@@ -45,6 +45,10 @@ const Navbar = () => {
                   Browse Tradesmen
                 </Link>
                 
+                <Link to="/messages" className="hover:text-blue-200">
+                  Messages
+                </Link>
+                
                 {userType === 'customer' && (
                   <Link to="/customer-dashboard" className="hover:text-blue-200">
                     Dashboard
