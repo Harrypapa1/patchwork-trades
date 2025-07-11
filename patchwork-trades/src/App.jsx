@@ -1,0 +1,78 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import Navbar from './components/Navbar';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Import all your pages
+import Home from './pages/Home';
+import Login from './pages/Login';
+import TradesmanRegister from './pages/TradesmanRegister';
+import CustomerRegister from './pages/CustomerRegister';
+import TradesmanDashboard from './pages/TradesmanDashboard';
+import CustomerDashboard from './pages/CustomerDashboard';
+import BrowseTradesmen from './pages/BrowseTradesmen';
+import BookingConfirmation from './pages/BookingConfirmation';
+import Messaging from './pages/Messaging';
+import Reviews from './pages/Reviews';
+
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <div className="min-h-screen bg-gray-50">
+          <Navbar />
+          <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register-tradesman" element={<TradesmanRegister />} />
+              <Route path="/register-customer" element={<CustomerRegister />} />
+              <Route path="/browse" element={<BrowseTradesmen />} />
+              
+              <Route
+                path="/tradesman-dashboard"
+                element={
+                  <ProtectedRoute userType="tradesman">
+                    <TradesmanDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/customer-dashboard"
+                element={
+                  <ProtectedRoute userType="customer">
+                    <CustomerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/booking-confirmation"
+                element={
+                  <ProtectedRoute userType="customer">
+                    <BookingConfirmation />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/messaging/:bookingId"
+                element={
+                  <ProtectedRoute>
+                    <Messaging />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route path="/reviews/:tradesmanId" element={<Reviews />} />
+            </Routes>
+          </main>
+        </div>
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default App;
