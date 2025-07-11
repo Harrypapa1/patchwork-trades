@@ -14,6 +14,7 @@ import CustomerDashboard from './pages/CustomerDashboard';
 import BrowseTradesmen from './pages/BrowseTradesmen';
 import BookingConfirmation from './pages/BookingConfirmation';
 import Messaging from './pages/Messaging';
+import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
 
 function App() {
@@ -53,6 +54,15 @@ function App() {
                 element={
                   <ProtectedRoute userType="customer">
                     <BookingConfirmation />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/messages"
+                element={
+                  <ProtectedRoute>
+                    <Messages />
                   </ProtectedRoute>
                 }
               />
