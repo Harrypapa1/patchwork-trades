@@ -28,7 +28,7 @@ const Messaging = () => {
 
   // EmailJS configuration
   const EMAILJS_SERVICE_ID = 'service_2m9tka2';
-  const EMAILJS_TEMPLATE_ID = 'w5edc68';
+  const EMAILJS_TEMPLATE_ID = 'template_nkgdl3a';
   const EMAILJS_PUBLIC_KEY = 'vE2mgUnyEvzyXiv5Z';
 
   useEffect(() => {
