@@ -13,7 +13,6 @@ import {
   getDoc 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import emailjs from '@emailjs/browser';
 
 const Messaging = () => {
   const { bookingId } = useParams();
@@ -25,11 +24,6 @@ const Messaging = () => {
   const [senderName, setSenderName] = useState('');
   const [receiverEmail, setReceiverEmail] = useState('');
   const [receiverName, setReceiverName] = useState('');
-
-  // EmailJS configuration
-  const EMAILJS_SERVICE_ID = 'service_2m9tka2';
-  const EMAILJS_TEMPLATE_ID = 'template_nkgdl3a';
-  const EMAILJS_PUBLIC_KEY = 'vE2mgUnyEvzyXiv5Z';
 
   useEffect(() => {
     if (!bookingId) return;
@@ -107,22 +101,27 @@ const Messaging = () => {
 
   const sendEmailNotification = async (messageText) => {
     try {
-      const templateParams = {
-        sender_name: senderName,
-        recipient_name: receiverName,
-        message_text: messageText,
-        reply_link: `${window.location.origin}/messaging/${bookingId}`,
-        to_email: receiverEmail
-      };
+      const response = await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          senderName: senderName,
+          recipientName: receiverName,
+          messageText: messageText,
+          replyLink: `${window.location.origin}/messaging/${bookingId}`,
+          recipientEmail: receiverEmail
+        })
+      });
 
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        templateParams,
-        EMAILJS_PUBLIC_KEY
-      );
-
-      console.log('Email notification sent successfully');
+      const result = await response.json();
+      
+      if (response.ok) {
+        console.log('Email notification sent successfully:', result);
+      } else {
+        console.error('Error sending email notification:', result);
+      }
     } catch (error) {
       console.error('Error sending email notification:', error);
       // Don't block the message sending if email fails
