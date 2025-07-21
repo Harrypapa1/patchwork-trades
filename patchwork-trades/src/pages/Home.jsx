@@ -7,6 +7,35 @@ const Home = () => {
       {/* Hero Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center">
+          {/* Large Logo */}
+          <div className="mb-8">
+            <img 
+              src="/patchwork-logo.png" 
+              alt="Patchwork Trades Logo" 
+              className="h-32 w-32 mx-auto object-contain"
+              onError={(e) => {
+                // Fallback to CSS-only logo if image fails
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'block';
+              }}
+            />
+            {/* CSS Fallback Logo */}
+            <div 
+              className="h-32 w-32 mx-auto rounded-2xl relative overflow-hidden shadow-lg"
+              style={{ display: 'none' }}
+            >
+              <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+                <div className="bg-orange-400"></div>
+                <div className="bg-teal-400"></div>
+                <div className="bg-green-500"></div>
+                <div className="bg-yellow-400"></div>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-white text-4xl font-bold transform rotate-45">🔧</div>
+              </div>
+            </div>
+          </div>
+          
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
             Patchwork Trades
           </h1>
