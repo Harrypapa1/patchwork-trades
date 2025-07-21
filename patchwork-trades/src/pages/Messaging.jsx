@@ -24,6 +24,8 @@ const Messaging = () => {
   const [senderName, setSenderName] = useState('');
   const [receiverEmail, setReceiverEmail] = useState('');
   const [receiverName, setReceiverName] = useState('');
+  const [senderPhoto, setSenderPhoto] = useState(null);
+  const [receiverPhoto, setReceiverPhoto] = useState(null);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -60,16 +62,26 @@ const Messaging = () => {
         const bookingData = bookingDoc.docs[0].data();
         setBooking(bookingData);
 
-        // Get current user's name
+        // Get current user's name and photo
         let currentUserName = '';
+        let currentUserPhoto = null;
         if (userType === 'customer') {
           const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          currentUserName = userDoc.exists() ? userDoc.data().name : 'Customer';
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            currentUserName = userData.name || 'Customer';
+            currentUserPhoto = userData.profilePhoto || null;
+          }
         } else {
           const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', currentUser.uid));
-          currentUserName = tradesmanDoc.exists() ? tradesmanDoc.data().name : 'Tradesman';
+          if (tradesmanDoc.exists()) {
+            const tradesmanData = tradesmanDoc.data();
+            currentUserName = tradesmanData.name || 'Tradesman';
+            currentUserPhoto = tradesmanData.profilePhoto || null;
+          }
         }
         setSenderName(currentUserName);
+        setSenderPhoto(currentUserPhoto);
 
         // Get receiver's details (the other person in the conversation)
         const receiverId = bookingData.customer_id === currentUser.uid 
@@ -93,6 +105,7 @@ const Messaging = () => {
 
         setReceiverEmail(receiverInfo.email || '');
         setReceiverName(receiverInfo.name || 'User');
+        setReceiverPhoto(receiverInfo.profilePhoto || null);
       }
     } catch (error) {
       console.error('Error fetching booking:', error);
@@ -153,43 +166,95 @@ const Messaging = () => {
     }
   };
 
+  // Helper component for profile picture
+  const ProfilePicture = ({ photo, name, size = "w-8 h-8" }) => {
+    if (photo) {
+      return (
+        <img 
+          src={photo} 
+          alt={`${name}'s profile`}
+          className={`${size} rounded-full object-cover flex-shrink-0 border border-gray-300`}
+        />
+      );
+    }
+    
+    return (
+      <div className={`${size} rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-sm font-medium flex-shrink-0`}>
+        {name.charAt(0).toUpperCase()}
+      </div>
+    );
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading messages...</div>;
   }
 
   return (
     <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-md h-96 flex flex-col">
+      {/* Header with receiver info */}
       <div className="p-4 border-b">
-        <h2 className="text-xl font-semibold">Messages</h2>
-        <p className="text-sm text-gray-600">
-          Conversation with {receiverName} | Booking ID: {bookingId.substring(0, 8)}...
-        </p>
+        <div className="flex items-center gap-3">
+          <ProfilePicture 
+            photo={receiverPhoto} 
+            name={receiverName} 
+            size="w-10 h-10"
+          />
+          <div>
+            <h2 className="text-xl font-semibold">Messages</h2>
+            <p className="text-sm text-gray-600">
+              Conversation with {receiverName} | Booking ID: {bookingId.substring(0, 8)}...
+            </p>
+          </div>
+        </div>
       </div>
       
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
           <p className="text-gray-500 text-center">No messages yet. Start the conversation!</p>
         ) : (
-          messages.map(message => (
-            <div
-              key={message.id}
-              className={`flex ${message.sender_id === currentUser.uid ? 'justify-end' : 'justify-start'}`}
-            >
+          messages.map(message => {
+            const isCurrentUser = message.sender_id === currentUser.uid;
+            const messagePhoto = isCurrentUser ? senderPhoto : receiverPhoto;
+            const messageName = isCurrentUser ? senderName : receiverName;
+            
+            return (
               <div
-                className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                  message.sender_id === currentUser.uid
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-800'
-                }`}
+                key={message.id}
+                className={`flex gap-2 ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
               >
-                <p>{message.message_text}</p>
-                <p className="text-xs opacity-75 mt-1">
-                  {new Date(message.timestamp).toLocaleString()}
-                </p>
+                {/* Profile picture for received messages (left side) */}
+                {!isCurrentUser && (
+                  <ProfilePicture 
+                    photo={messagePhoto} 
+                    name={messageName}
+                  />
+                )}
+                
+                {/* Message bubble */}
+                <div
+                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
+                    isCurrentUser
+                      ? 'bg-blue-600 text-white rounded-br-sm'
+                      : 'bg-gray-200 text-gray-800 rounded-bl-sm'
+                  }`}
+                >
+                  <p>{message.message_text}</p>
+                  <p className="text-xs opacity-75 mt-1">
+                    {new Date(message.timestamp).toLocaleString()}
+                  </p>
+                </div>
+
+                {/* Profile picture for sent messages (right side) */}
+                {isCurrentUser && (
+                  <ProfilePicture 
+                    photo={messagePhoto} 
+                    name={messageName}
+                  />
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
       
