@@ -38,8 +38,14 @@ const Navbar = () => {
     <nav className="bg-blue-600 text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <Link to="/" className="text-xl font-bold" onClick={closeMenu}>
-            Patchwork Trades
+          {/* Logo and Brand */}
+          <Link to="/" className="flex items-center space-x-2" onClick={closeMenu}>
+            <img 
+              src="/src/assets/patchwork-logo.png" 
+              alt="Patchwork Trades Logo" 
+              className="h-8 w-8"
+            />
+            <span className="text-xl font-bold">Patchwork Trades</span>
           </Link>
           
           {/* Desktop Menu - Only show on desktop */}
