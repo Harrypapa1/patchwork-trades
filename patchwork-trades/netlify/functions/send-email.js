@@ -1,5 +1,4 @@
 const { Resend } = require('resend');
-
 exports.handler = async (event, context) => {
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
@@ -8,14 +7,12 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({ error: 'Method not allowed' }),
     };
   }
-
   try {
     // Initialize Resend with API key from environment variable
     const resend = new Resend(process.env.RESEND_API_KEY);
     
     // Parse the request body
     const { senderName, recipientName, messageText, replyLink, recipientEmail } = JSON.parse(event.body);
-
     // Validate required fields
     if (!recipientEmail || !messageText || !senderName) {
       return {
@@ -23,10 +20,9 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Missing required fields' }),
       };
     }
-
     // Send email using Resend
     const { data, error } = await resend.emails.send({
-      from: 'Patchwork Trades <noreply@resend.dev>', // We'll use Resend's domain for now
+      from: 'Patchwork Trades <noreply@patchworktrades.com>',
       to: [recipientEmail],
       subject: `New message from ${senderName} - Patchwork Trades`,
       html: `
@@ -61,7 +57,6 @@ exports.handler = async (event, context) => {
         </div>
       `,
     });
-
     if (error) {
       console.error('Resend error:', error);
       return {
@@ -69,7 +64,6 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Failed to send email', details: error }),
       };
     }
-
     return {
       statusCode: 200,
       body: JSON.stringify({ 
@@ -78,7 +72,6 @@ exports.handler = async (event, context) => {
         emailId: data.id 
       }),
     };
-
   } catch (error) {
     console.error('Function error:', error);
     return {
