@@ -39,11 +39,14 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo and Brand */}
-          <Link to="/" className="flex items-center space-x-2" onClick={closeMenu}>
+          <Link to="/" className="flex items-center space-x-3" onClick={closeMenu}>
             <img 
               src="/src/assets/patchwork-logo.png" 
               alt="Patchwork Trades Logo" 
-              className="h-8 w-8"
+              className="h-10 w-10 object-contain"
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
             />
             <span className="text-xl font-bold">Patchwork Trades</span>
           </Link>
