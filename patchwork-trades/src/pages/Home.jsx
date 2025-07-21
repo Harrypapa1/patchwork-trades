@@ -12,7 +12,11 @@ const Home = () => {
             <img 
               src="/patchwork-logo.png" 
               alt="Patchwork Trades Logo" 
-              className="h-32 w-32 mx-auto object-contain"
+              className="h-64 w-64 mx-auto object-contain"
+              style={{ 
+                filter: 'drop-shadow(0 10px 25px rgba(0,0,0,0.1))',
+                mixBlendMode: 'multiply'
+              }}
               onError={(e) => {
                 // Fallback to CSS-only logo if image fails
                 e.target.style.display = 'none';
