@@ -7,7 +7,8 @@ import {
   collection, 
   query, 
   where, 
-  getDocs 
+  getDocs,
+  updateDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -16,6 +17,7 @@ const CustomerDashboard = () => {
   const [profile, setProfile] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -68,6 +70,74 @@ const CustomerDashboard = () => {
     }
   };
 
+  // Image compression function
+  const compressImage = (file, maxWidth = 400, quality = 0.7) => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        // Calculate new dimensions
+        const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        
+        // Draw and compress
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(resolve, 'image/jpeg', quality);
+      };
+      
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  // Convert file to base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle profile photo upload
+  const handleProfilePhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image too large. Please choose an image under 5MB.');
+      return;
+    }
+
+    setUploadingImage(true);
+
+    try {
+      // Compress the image
+      const compressedFile = await compressImage(file, 400, 0.7);
+      
+      // Convert to base64
+      const base64 = await fileToBase64(compressedFile);
+
+      // Update profile in Firestore
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        profilePhoto: base64
+      });
+
+      // Update local state
+      setProfile(prev => ({ ...prev, profilePhoto: base64 }));
+      
+      alert('Profile photo updated successfully!');
+    } catch (error) {
+      console.error('Error uploading profile photo:', error);
+      alert('Error uploading photo. Please try again.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading...</div>;
   }
@@ -80,10 +150,51 @@ const CustomerDashboard = () => {
       {profile && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Profile Information</h2>
-          <div>
-            <p><strong>Name:</strong> {profile.name}</p>
-            <p><strong>Email:</strong> {profile.email}</p>
-            <p><strong>Member since:</strong> {new Date(profile.createdAt).toLocaleDateString()}</p>
+          
+          {/* Profile Photo Section */}
+          <div className="mb-6">
+            <h3 className="text-lg font-medium mb-3">Profile Photo</h3>
+            <div className="flex items-center gap-4">
+              {profile.profilePhoto ? (
+                <img 
+                  src={profile.profilePhoto} 
+                  alt="Profile" 
+                  className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                  No Photo
+                </div>
+              )}
+              <div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleProfilePhotoUpload}
+                  disabled={uploadingImage}
+                  className="hidden"
+                  id="profile-photo-upload"
+                />
+                <label 
+                  htmlFor="profile-photo-upload"
+                  className="bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 disabled:bg-gray-400"
+                >
+                  {uploadingImage ? 'Uploading...' : 'Upload Photo'}
+                </label>
+                <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Basic Profile Info */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <p><strong>Name:</strong> {profile.name}</p>
+              <p><strong>Email:</strong> {profile.email}</p>
+            </div>
+            <div>
+              <p><strong>Member since:</strong> {new Date(profile.createdAt).toLocaleDateString()}</p>
+            </div>
           </div>
         </div>
       )}
