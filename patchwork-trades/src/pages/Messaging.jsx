@@ -10,7 +10,8 @@ import {
   addDoc, 
   onSnapshot,
   doc,
-  getDoc 
+  getDoc,
+  updateDoc 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -46,10 +47,33 @@ const Messaging = () => {
       }));
       setMessages(messagesData);
       setLoading(false);
+      
+      // Mark unread messages as read
+      markMessagesAsRead(messagesData);
     });
 
     return () => unsubscribe();
   }, [bookingId]);
+
+  const markMessagesAsRead = async (messagesData) => {
+    if (!currentUser) return;
+    
+    // Find messages that are unread and sent to current user
+    const unreadMessages = messagesData.filter(message => 
+      message.receiver_id === currentUser.uid && message.read === false
+    );
+    
+    // Mark them as read
+    for (const message of unreadMessages) {
+      try {
+        await updateDoc(doc(db, 'messages', message.id), {
+          read: true
+        });
+      } catch (error) {
+        console.error('Error marking message as read:', error);
+      }
+    }
+  };
 
   const fetchBookingDetails = async () => {
     try {
@@ -152,7 +176,8 @@ const Messaging = () => {
         sender_id: currentUser.uid,
         receiver_id: booking.customer_id === currentUser.uid ? booking.tradesman_id : booking.customer_id,
         message_text: newMessage,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        read: false
       });
 
       // Send email notification
