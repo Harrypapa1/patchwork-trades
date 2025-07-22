@@ -8,7 +8,8 @@ import {
   getDocs, 
   doc, 
   getDoc,
-  orderBy 
+  orderBy,
+  onSnapshot 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -20,6 +21,18 @@ const Messages = () => {
   useEffect(() => {
     if (!currentUser) return;
     fetchConversations();
+    
+    // Set up real-time listener for messages to update unread counts
+    const messagesQuery = query(
+      collection(db, 'messages'),
+      where('receiver_id', '==', currentUser.uid)
+    );
+    
+    const unsubscribe = onSnapshot(messagesQuery, () => {
+      fetchConversations();
+    });
+
+    return () => unsubscribe();
   }, [currentUser]);
 
   const fetchConversations = async () => {
@@ -60,11 +73,17 @@ const Messages = () => {
             lastMessage: null,
             lastMessageTime: null,
             otherUserId: null,
-            otherUserName: 'Loading...'
+            otherUserName: 'Loading...',
+            unreadCount: 0
           };
         }
         
         conversationMap[bookingId].messages.push(message);
+        
+        // Count unread messages (received by current user and not read)
+        if (message.receiver_id === currentUser.uid && message.read === false) {
+          conversationMap[bookingId].unreadCount++;
+        }
         
         // Track the other user
         const otherUserId = message.sender_id === currentUser.uid 
@@ -167,18 +186,26 @@ const Messages = () => {
             <Link
               key={conversation.bookingId}
               to={`/messaging/${conversation.bookingId}`}
-              className="block border-b border-gray-200 p-4 hover:bg-gray-50 transition-colors"
+              className={`block border-b border-gray-200 p-4 hover:bg-gray-50 transition-colors ${
+                conversation.unreadCount > 0 ? 'bg-blue-50' : ''
+              }`}
             >
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
-                    <h3 className="font-semibold text-lg">{conversation.otherUserName}</h3>
+                    <h3 className={`font-semibold text-lg ${
+                      conversation.unreadCount > 0 ? 'text-blue-700' : ''
+                    }`}>
+                      {conversation.otherUserName}
+                    </h3>
                     <span className="text-xs text-gray-500">
                       Booking: {conversation.bookingId.substring(0, 8)}...
                     </span>
                   </div>
                   
-                  <p className="text-gray-600 text-sm mb-1">
+                  <p className={`text-sm mb-1 ${
+                    conversation.unreadCount > 0 ? 'text-gray-800 font-medium' : 'text-gray-600'
+                  }`}>
                     {conversation.lastMessage?.sender_id === currentUser.uid ? 'You: ' : ''}
                     {truncateMessage(conversation.lastMessage?.message_text)}
                   </p>
@@ -188,7 +215,12 @@ const Messages = () => {
                   </p>
                 </div>
                 
-                <div className="flex items-center">
+                <div className="flex items-center gap-2">
+                  {conversation.unreadCount > 0 && (
+                    <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
+                      {conversation.unreadCount}
+                    </span>
+                  )}
                   <svg 
                     className="w-5 h-5 text-gray-400" 
                     fill="none" 
