@@ -43,12 +43,15 @@ const Home = () => {
           <h1 className="text-5xl font-bold text-gray-900 mb-6">
             Patchwork Trades
           </h1>
+          <h2 className="text-3xl font-semibold text-gray-800 mb-4">
+            On-Demand Tradesmen for Homes & Building Sites
+          </h2>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Book tradesmen easily. Tradesmen, list your availability today.
+            Find trusted local professionals or fill last-minute jobs — fast.
           </p>
           
           {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <Link 
               to="/browse"
               className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors"
@@ -61,6 +64,58 @@ const Home = () => {
             >
               List Your Availability
             </Link>
+          </div>
+
+          {/* How It Works Section */}
+          <div className="bg-white rounded-xl shadow-lg p-8 max-w-5xl mx-auto">
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">How It Works</h3>
+            <div className="flex flex-col lg:flex-row items-center justify-center gap-6">
+              
+              {/* Step 1 */}
+              <div className="text-center flex-1">
+                <div className="bg-blue-100 p-3 rounded-full w-12 h-12 mx-auto mb-3 flex items-center justify-center">
+                  <span className="text-blue-600 text-lg font-bold">1</span>
+                </div>
+                <h4 className="text-base font-semibold mb-2">Tradesmen List Days</h4>
+                <p className="text-gray-600 text-sm">Professionals set their available calendar</p>
+              </div>
+
+              {/* Arrow */}
+              <div className="hidden lg:block text-gray-400 text-xl">→</div>
+
+              {/* Step 2 */}
+              <div className="text-center flex-1">
+                <div className="bg-orange-100 p-3 rounded-full w-12 h-12 mx-auto mb-3 flex items-center justify-center">
+                  <span className="text-orange-600 text-lg font-bold">2</span>
+                </div>
+                <h4 className="text-base font-semibold mb-2">Find Available Tradesmen</h4>
+                <p className="text-gray-600 text-sm">Browse local professionals with open dates that work for you</p>
+              </div>
+
+              {/* Arrow */}
+              <div className="hidden lg:block text-gray-400 text-xl">→</div>
+
+              {/* Step 3 */}
+              <div className="text-center flex-1">
+                <div className="bg-green-100 p-3 rounded-full w-12 h-12 mx-auto mb-3 flex items-center justify-center">
+                  <span className="text-green-600 text-lg font-bold">3</span>
+                </div>
+                <h4 className="text-base font-semibold mb-2">Message & Agree</h4>
+                <p className="text-gray-600 text-sm">Chat to discuss the job and confirm the booking</p>
+              </div>
+
+              {/* Arrow */}
+              <div className="hidden lg:block text-gray-400 text-xl">→</div>
+
+              {/* Step 4 */}
+              <div className="text-center flex-1">
+                <div className="bg-purple-100 p-3 rounded-full w-12 h-12 mx-auto mb-3 flex items-center justify-center">
+                  <span className="text-purple-600 text-lg font-bold">4</span>
+                </div>
+                <h4 className="text-base font-semibold mb-2">Get It Done</h4>
+                <p className="text-gray-600 text-sm">A Patchwork professional gets the job done</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
