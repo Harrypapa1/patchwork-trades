@@ -74,6 +74,7 @@ const Messages = () => {
             lastMessageTime: null,
             otherUserId: null,
             otherUserName: 'Loading...',
+            otherUserPhoto: null,
             unreadCount: 0
           };
         }
@@ -92,7 +93,7 @@ const Messages = () => {
         conversationMap[bookingId].otherUserId = otherUserId;
       }
 
-      // Get the latest message for each conversation and fetch other user names
+      // Get the latest message for each conversation and fetch other user names + photos
       const conversationsList = [];
       
       for (const conversation of Object.values(conversationMap)) {
@@ -104,7 +105,7 @@ const Messages = () => {
         conversation.lastMessage = conversation.messages[0];
         conversation.lastMessageTime = conversation.lastMessage?.timestamp;
 
-        // Fetch other user's name
+        // Fetch other user's name and profile photo
         try {
           let otherUserDoc;
           if (userType === 'customer') {
@@ -116,13 +117,17 @@ const Messages = () => {
           }
           
           if (otherUserDoc.exists()) {
-            conversation.otherUserName = otherUserDoc.data().name;
+            const userData = otherUserDoc.data();
+            conversation.otherUserName = userData.name || 'Unknown User';
+            conversation.otherUserPhoto = userData.profilePhoto || null;
           } else {
             conversation.otherUserName = 'Unknown User';
+            conversation.otherUserPhoto = null;
           }
         } catch (error) {
-          console.error('Error fetching user name:', error);
+          console.error('Error fetching user details:', error);
           conversation.otherUserName = 'Unknown User';
+          conversation.otherUserPhoto = null;
         }
 
         conversationsList.push(conversation);
@@ -162,6 +167,25 @@ const Messages = () => {
       : message;
   };
 
+  // Helper component for profile picture
+  const ProfilePicture = ({ photo, name, size = "w-12 h-12" }) => {
+    if (photo) {
+      return (
+        <img 
+          src={photo} 
+          alt={`${name}'s profile`}
+          className={`${size} rounded-full object-cover flex-shrink-0 border-2 border-gray-300`}
+        />
+      );
+    }
+    
+    return (
+      <div className={`${size} rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-lg font-medium flex-shrink-0 border-2 border-gray-300`}>
+        {name.charAt(0).toUpperCase()}
+      </div>
+    );
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading messages...</div>;
   }
@@ -190,20 +214,27 @@ const Messages = () => {
                 conversation.unreadCount > 0 ? 'bg-blue-50' : ''
               }`}
             >
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
+              <div className="flex items-center gap-4">
+                {/* Profile Picture */}
+                <ProfilePicture 
+                  photo={conversation.otherUserPhoto} 
+                  name={conversation.otherUserName}
+                />
+                
+                {/* Conversation Details */}
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-1">
-                    <h3 className={`font-semibold text-lg ${
+                    <h3 className={`font-semibold text-lg truncate ${
                       conversation.unreadCount > 0 ? 'text-blue-700' : ''
                     }`}>
                       {conversation.otherUserName}
                     </h3>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 flex-shrink-0">
                       Booking: {conversation.bookingId.substring(0, 8)}...
                     </span>
                   </div>
                   
-                  <p className={`text-sm mb-1 ${
+                  <p className={`text-sm mb-1 truncate ${
                     conversation.unreadCount > 0 ? 'text-gray-800 font-medium' : 'text-gray-600'
                   }`}>
                     {conversation.lastMessage?.sender_id === currentUser.uid ? 'You: ' : ''}
@@ -215,7 +246,8 @@ const Messages = () => {
                   </p>
                 </div>
                 
-                <div className="flex items-center gap-2">
+                {/* Unread Badge and Arrow */}
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {conversation.unreadCount > 0 && (
                     <span className="bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
                       {conversation.unreadCount}
