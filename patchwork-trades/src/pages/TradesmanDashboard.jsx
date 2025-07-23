@@ -22,6 +22,8 @@ const TradesmanDashboard = () => {
   const [newDate, setNewDate] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({});
 
   useEffect(() => {
     fetchProfile();
@@ -35,7 +37,9 @@ const TradesmanDashboard = () => {
     try {
       const profileDoc = await getDoc(doc(db, 'tradesmen_profiles', currentUser.uid));
       if (profileDoc.exists()) {
-        setProfile(profileDoc.data());
+        const profileData = profileDoc.data();
+        setProfile(profileData);
+        setProfileForm(profileData);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -91,6 +95,21 @@ const TradesmanDashboard = () => {
       setBookings(bookingsData);
     } catch (error) {
       console.error('Error fetching bookings:', error);
+    }
+  };
+
+  // Update profile with enhanced fields
+  const updateProfile = async (e) => {
+    e.preventDefault();
+    
+    try {
+      await updateDoc(doc(db, 'tradesmen_profiles', currentUser.uid), profileForm);
+      setProfile(profileForm);
+      setEditingProfile(false);
+      alert('Profile updated successfully!');
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert('Error updating profile. Please try again.');
     }
   };
 
@@ -152,6 +171,7 @@ const TradesmanDashboard = () => {
 
       // Update local state
       setProfile(prev => ({ ...prev, profilePhoto: base64 }));
+      setProfileForm(prev => ({ ...prev, profilePhoto: base64 }));
       
       alert('Profile photo updated successfully!');
     } catch (error) {
@@ -272,102 +292,288 @@ const TradesmanDashboard = () => {
       {/* Profile Section */}
       {profile && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Profile Information</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Profile Information</h2>
+            <button
+              onClick={() => setEditingProfile(!editingProfile)}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+            >
+              {editingProfile ? 'Cancel' : 'Edit Profile'}
+            </button>
+          </div>
           
-          {/* Profile Photo Section */}
-          <div className="mb-6">
-            <h3 className="text-lg font-medium mb-3">Profile Photo</h3>
-            <div className="flex items-center gap-4">
-              {profile.profilePhoto ? (
-                <img 
-                  src={profile.profilePhoto} 
-                  alt="Profile" 
-                  className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+          {editingProfile ? (
+            /* Edit Profile Form */
+            <form onSubmit={updateProfile} className="space-y-6">
+              {/* Basic Information */}
+              <div>
+                <h3 className="text-lg font-medium mb-3 text-gray-700">Basic Information</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Years of Experience</label>
+                    <input
+                      type="number"
+                      value={profileForm.yearsExperience || ''}
+                      onChange={(e) => setProfileForm({...profileForm, yearsExperience: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g. 5"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Hourly Rate (£)</label>
+                    <input
+                      type="number"
+                      value={profileForm.hourlyRate || ''}
+                      onChange={(e) => setProfileForm({...profileForm, hourlyRate: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g. 45"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Professional Details */}
+              <div>
+                <h3 className="text-lg font-medium mb-3 text-gray-700">Professional Details</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Certifications & Qualifications</label>
+                    <textarea
+                      value={profileForm.certifications || ''}
+                      onChange={(e) => setProfileForm({...profileForm, certifications: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows="3"
+                      placeholder="e.g. City & Guilds Level 3, Part P Certified, Gas Safe Registered"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Specializations</label>
+                    <textarea
+                      value={profileForm.specializations || ''}
+                      onChange={(e) => setProfileForm({...profileForm, specializations: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows="2"
+                      placeholder="e.g. Kitchen installations, Bathroom renovations, Emergency repairs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Insurance Status</label>
+                    <select
+                      value={profileForm.insuranceStatus || ''}
+                      onChange={(e) => setProfileForm({...profileForm, insuranceStatus: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select insurance status</option>
+                      <option value="Fully Insured">Fully Insured (Public Liability & Professional Indemnity)</option>
+                      <option value="Public Liability Only">Public Liability Insurance Only</option>
+                      <option value="Not Insured">Not Currently Insured</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Services Offered */}
+              <div>
+                <h3 className="text-lg font-medium mb-3 text-gray-700">Services Offered</h3>
+                <textarea
+                  value={profileForm.servicesOffered || ''}
+                  onChange={(e) => setProfileForm({...profileForm, servicesOffered: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows="4"
+                  placeholder="List all services you provide, e.g.:
+• Complete bathroom installations
+• Kitchen electrical work
+• Emergency call-outs
+• Socket and switch installations
+• Consumer unit upgrades"
                 />
-              ) : (
-                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
-                  No Photo
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  type="submit"
+                  className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingProfile(false)}
+                  className="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* Display Profile */
+            <div>
+              {/* Profile Photo Section */}
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-3">Profile Photo</h3>
+                <div className="flex items-center gap-4">
+                  {profile.profilePhoto ? (
+                    <img 
+                      src={profile.profilePhoto} 
+                      alt="Profile" 
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                      No Photo
+                    </div>
+                  )}
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePhotoUpload}
+                      disabled={uploadingImage}
+                      className="hidden"
+                      id="profile-photo-upload"
+                    />
+                    <label 
+                      htmlFor="profile-photo-upload"
+                      className="bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 disabled:bg-gray-400"
+                    >
+                      {uploadingImage ? 'Uploading...' : 'Upload Photo'}
+                    </label>
+                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Basic Profile Info */}
+              <div className="grid md:grid-cols-2 gap-6 mb-6">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-gray-600">Name</p>
+                    <p className="font-medium">{profile.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Email</p>
+                    <p className="font-medium">{profile.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Trade Type</p>
+                    <p className="font-medium">{profile.tradeType}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Years of Experience</p>
+                    <p className="font-medium">
+                      {profile.yearsExperience ? `${profile.yearsExperience} years` : 'Not specified'}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-gray-600">Area Covered</p>
+                    <p className="font-medium">{profile.areaCovered}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Hourly Rate</p>
+                    <p className="font-medium">
+                      {profile.hourlyRate ? `£${profile.hourlyRate}/hour` : 'Not specified'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Insurance Status</p>
+                    <p className="font-medium">
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        profile.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
+                        profile.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {profile.insuranceStatus || 'Not specified'}
+                      </span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Bio</p>
+                    <p className="font-medium">{profile.bio}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Professional Details */}
+              {(profile.certifications || profile.specializations) && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium mb-3">Professional Details</h3>
+                  {profile.certifications && (
+                    <div className="mb-3">
+                      <p className="text-sm text-gray-600 mb-1">Certifications & Qualifications</p>
+                      <p className="font-medium whitespace-pre-line">{profile.certifications}</p>
+                    </div>
+                  )}
+                  {profile.specializations && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Specializations</p>
+                      <p className="font-medium whitespace-pre-line">{profile.specializations}</p>
+                    </div>
+                  )}
                 </div>
               )}
-              <div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleProfilePhotoUpload}
-                  disabled={uploadingImage}
-                  className="hidden"
-                  id="profile-photo-upload"
-                />
-                <label 
-                  htmlFor="profile-photo-upload"
-                  className="bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 disabled:bg-gray-400"
-                >
-                  {uploadingImage ? 'Uploading...' : 'Upload Photo'}
-                </label>
-                <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG</p>
-              </div>
-            </div>
-          </div>
 
-          {/* Basic Profile Info */}
-          <div className="grid md:grid-cols-2 gap-4 mb-6">
-            <div>
-              <p><strong>Name:</strong> {profile.name}</p>
-              <p><strong>Email:</strong> {profile.email}</p>
-              <p><strong>Trade Type:</strong> {profile.tradeType}</p>
-            </div>
-            <div>
-              <p><strong>Area Covered:</strong> {profile.areaCovered}</p>
-              <p><strong>Bio:</strong> {profile.bio}</p>
-            </div>
-          </div>
-
-          {/* Portfolio Section */}
-          <div>
-            <h3 className="text-lg font-medium mb-3">Work Portfolio</h3>
-            
-            {/* Upload Button */}
-            <div className="mb-4">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePortfolioUpload}
-                disabled={uploadingImage}
-                className="hidden"
-                id="portfolio-upload"
-              />
-              <label 
-                htmlFor="portfolio-upload"
-                className="bg-green-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-green-600 disabled:bg-gray-400"
-              >
-                {uploadingImage ? 'Uploading...' : 'Add Portfolio Image'}
-              </label>
-              <p className="text-sm text-gray-500 mt-1">Show examples of your work</p>
-            </div>
-
-            {/* Portfolio Gallery */}
-            {profile.portfolio && profile.portfolio.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {profile.portfolio.map((portfolioItem) => (
-                  <div key={portfolioItem.id} className="relative group">
-                    <img 
-                      src={portfolioItem.image} 
-                      alt="Portfolio work" 
-                      className="w-full h-32 object-cover rounded border"
-                    />
-                    <button
-                      onClick={() => deletePortfolioImage(portfolioItem.id)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      ×
-                    </button>
+              {/* Services Offered */}
+              {profile.servicesOffered && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium mb-3">Services Offered</h3>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="whitespace-pre-line">{profile.servicesOffered}</p>
                   </div>
-                ))}
+                </div>
+              )}
+
+              {/* Portfolio Section */}
+              <div>
+                <h3 className="text-lg font-medium mb-3">Work Portfolio</h3>
+                
+                {/* Upload Button */}
+                <div className="mb-4">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePortfolioUpload}
+                    disabled={uploadingImage}
+                    className="hidden"
+                    id="portfolio-upload"
+                  />
+                  <label 
+                    htmlFor="portfolio-upload"
+                    className="bg-green-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-green-600 disabled:bg-gray-400"
+                  >
+                    {uploadingImage ? 'Uploading...' : 'Add Portfolio Image'}
+                  </label>
+                  <p className="text-sm text-gray-500 mt-1">Show examples of your work</p>
+                </div>
+
+                {/* Portfolio Gallery */}
+                {profile.portfolio && profile.portfolio.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    {profile.portfolio.map((portfolioItem) => (
+                      <div key={portfolioItem.id} className="relative group">
+                        <img 
+                          src={portfolioItem.image} 
+                          alt="Portfolio work" 
+                          className="w-full h-32 object-cover rounded border"
+                        />
+                        <button
+                          onClick={() => deletePortfolioImage(portfolioItem.id)}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No portfolio images uploaded yet.</p>
+                )}
               </div>
-            ) : (
-              <p className="text-gray-500">No portfolio images uploaded yet.</p>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
