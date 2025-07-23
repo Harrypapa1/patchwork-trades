@@ -96,9 +96,11 @@ const Navbar = () => {
                 </>
               ) : (
                 <>
-                  <Link to="/browse" className="hover:text-blue-200">
-                    Browse
-                  </Link>
+                  {userType !== 'tradesman' && (
+                    <Link to="/browse" className="hover:text-blue-200">
+                      Browse
+                    </Link>
+                  )}
                   
                   <Link 
                     to="/messages" 
@@ -189,13 +191,15 @@ const Navbar = () => {
               </>
             ) : (
               <>
-                <Link 
-                  to="/browse" 
-                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
-                  onClick={closeMenu}
-                >
-                  🔍 Browse Tradesmen
-                </Link>
+                {userType !== 'tradesman' && (
+                  <Link 
+                    to="/browse" 
+                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                    onClick={closeMenu}
+                  >
+                    🔍 Browse Tradesmen
+                  </Link>
+                )}
                 
                 <Link 
                   to="/messages" 
