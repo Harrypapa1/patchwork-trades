@@ -1,5 +1,31 @@
-import React, { useState, useEffect } from 'react';
+const fetchBookings = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const q = query(
+        collection(db, 'bookings'),
+        where('tradesman_id', '==', currentUser.uid)
+      );
+      const querySnapshot = await getDocs(q);
+      const bookingsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setBookings(bookingsData);
+    } catch (error) {
+      console.error('Error fetching bookings:', error);
+    }
+  };
+
+  const handleBookedDateClick = (dateStr) => {
+    // Find the booking for this date
+    const booking = bookings.find(b => b.date_booked === dateStr);
+    if (booking) {
+      navigate(`/messaging/${booking.id}`);
+    }
+  };import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -13,12 +39,15 @@ import { db } from '../config/firebase';
 
 const ManageAvailability = () => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [availability, setAvailability] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchAvailability();
+    fetchBookings();
   }, [currentDate, currentUser]);
 
   const fetchAvailability = async () => {
@@ -150,7 +179,7 @@ const ManageAvailability = () => {
             className += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200";
             break;
           case 'booked':
-            className += "bg-red-100 text-red-800 border-red-300 cursor-not-allowed";
+            className += "bg-red-100 text-red-800 border-red-300 hover:bg-red-200";
             break;
           default:
             className += "bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-300";
@@ -161,14 +190,21 @@ const ManageAvailability = () => {
         <div
           key={day}
           className={className}
-          onClick={() => !isPast && status !== 'booked' && toggleAvailability(dateStr)}
+          onClick={() => {
+            if (isPast) return;
+            if (status === 'booked') {
+              handleBookedDateClick(dateStr);
+            } else {
+              toggleAvailability(dateStr);
+            }
+          }}
         >
           <div className="font-medium">{day}</div>
           {status === 'available' && !isPast && (
             <div className="text-xs mt-1">Available</div>
           )}
           {status === 'booked' && (
-            <div className="text-xs mt-1">Booked</div>
+            <div className="text-xs mt-1">Click for job</div>
           )}
         </div>
       );
@@ -191,6 +227,7 @@ const ManageAvailability = () => {
         <ul className="text-blue-700 text-sm space-y-1">
           <li>• <strong>Click any future date</strong> to mark yourself as available</li>
           <li>• <strong>Click available dates again</strong> to remove availability</li>
+          <li>• <strong>Click red booked dates</strong> to view job details and message customer</li>
           <li>• <strong>Green dates</strong> = You're available for booking</li>
           <li>• <strong>Red dates</strong> = Already booked by customers</li>
           <li>• <strong>Gray dates</strong> = Past dates (cannot be changed)</li>
@@ -232,7 +269,7 @@ const ManageAvailability = () => {
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
-            <span>Booked</span>
+            <span>Booked (click to view job)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
