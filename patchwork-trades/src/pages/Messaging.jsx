@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -27,6 +27,14 @@ const Messaging = () => {
   const [receiverName, setReceiverName] = useState('');
   const [senderPhoto, setSenderPhoto] = useState(null);
   const [receiverPhoto, setReceiverPhoto] = useState(null);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollTo({
+      top: messagesEndRef.current.scrollHeight,
+      behavior: 'smooth'
+    });
+  };
 
   useEffect(() => {
     if (!bookingId) return;
@@ -50,6 +58,9 @@ const Messaging = () => {
       
       // Mark unread messages as read
       markMessagesAsRead(messagesData);
+      
+      // Scroll to bottom when messages change
+      setTimeout(scrollToBottom, 100);
     });
 
     return () => unsubscribe();
@@ -234,7 +245,7 @@ const Messaging = () => {
       </div>
       
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={messagesEndRef}>
         {messages.length === 0 ? (
           <p className="text-gray-500 text-center">No messages yet. Start the conversation!</p>
         ) : (
