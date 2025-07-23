@@ -115,6 +115,12 @@ const Navbar = () => {
                       </span>
                     )}
                   </Link>
+
+                  {userType === 'tradesman' && (
+                    <Link to="/manage-availability" className="hover:text-blue-200">
+                      Manage Availability
+                    </Link>
+                  )}
                   
                   {userType === 'customer' && (
                     <Link to="/customer-dashboard" className="hover:text-blue-200">
@@ -209,6 +215,16 @@ const Navbar = () => {
                     </span>
                   )}
                 </Link>
+
+                {userType === 'tradesman' && (
+                  <Link 
+                    to="/manage-availability" 
+                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                    onClick={closeMenu}
+                  >
+                    📅 Manage Availability
+                  </Link>
+                )}
                 
                 {userType === 'customer' && (
                   <Link 
