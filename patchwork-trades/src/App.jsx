@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
-
 // Import all your pages
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -16,6 +15,7 @@ import BookingConfirmation from './pages/BookingConfirmation';
 import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
+import ManageAvailability from './pages/ManageAvailability';
 
 function App() {
   return (
@@ -36,6 +36,15 @@ function App() {
                 element={
                   <ProtectedRoute userType="tradesman">
                     <TradesmanDashboard />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/manage-availability"
+                element={
+                  <ProtectedRoute userType="tradesman">
+                    <ManageAvailability />
                   </ProtectedRoute>
                 }
               />
