@@ -1,7 +1,35 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Home = () => {
+  const { currentUser, userType } = useAuth();
+
+  // Dynamic button logic
+  const getTradesmanButtonLink = () => {
+    if (currentUser && userType === 'tradesman') {
+      return '/manage-availability';
+    }
+    return '/register-tradesman';
+  };
+
+  const getTradesmanButtonText = () => {
+    if (currentUser && userType === 'tradesman') {
+      return 'Manage Your Availability';
+    }
+    return 'List Your Availability';
+  };
+
+  const getCustomerButtonLink = () => {
+    if (currentUser && userType === 'customer') {
+      return '/browse';
+    }
+    return '/register-customer';
+  };
+
+  const getCustomerButtonText = () => {
+    return 'Find a Tradesman';
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {/* Hero Section */}
@@ -53,16 +81,16 @@ const Home = () => {
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <Link 
-              to="/browse"
+              to={getCustomerButtonLink()}
               className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors"
             >
-              Find a Tradesman
+              {getCustomerButtonText()}
             </Link>
             <Link 
-              to="/register-tradesman"
+              to={getTradesmanButtonLink()}
               className="bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 transition-colors"
             >
-              List Your Availability
+              {getTradesmanButtonText()}
             </Link>
           </div>
 
