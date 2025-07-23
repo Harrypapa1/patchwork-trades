@@ -2,13 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { signOut } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot 
+} from 'firebase/firestore';
 
 const Navbar = () => {
   const { currentUser, userType } = useAuth();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Check if mobile screen
   useEffect(() => {
@@ -21,6 +28,26 @@ const Navbar = () => {
     
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Listen for unread messages
+  useEffect(() => {
+    if (!currentUser) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const unreadQuery = query(
+      collection(db, 'messages'),
+      where('receiver_id', '==', currentUser.uid),
+      where('read', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(unreadQuery, (snapshot) => {
+      setUnreadCount(snapshot.docs.length);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
 
   const handleLogout = async () => {
     try {
@@ -73,8 +100,20 @@ const Navbar = () => {
                     Browse
                   </Link>
                   
-                  <Link to="/messages" className="hover:text-blue-200">
+                  <Link 
+                    to="/messages" 
+                    className={`relative ${
+                      unreadCount > 0 
+                        ? 'text-red-400 hover:text-red-300 font-semibold' 
+                        : 'hover:text-blue-200'
+                    }`}
+                  >
                     Messages
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                        {unreadCount}
+                      </span>
+                    )}
                   </Link>
                   
                   {userType === 'customer' && (
@@ -154,11 +193,21 @@ const Navbar = () => {
                 
                 <Link 
                   to="/messages" 
-                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 font-bold"
+                  className={`block px-3 py-2 rounded-md text-white hover:bg-blue-600 relative ${
+                    unreadCount > 0 ? 'font-bold' : ''
+                  }`}
                   onClick={closeMenu}
-                  style={{ backgroundColor: '#1e40af', border: '2px solid white' }}
+                  style={{ 
+                    backgroundColor: unreadCount > 0 ? '#dc2626' : '#1e40af', 
+                    border: '2px solid white' 
+                  }}
                 >
                   📨 MESSAGES
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-2 bg-white text-red-600 text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                      {unreadCount}
+                    </span>
+                  )}
                 </Link>
                 
                 {userType === 'customer' && (
