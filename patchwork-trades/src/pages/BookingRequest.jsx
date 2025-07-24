@@ -216,51 +216,35 @@ const BookingRequest = () => {
     setSubmitting(true);
 
     try {
-      // Create booking request (simplified for testing)
-      const bookingRequest = {
+      // Use existing booking structure that already works
+      const bookingData = {
         customer_id: currentUser.uid,
         customer_name: customerProfile?.name || currentUser.email,
         tradesman_id: tradesmanId,
         tradesman_name: tradesman.name,
+        date_booked: 'Quote Request', // Placeholder until date selected
+        status: 'Quote Requested',
         job_title: formData.jobTitle,
         job_description: formData.jobDescription,
         urgency: formData.urgency,
-        preferred_dates: formData.preferredDates,
+        preferred_dates_list: formData.preferredDates,
         budget_expectation: formData.budgetExpectation,
         additional_notes: formData.additionalNotes,
-        job_images: formData.jobImages, // Re-enabled with better compression
-        status: 'pending_review',
-        hourly_rate: tradesman.hourlyRate,
-        created_at: new Date().toISOString(),
-        conversation_id: null
-      };
-
-      console.log('Creating booking request:', bookingRequest); // Debug log
-      const docRef = await addDoc(collection(db, 'booking_requests'), bookingRequest);
-
-      // Create initial message in conversations
-      const conversationData = {
-        booking_request_id: docRef.id,
-        customer_id: currentUser.uid,
-        customer_name: customerProfile?.name || currentUser.email,
-        tradesman_id: tradesmanId,
-        tradesman_name: tradesman.name,
-        last_message: `New job request: ${formData.jobTitle}`,
-        last_message_time: new Date().toISOString(),
-        unread_count_customer: 0,
-        unread_count_tradesman: 1,
+        job_images: formData.jobImages,
         created_at: new Date().toISOString()
       };
 
-      const conversationRef = await addDoc(collection(db, 'conversations'), conversationData);
+      console.log('Creating booking:', bookingData);
+      const bookingRef = await addDoc(collection(db, 'bookings'), bookingData);
 
-      // Send initial message (simplified)
-      console.log('Creating message for conversation:', conversationRef.id); // Debug log
+      // Send message using existing message structure
+      console.log('Sending message to booking:', bookingRef.id);
       await addDoc(collection(db, 'messages'), {
-        conversation_id: conversationRef.id,
+        booking_id: bookingRef.id,
         sender_id: currentUser.uid,
         sender_name: customerProfile?.name || currentUser.email,
-        sender_type: 'customer',
+        receiver_id: tradesmanId,
+        receiver_name: tradesman.name,
         message: `Hi ${tradesman.name},
 
 I'd like to request a quote for: ${formData.jobTitle}
@@ -289,15 +273,13 @@ Please let me know if you're interested and if you need any additional informati
 Thanks!`,
         timestamp: new Date().toISOString(),
         read: false,
-        message_type: 'booking_request',
-        attached_images: formData.jobImages // Re-enabled
+        attached_images: formData.jobImages
       });
 
-      // Navigate to messages to continue conversation
+      // Navigate to messages
       navigate('/messages', {
         state: { 
-          success: 'Quote request sent successfully! The tradesman will respond shortly.',
-          conversationId: conversationRef.id 
+          success: 'Quote request sent successfully! The tradesman will respond shortly.'
         }
       });
 
