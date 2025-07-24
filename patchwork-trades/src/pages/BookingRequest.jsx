@@ -276,8 +276,8 @@ Thanks!`,
         attached_images: formData.jobImages
       });
 
-      // Navigate to messages
-      navigate('/messages', {
+      // Navigate to booking requests instead of messages
+      navigate('/booking-requests', {
         state: { 
           success: 'Quote request sent successfully! The tradesman will respond shortly.'
         }
@@ -555,10 +555,10 @@ Thanks!`,
         <h3 className="font-medium text-blue-900 mb-2">What happens next?</h3>
         <ul className="text-sm text-blue-800 space-y-1">
           <li>• Your request (with photos if added) will be sent to {tradesman.name}</li>
-          <li>• They'll review your job details and may ask questions</li>
+          <li>• You'll be taken to the Booking Requests page to track progress</li>
+          <li>• The tradesman can ask questions and discuss the job with you</li>
           <li>• They can accept at their standard rate (£{tradesman.hourlyRate}/hour) or propose a custom quote</li>
           <li>• Once you both agree, you'll proceed to payment and booking confirmation</li>
-          <li>• Photos help tradesmen give more accurate quotes!</li>
         </ul>
       </div>
     </div>
