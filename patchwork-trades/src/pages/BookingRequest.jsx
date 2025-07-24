@@ -23,6 +23,7 @@ const BookingRequest = () => {
   const [availableDates, setAvailableDates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -31,7 +32,8 @@ const BookingRequest = () => {
     urgency: 'normal',
     preferredDates: [],
     budgetExpectation: '',
-    additionalNotes: ''
+    additionalNotes: '',
+    jobImages: []
   });
 
   useEffect(() => {
@@ -102,6 +104,96 @@ const BookingRequest = () => {
     }));
   };
 
+  // Image compression function
+  const compressImage = (file, maxWidth = 800, quality = 0.8) => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        // Calculate new dimensions
+        const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        
+        // Draw and compress
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(resolve, 'image/jpeg', quality);
+      };
+      
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  // Convert file to base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle image upload
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    
+    if (files.length === 0) return;
+    
+    // Check total images limit
+    if (formData.jobImages.length + files.length > 5) {
+      alert('Maximum 5 images allowed');
+      return;
+    }
+    
+    setUploadingImages(true);
+    
+    try {
+      const newImages = [];
+      
+      for (const file of files) {
+        // Check file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+          alert(`${file.name} is too large. Please choose images under 5MB.`);
+          continue;
+        }
+        
+        // Compress the image
+        const compressedFile = await compressImage(file, 800, 0.8);
+        
+        // Convert to base64
+        const base64 = await fileToBase64(compressedFile);
+        
+        newImages.push({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          image: base64,
+          filename: file.name,
+          uploadedAt: new Date().toISOString()
+        });
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        jobImages: [...prev.jobImages, ...newImages]
+      }));
+      
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      alert('Error uploading images. Please try again.');
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  // Delete image
+  const deleteImage = (imageId) => {
+    setFormData(prev => ({
+      ...prev,
+      jobImages: prev.jobImages.filter(img => img.id !== imageId)
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -130,6 +222,7 @@ const BookingRequest = () => {
         preferred_dates: formData.preferredDates,
         budget_expectation: formData.budgetExpectation,
         additional_notes: formData.additionalNotes,
+        job_images: formData.jobImages,
         status: 'pending_review',
         hourly_rate: tradesman.hourlyRate,
         created_at: new Date().toISOString(),
@@ -181,12 +274,15 @@ I'm available on these dates: ${formData.preferredDates.map(dateId => {
           }) : '';
         }).join(', ')}
 
+${formData.jobImages.length > 0 ? `I've attached ${formData.jobImages.length} photo${formData.jobImages.length > 1 ? 's' : ''} to help show what needs to be done.` : ''}
+
 Please let me know if you're interested and if you need any additional information.
 
 Thanks!`,
         timestamp: new Date().toISOString(),
         read: false,
-        message_type: 'booking_request'
+        message_type: 'booking_request',
+        attached_images: formData.jobImages
       });
 
       // Navigate to messages to continue conversation
@@ -296,6 +392,62 @@ Thanks!`,
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
+          </div>
+
+          {/* Job Images */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Job Photos (Optional - but recommended)
+            </label>
+            <div className="mb-4">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                disabled={uploadingImages || formData.jobImages.length >= 5}
+                className="hidden"
+                id="job-images-upload"
+              />
+              <label 
+                htmlFor="job-images-upload"
+                className={`inline-block px-4 py-2 rounded cursor-pointer transition-colors ${
+                  uploadingImages || formData.jobImages.length >= 5
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-blue-500 text-white hover:bg-blue-600'
+                }`}
+              >
+                {uploadingImages ? 'Uploading...' : 'Add Photos'}
+              </label>
+              <p className="text-sm text-gray-500 mt-1">
+                Max 5 photos, up to 5MB each. Show the tradesman what needs to be fixed!
+              </p>
+            </div>
+
+            {/* Image Gallery */}
+            {formData.jobImages.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                {formData.jobImages.map((image) => (
+                  <div key={image.id} className="relative group">
+                    <img 
+                      src={image.image} 
+                      alt="Job photo" 
+                      className="w-full h-32 object-cover rounded border"
+                    />
+                    <button
+                      onClick={() => deleteImage(image.id)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      type="button"
+                    >
+                      ×
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 rounded-b">
+                      {image.filename}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Urgency */}
@@ -410,10 +562,11 @@ Thanks!`,
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="font-medium text-blue-900 mb-2">What happens next?</h3>
         <ul className="text-sm text-blue-800 space-y-1">
-          <li>• Your request will be sent to {tradesman.name}</li>
+          <li>• Your request (with photos if added) will be sent to {tradesman.name}</li>
           <li>• They'll review your job details and may ask questions</li>
           <li>• They can accept at their standard rate (£{tradesman.hourlyRate}/hour) or propose a custom quote</li>
           <li>• Once you both agree, you'll proceed to payment and booking confirmation</li>
+          <li>• Photos help tradesmen give more accurate quotes!</li>
         </ul>
       </div>
     </div>
