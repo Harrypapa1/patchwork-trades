@@ -298,10 +298,22 @@ const BrowseTradesmen = () => {
                   <p className="text-gray-500 text-sm mb-3">No dates available</p>
                 ) : (
                   <div className="mb-3">
-                    <p className="text-sm text-green-600 font-medium">
-                      {tradesman.availableDates.slice(0, 3).map(date => date.date_available).join(', ')}
-                      {tradesman.availableDates.length > 3 && ` +${tradesman.availableDates.length - 3} more`}
-                    </p>
+                    <ul className="text-sm text-green-600 space-y-1">
+                      {tradesman.availableDates.slice(0, 3).map(date => (
+                        <li key={date.id} className="flex items-center">
+                          <span className="w-1 h-1 bg-green-600 rounded-full mr-2"></span>
+                          {new Date(date.date_available).toLocaleDateString('en-GB', { 
+                            day: 'numeric', 
+                            month: 'long' 
+                          })}
+                        </li>
+                      ))}
+                      {tradesman.availableDates.length > 3 && (
+                        <li className="text-gray-500 text-xs ml-3">
+                          +{tradesman.availableDates.length - 3} more dates
+                        </li>
+                      )}
+                    </ul>
                   </div>
                 )}
                 
