@@ -13,6 +13,7 @@ import CustomerDashboard from './pages/CustomerDashboard';
 import BrowseTradesmen from './pages/BrowseTradesmen';
 import BookingConfirmation from './pages/BookingConfirmation';
 import BookingRequest from './pages/BookingRequest';
+import BookingRequests from './pages/BookingRequests';
 import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
@@ -63,6 +64,15 @@ function App() {
                 element={
                   <ProtectedRoute userType="customer">
                     <BookingRequest />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/booking-requests"
+                element={
+                  <ProtectedRoute>
+                    <BookingRequests />
                   </ProtectedRoute>
                 }
               />
