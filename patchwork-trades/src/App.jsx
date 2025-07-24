@@ -12,6 +12,7 @@ import TradesmanDashboard from './pages/TradesmanDashboard';
 import CustomerDashboard from './pages/CustomerDashboard';
 import BrowseTradesmen from './pages/BrowseTradesmen';
 import BookingConfirmation from './pages/BookingConfirmation';
+import BookingRequest from './pages/BookingRequest';
 import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
@@ -39,7 +40,6 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-
               <Route
                 path="/manage-availability"
                 element={
@@ -54,6 +54,15 @@ function App() {
                 element={
                   <ProtectedRoute userType="customer">
                     <CustomerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/booking-request"
+                element={
+                  <ProtectedRoute userType="customer">
+                    <BookingRequest />
                   </ProtectedRoute>
                 }
               />
