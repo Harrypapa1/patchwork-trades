@@ -120,14 +120,14 @@ const BrowseTradesmen = () => {
     setSearchServices('');
   };
 
-  const handleBooking = (tradesmanId, availabilityId) => {
+  const handleBooking = (tradesmanId) => {
     if (!currentUser) {
       navigate('/login');
       return;
     }
     
-    navigate('/booking-confirmation', {
-      state: { tradesmanId, availabilityId }
+    navigate('/booking-request', {
+      state: { tradesmanId }
     });
   };
 
@@ -234,30 +234,89 @@ const BrowseTradesmen = () => {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTradesmen.map(tradesman => (
             <div key={tradesman.id} className="bg-white rounded-lg shadow-md p-6">
-              <h3 className="text-xl font-semibold mb-2">{tradesman.name}</h3>
-              <p className="text-gray-600 mb-1"><strong>Trade:</strong> {tradesman.tradeType}</p>
-              <p className="text-gray-600 mb-1"><strong>Area:</strong> {tradesman.areaCovered}</p>
-              <p className="text-gray-600 mb-4">{tradesman.bio}</p>
-              
-              <div className="border-t pt-4">
-                <h4 className="font-medium mb-2">Available Dates:</h4>
-                {tradesman.availableDates.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No dates available</p>
+              {/* Profile Photo */}
+              <div className="flex items-center mb-4">
+                {tradesman.profilePhoto ? (
+                  <img 
+                    src={tradesman.profilePhoto} 
+                    alt={tradesman.name} 
+                    className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-3"
+                  />
                 ) : (
-                  <div className="space-y-2">
-                    {tradesman.availableDates.map(date => (
-                      <div key={date.id} className="flex justify-between items-center">
-                        <span className="text-sm">{date.date_available}</span>
-                        <button
-                          onClick={() => handleBooking(tradesman.id, date.id)}
-                          className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-                        >
-                          Book
-                        </button>
-                      </div>
-                    ))}
+                  <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mr-3 text-xs">
+                    No Photo
                   </div>
                 )}
+                <div>
+                  <h3 className="text-xl font-semibold">{tradesman.name}</h3>
+                  <p className="text-gray-600">{tradesman.tradeType}</p>
+                </div>
+              </div>
+
+              {/* Key Details */}
+              <div className="mb-4 space-y-2">
+                <p className="text-gray-600"><strong>Area:</strong> {tradesman.areaCovered}</p>
+                
+                {/* Hourly Rate - Prominent Display */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-blue-800 font-semibold">
+                    {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
+                  </p>
+                  {tradesman.yearsExperience && (
+                    <p className="text-blue-600 text-sm">{tradesman.yearsExperience} years experience</p>
+                  )}
+                </div>
+
+                {/* Insurance Badge */}
+                {tradesman.insuranceStatus && (
+                  <div>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
+                      tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {tradesman.insuranceStatus}
+                    </span>
+                  </div>
+                )}
+
+                {/* Bio */}
+                <p className="text-gray-600 text-sm">{tradesman.bio}</p>
+
+                {/* Services Preview */}
+                {tradesman.servicesOffered && (
+                  <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
+                    <strong>Services:</strong> {tradesman.servicesOffered.slice(0, 100)}...
+                  </div>
+                )}
+              </div>
+              
+              {/* Available Dates */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-2">Next Available:</h4>
+                {tradesman.availableDates.length === 0 ? (
+                  <p className="text-gray-500 text-sm mb-3">No dates available</p>
+                ) : (
+                  <div className="mb-3">
+                    <p className="text-sm text-green-600 font-medium">
+                      {tradesman.availableDates.slice(0, 3).map(date => date.date_available).join(', ')}
+                      {tradesman.availableDates.length > 3 && ` +${tradesman.availableDates.length - 3} more`}
+                    </p>
+                  </div>
+                )}
+                
+                {/* Request Quote Button */}
+                <button
+                  onClick={() => handleBooking(tradesman.id, null)}
+                  className={`w-full py-2 px-4 rounded font-medium transition-colors ${
+                    tradesman.availableDates.length > 0 
+                      ? 'bg-green-600 text-white hover:bg-green-700' 
+                      : 'bg-gray-400 text-white cursor-not-allowed'
+                  }`}
+                  disabled={tradesman.availableDates.length === 0}
+                >
+                  {tradesman.availableDates.length > 0 ? 'Request Quote' : 'No Availability'}
+                </button>
               </div>
             </div>
           ))}
