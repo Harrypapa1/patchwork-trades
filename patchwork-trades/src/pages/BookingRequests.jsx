@@ -75,6 +75,8 @@ const BookingRequests = () => {
         orderBy('timestamp', 'asc')
       );
 
+      console.log('Setting up real-time listener for booking:', bookingId); // Debug
+
       // Use real-time listener for comments - with error handling
       const unsubscribe = onSnapshot(commentsQuery, 
         (snapshot) => {
@@ -82,6 +84,8 @@ const BookingRequests = () => {
             id: doc.id,
             ...doc.data()
           }));
+          
+          console.log('Comments updated for booking', bookingId, ':', bookingComments); // Debug
           
           setComments(prev => ({
             ...prev,
@@ -114,8 +118,10 @@ const BookingRequests = () => {
     const commentText = newComments[bookingId]?.trim();
     if (!commentText) return;
 
+    console.log('Adding comment for booking:', bookingId, 'Comment:', commentText); // Debug
+
     try {
-      await addDoc(collection(db, 'booking_comments'), {
+      const commentData = {
         booking_id: bookingId,
         user_id: currentUser.uid,
         user_type: userType,
@@ -124,13 +130,19 @@ const BookingRequests = () => {
           bookingRequests.find(b => b.id === bookingId)?.tradesman_name,
         comment: commentText,
         timestamp: new Date().toISOString()
-      });
+      };
+
+      console.log('Comment data being saved:', commentData); // Debug
+
+      await addDoc(collection(db, 'booking_comments'), commentData);
 
       // Clear the input
       setNewComments(prev => ({
         ...prev,
         [bookingId]: ''
       }));
+
+      console.log('Comment saved successfully!'); // Debug
 
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -365,29 +377,35 @@ const BookingRequests = () => {
                   {/* Comments List */}
                   <div className="space-y-3 mb-4">
                     {comments[request.id] && comments[request.id].length > 0 ? (
-                      comments[request.id].map(comment => (
-                        <div key={comment.id} className="bg-white rounded-lg p-3 shadow-sm">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-sm text-gray-900">
-                              {comment.user_name}
-                              <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                                comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' :
-                                comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {comment.user_type === 'system' ? 'System' : 
-                                 comment.user_type.charAt(0).toUpperCase() + comment.user_type.slice(1)}
+                      <>
+                        {console.log('Displaying comments for booking', request.id, ':', comments[request.id])}
+                        {comments[request.id].map(comment => (
+                          <div key={comment.id} className="bg-white rounded-lg p-3 shadow-sm">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium text-sm text-gray-900">
+                                {comment.user_name}
+                                <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                                  comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' :
+                                  comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {comment.user_type === 'system' ? 'System' : 
+                                   comment.user_type.charAt(0).toUpperCase() + comment.user_type.slice(1)}
+                                </span>
                               </span>
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {formatDate(comment.timestamp)}
-                            </span>
+                              <span className="text-xs text-gray-500">
+                                {formatDate(comment.timestamp)}
+                              </span>
+                            </div>
+                            <p className="text-gray-700 text-sm whitespace-pre-line">{comment.comment}</p>
                           </div>
-                          <p className="text-gray-700 text-sm whitespace-pre-line">{comment.comment}</p>
-                        </div>
-                      ))
+                        ))}
+                      </>
                     ) : (
-                      <p className="text-gray-500 text-sm italic">No comments yet. Start the conversation!</p>
+                      <>
+                        {console.log('No comments to display for booking', request.id, 'Comments:', comments[request.id])}
+                        <p className="text-gray-500 text-sm italic">No comments yet. Start the conversation!</p>
+                      </>
                     )}
                   </div>
 
