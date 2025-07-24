@@ -20,6 +20,7 @@ const BrowseTradesmen = () => {
   const [searchName, setSearchName] = useState('');
   const [searchTrade, setSearchTrade] = useState('');
   const [searchArea, setSearchArea] = useState('');
+  const [searchServices, setSearchServices] = useState('');
 
   useEffect(() => {
     fetchTradesmen();
@@ -28,7 +29,7 @@ const BrowseTradesmen = () => {
   // Filter tradesmen when search terms change
   useEffect(() => {
     filterTradesmen();
-  }, [tradesmen, searchName, searchTrade, searchArea]);
+  }, [tradesmen, searchName, searchTrade, searchArea, searchServices]);
 
   const fetchTradesmen = async () => {
     try {
@@ -89,6 +90,26 @@ const BrowseTradesmen = () => {
       );
     }
 
+    // Filter by services/jobs
+    if (searchServices.trim()) {
+      filtered = filtered.filter(tradesman => {
+        const searchTerm = searchServices.toLowerCase();
+        
+        // Search in various fields where services might be listed
+        const searchFields = [
+          tradesman.services || '',
+          tradesman.specializations || '',
+          tradesman.servicesOffered || '',
+          tradesman.bio || '',
+          tradesman.description || ''
+        ];
+        
+        return searchFields.some(field => 
+          field.toLowerCase().includes(searchTerm)
+        );
+      });
+    }
+
     setFilteredTradesmen(filtered);
   };
 
@@ -96,6 +117,7 @@ const BrowseTradesmen = () => {
     setSearchName('');
     setSearchTrade('');
     setSearchArea('');
+    setSearchServices('');
   };
 
   const handleBooking = (tradesmanId, availabilityId) => {
@@ -121,7 +143,7 @@ const BrowseTradesmen = () => {
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">Search & Filter</h2>
         
-        <div className="grid md:grid-cols-3 gap-4 mb-4">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Search by Name
@@ -160,6 +182,19 @@ const BrowseTradesmen = () => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Services/Jobs
+            </label>
+            <input
+              type="text"
+              value={searchServices}
+              onChange={(e) => setSearchServices(e.target.value)}
+              placeholder="e.g. change plugs, fix toilet..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
         
         <div className="flex justify-between items-center">
@@ -167,7 +202,7 @@ const BrowseTradesmen = () => {
             Showing {filteredTradesmen.length} of {tradesmen.length} tradesmen
           </p>
           
-          {(searchName || searchTrade || searchArea) && (
+          {(searchName || searchTrade || searchArea || searchServices) && (
             <button
               onClick={clearFilters}
               className="text-blue-600 hover:text-blue-800 text-sm font-medium"
