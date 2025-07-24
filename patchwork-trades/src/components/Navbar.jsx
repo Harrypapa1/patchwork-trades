@@ -16,6 +16,7 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [bookingRequestsCount, setBookingRequestsCount] = useState(0);
 
   // Check if mobile screen
   useEffect(() => {
@@ -48,6 +49,39 @@ const Navbar = () => {
 
     return () => unsubscribe();
   }, [currentUser]);
+
+  // Listen for booking requests
+  useEffect(() => {
+    if (!currentUser) {
+      setBookingRequestsCount(0);
+      return;
+    }
+
+    let bookingQuery;
+    if (userType === 'customer') {
+      // Customers see their own requests
+      bookingQuery = query(
+        collection(db, 'bookings'),
+        where('customer_id', '==', currentUser.uid),
+        where('status', '==', 'Quote Requested')
+      );
+    } else if (userType === 'tradesman') {
+      // Tradesmen see requests for them
+      bookingQuery = query(
+        collection(db, 'bookings'),
+        where('tradesman_id', '==', currentUser.uid),
+        where('status', '==', 'Quote Requested')
+      );
+    }
+
+    if (bookingQuery) {
+      const unsubscribe = onSnapshot(bookingQuery, (snapshot) => {
+        setBookingRequestsCount(snapshot.docs.length);
+      });
+
+      return () => unsubscribe();
+    }
+  }, [currentUser, userType]);
 
   const handleLogout = async () => {
     try {
@@ -101,6 +135,23 @@ const Navbar = () => {
                       Browse
                     </Link>
                   )}
+                  
+                  {/* Booking Requests - Both user types */}
+                  <Link 
+                    to="/booking-requests" 
+                    className={`relative ${
+                      bookingRequestsCount > 0 
+                        ? 'text-yellow-300 hover:text-yellow-200 font-semibold' 
+                        : 'hover:text-blue-200'
+                    }`}
+                  >
+                    Booking Requests
+                    {bookingRequestsCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                        {bookingRequestsCount}
+                      </span>
+                    )}
+                  </Link>
                   
                   <Link 
                     to="/messages" 
@@ -200,6 +251,26 @@ const Navbar = () => {
                     🔍 Browse Tradesmen
                   </Link>
                 )}
+                
+                {/* Booking Requests - Mobile */}
+                <Link 
+                  to="/booking-requests" 
+                  className={`block px-3 py-2 rounded-md text-white hover:bg-blue-600 relative ${
+                    bookingRequestsCount > 0 ? 'font-bold' : ''
+                  }`}
+                  onClick={closeMenu}
+                  style={{ 
+                    backgroundColor: bookingRequestsCount > 0 ? '#f59e0b' : '#1e40af', 
+                    border: '2px solid white' 
+                  }}
+                >
+                  📋 BOOKING REQUESTS
+                  {bookingRequestsCount > 0 && (
+                    <span className="absolute top-1 right-2 bg-white text-yellow-600 text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                      {bookingRequestsCount}
+                    </span>
+                  )}
+                </Link>
                 
                 <Link 
                   to="/messages" 
