@@ -104,20 +104,20 @@ const BookingRequest = () => {
     }));
   };
 
-  // Image compression function
-  const compressImage = (file, maxWidth = 800, quality = 0.8) => {
+  // Image compression function - MORE AGGRESSIVE
+  const compressImage = (file, maxWidth = 400, quality = 0.6) => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const img = new Image();
       
       img.onload = () => {
-        // Calculate new dimensions
+        // More aggressive sizing
         const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
         canvas.width = img.width * ratio;
         canvas.height = img.height * ratio;
         
-        // Draw and compress
+        // Draw and compress more
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.toBlob(resolve, 'image/jpeg', quality);
       };
@@ -142,8 +142,8 @@ const BookingRequest = () => {
     if (files.length === 0) return;
     
     // Check total images limit
-    if (formData.jobImages.length + files.length > 5) {
-      alert('Maximum 5 images allowed');
+    if (formData.jobImages.length + files.length > 3) {
+      alert('Maximum 3 images allowed (to keep file sizes manageable)');
       return;
     }
     
@@ -153,17 +153,23 @@ const BookingRequest = () => {
       const newImages = [];
       
       for (const file of files) {
-        // Check file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-          alert(`${file.name} is too large. Please choose images under 5MB.`);
+        // Check file size (max 2MB before compression)
+        if (file.size > 2 * 1024 * 1024) {
+          alert(`${file.name} is too large. Please choose images under 2MB.`);
           continue;
         }
         
-        // Compress the image
-        const compressedFile = await compressImage(file, 800, 0.8);
+        // Compress the image aggressively
+        const compressedFile = await compressImage(file, 400, 0.5);
         
         // Convert to base64
         const base64 = await fileToBase64(compressedFile);
+        
+        // Check final base64 size (should be under 100KB after compression)
+        if (base64.length > 150000) {
+          alert(`${file.name} is still too large after compression. Try a smaller/simpler image.`);
+          continue;
+        }
         
         newImages.push({
           id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
@@ -210,7 +216,7 @@ const BookingRequest = () => {
     setSubmitting(true);
 
     try {
-      // Create booking request
+      // Create booking request (simplified for testing)
       const bookingRequest = {
         customer_id: currentUser.uid,
         customer_name: customerProfile?.name || currentUser.email,
@@ -222,13 +228,14 @@ const BookingRequest = () => {
         preferred_dates: formData.preferredDates,
         budget_expectation: formData.budgetExpectation,
         additional_notes: formData.additionalNotes,
-        job_images: formData.jobImages,
+        job_images: formData.jobImages, // Re-enabled with better compression
         status: 'pending_review',
         hourly_rate: tradesman.hourlyRate,
         created_at: new Date().toISOString(),
-        conversation_id: null // Will be created when first message is sent
+        conversation_id: null
       };
 
+      console.log('Creating booking request:', bookingRequest); // Debug log
       const docRef = await addDoc(collection(db, 'booking_requests'), bookingRequest);
 
       // Create initial message in conversations
@@ -247,7 +254,8 @@ const BookingRequest = () => {
 
       const conversationRef = await addDoc(collection(db, 'conversations'), conversationData);
 
-      // Send initial message
+      // Send initial message (simplified)
+      console.log('Creating message for conversation:', conversationRef.id); // Debug log
       await addDoc(collection(db, 'messages'), {
         conversation_id: conversationRef.id,
         sender_id: currentUser.uid,
@@ -282,7 +290,7 @@ Thanks!`,
         timestamp: new Date().toISOString(),
         read: false,
         message_type: 'booking_request',
-        attached_images: formData.jobImages
+        attached_images: formData.jobImages // Re-enabled
       });
 
       // Navigate to messages to continue conversation
@@ -294,8 +302,10 @@ Thanks!`,
       });
 
     } catch (error) {
-      console.error('Error submitting booking request:', error);
-      alert('Error sending request. Please try again.');
+      console.error('Detailed error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      alert(`Error sending request: ${error.message}. Check console for details.`);
     } finally {
       setSubmitting(false);
     }
@@ -405,14 +415,14 @@ Thanks!`,
                 accept="image/*"
                 multiple
                 onChange={handleImageUpload}
-                disabled={uploadingImages || formData.jobImages.length >= 5}
+                disabled={uploadingImages || formData.jobImages.length >= 3}
                 className="hidden"
                 id="job-images-upload"
               />
               <label 
                 htmlFor="job-images-upload"
                 className={`inline-block px-4 py-2 rounded cursor-pointer transition-colors ${
-                  uploadingImages || formData.jobImages.length >= 5
+                  uploadingImages || formData.jobImages.length >= 3
                     ? 'bg-gray-400 text-white cursor-not-allowed'
                     : 'bg-blue-500 text-white hover:bg-blue-600'
                 }`}
@@ -420,7 +430,7 @@ Thanks!`,
                 {uploadingImages ? 'Uploading...' : 'Add Photos'}
               </label>
               <p className="text-sm text-gray-500 mt-1">
-                Max 5 photos, up to 5MB each. Show the tradesman what needs to be fixed!
+                Max 3 photos, up to 2MB each. Images automatically compressed for faster sending!
               </p>
             </div>
 
