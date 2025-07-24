@@ -52,6 +52,7 @@ const BookingRequests = () => {
         ...doc.data()
       }));
 
+      console.log('Found booking requests:', requests); // Debug log
       setBookingRequests(requests);
 
       // Fetch comments for each request
@@ -74,24 +75,38 @@ const BookingRequests = () => {
         orderBy('timestamp', 'asc')
       );
 
-      // Use real-time listener for comments
-      const unsubscribe = onSnapshot(commentsQuery, (snapshot) => {
-        const bookingComments = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        
-        setComments(prev => ({
-          ...prev,
-          [bookingId]: bookingComments
-        }));
-      });
+      // Use real-time listener for comments - with error handling
+      const unsubscribe = onSnapshot(commentsQuery, 
+        (snapshot) => {
+          const bookingComments = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          setComments(prev => ({
+            ...prev,
+            [bookingId]: bookingComments
+          }));
+        },
+        (error) => {
+          // Handle collection not existing yet
+          console.log('Comments collection may not exist yet, initializing empty:', error);
+          setComments(prev => ({
+            ...prev,
+            [bookingId]: []
+          }));
+        }
+      );
 
-      // Store unsubscribe function (you might want to clean this up on unmount)
       return unsubscribe;
 
     } catch (error) {
       console.error('Error fetching comments:', error);
+      // Initialize empty comments for this booking
+      setComments(prev => ({
+        ...prev,
+        [bookingId]: []
+      }));
     }
   };
 
@@ -136,16 +151,20 @@ const BookingRequests = () => {
       fetchBookingRequests();
       
       // Add system comment
-      await addDoc(collection(db, 'booking_comments'), {
-        booking_id: bookingId,
-        user_id: currentUser.uid,
-        user_type: 'system',
-        user_name: 'System',
-        comment: customQuote ? 
-          `Custom quote proposed: ${customQuote}` : 
-          `Booking ${newStatus.toLowerCase()}`,
-        timestamp: new Date().toISOString()
-      });
+      try {
+        await addDoc(collection(db, 'booking_comments'), {
+          booking_id: bookingId,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          user_name: 'System',
+          comment: customQuote ? 
+            `Custom quote proposed: ${customQuote}` : 
+            `Booking ${newStatus.toLowerCase()}`,
+          timestamp: new Date().toISOString()
+        });
+      } catch (commentError) {
+        console.log('Could not add system comment (collection may not exist yet):', commentError);
+      }
 
     } catch (error) {
       console.error('Error updating booking status:', error);
