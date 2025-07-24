@@ -71,8 +71,8 @@ const BookingRequests = () => {
     try {
       const commentsQuery = query(
         collection(db, 'booking_comments'),
-        where('booking_id', '==', bookingId),
-        orderBy('timestamp', 'asc')
+        where('booking_id', '==', bookingId)
+        // Removed orderBy temporarily to fix the real-time listener
       );
 
       console.log('Setting up real-time listener for booking:', bookingId); // Debug
@@ -84,6 +84,9 @@ const BookingRequests = () => {
             id: doc.id,
             ...doc.data()
           }));
+          
+          // Sort manually by timestamp
+          bookingComments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
           
           console.log('Comments updated for booking', bookingId, ':', bookingComments); // Debug
           
