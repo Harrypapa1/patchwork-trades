@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom'; // Add this import
 import { 
   collection, 
   query, 
@@ -15,6 +16,7 @@ import { db } from '../config/firebase';
 
 const BookingRequests = () => {
   const { currentUser, userType } = useAuth();
+  const navigate = useNavigate(); // Add this hook
   const [bookingRequests, setBookingRequests] = useState([]);
   const [comments, setComments] = useState({});
   const [newComments, setNewComments] = useState({});
@@ -436,7 +438,7 @@ const BookingRequests = () => {
           </p>
           {userType === 'customer' && (
             <button
-              onClick={() => window.location.href = '/browse'}
+              onClick={() => navigate('/browse')}
               className="mt-4 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
             >
               Browse Tradesmen
