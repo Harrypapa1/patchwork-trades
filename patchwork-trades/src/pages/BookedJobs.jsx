@@ -10,14 +10,20 @@ import {
   addDoc,
   onSnapshot,
   orderBy,
-  updateDoc
+  updateDoc,
+  limit
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import LazyImage from '../components/LazyImage';
 
-// Job Card Component - Moved outside to prevent re-creation on each render
+const JOBS_PER_PAGE = 5; // Limit initial load
+
+// Lightweight JobCard - only load comments when expanded
 const JobCard = React.memo(({ 
   job, 
   userType, 
+  isExpanded,
+  onToggleExpand,
   comments, 
   newComments, 
   setNewComments, 
@@ -36,7 +42,7 @@ const JobCard = React.memo(({
       'border-blue-500'
     }`}>
       <div className="p-6">
-        {/* Job Header */}
+        {/* Job Header - Always visible */}
         <div className="flex justify-between items-start mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
@@ -51,7 +57,13 @@ const JobCard = React.memo(({
                 {userType === 'customer' ? (
                   <>
                     {job.tradesmanPhoto ? (
-                      <img src={job.tradesmanPhoto} alt="Tradesman" className="w-6 h-6 rounded-full object-cover" />
+                      <LazyImage 
+                        src={job.tradesmanPhoto} 
+                        alt="Tradesman" 
+                        className="w-6 h-6 rounded-full object-cover"
+                        width="24px"
+                        height="24px"
+                      />
                     ) : (
                       <div className="w-6 h-6 rounded-full bg-gray-300"></div>
                     )}
@@ -60,7 +72,13 @@ const JobCard = React.memo(({
                 ) : (
                   <>
                     {job.customerPhoto ? (
-                      <img src={job.customerPhoto} alt="Customer" className="w-6 h-6 rounded-full object-cover" />
+                      <LazyImage 
+                        src={job.customerPhoto} 
+                        alt="Customer" 
+                        className="w-6 h-6 rounded-full object-cover"
+                        width="24px"
+                        height="24px"
+                      />
                     ) : (
                       <div className="w-6 h-6 rounded-full bg-gray-300"></div>
                     )}
@@ -71,174 +89,182 @@ const JobCard = React.memo(({
               <span><strong>Date:</strong> {job.requested_date}</span>
               <span className="text-green-600 font-semibold"><strong>Final Price:</strong> {getFinalPrice(job)}</span>
             </div>
-
-            <div className="text-sm text-gray-500 mb-3">
-              <span>Requested: {new Date(job.created_at).toLocaleDateString()}</span>
-            </div>
           </div>
         </div>
 
-        {/* Job Description */}
-        <div className="mb-4">
-          <h3 className="font-medium text-gray-900 mb-2">Job Description</h3>
-          <p className="text-gray-700 whitespace-pre-line">{job.job_description}</p>
-        </div>
+        {/* Expand/Collapse Button */}
+        <button
+          onClick={() => onToggleExpand(job.id)}
+          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-4 rounded mb-4 transition-colors"
+        >
+          {isExpanded ? '▲ Hide Details' : '▼ Show Details & Comments'}
+        </button>
 
-        {/* Job Photos - Always visible if they exist */}
-        {job.photos && job.photos.length > 0 && (
-          <div className="mb-6">
-            <h3 className="font-medium text-gray-900 mb-3">Job Photos</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {job.photos.map((photo, index) => (
-                <img 
-                  key={index}
-                  src={photo} 
-                  alt={`Job photo ${index + 1}`}
-                  className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={() => window.open(photo, '_blank')}
-                />
-              ))}
+        {/* Expandable Content - Only load when expanded */}
+        {isExpanded && (
+          <>
+            {/* Job Description */}
+            <div className="mb-4">
+              <h3 className="font-medium text-gray-900 mb-2">Job Description</h3>
+              <p className="text-gray-700 whitespace-pre-line">{job.job_description}</p>
             </div>
-          </div>
-        )}
 
-        {/* Additional Details */}
-        {job.additional_notes && (
-          <div className="mb-4">
-            <h3 className="font-medium text-gray-900 mb-2">Additional Notes</h3>
-            <p className="text-gray-700 whitespace-pre-line">{job.additional_notes}</p>
-          </div>
-        )}
+            {/* Job Photos - Lazy loaded */}
+            {job.photos && job.photos.length > 0 && (
+              <div className="mb-6">
+                <h3 className="font-medium text-gray-900 mb-3">Job Photos</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {job.photos.map((photo, index) => (
+                    <LazyImage
+                      key={index}
+                      src={photo} 
+                      alt={`Job photo ${index + 1}`}
+                      className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                      width="100%"
+                      height="96px"  
+                      onClick={() => window.open(photo, '_blank')}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-        {/* Job Actions */}
-        <div className="flex flex-wrap gap-3 mb-6">
-          {/* Status Update Buttons for Tradesmen */}
-          {userType === 'tradesman' && (
-            <>
-              {job.status === 'Accepted' && (
-                <button
-                  onClick={() => onUpdateJobStatus(job.id, 'In Progress')}
-                  className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
-                >
-                  Mark In Progress
-                </button>
-              )}
-              {job.status === 'In Progress' && (
-                <button
-                  onClick={() => onUpdateJobStatus(job.id, 'Completed')}
-                  className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
-                >
-                  Mark Complete
-                </button>
-              )}
-            </>
-          )}
+            {/* Additional Details */}
+            {job.additional_notes && (
+              <div className="mb-4">
+                <h3 className="font-medium text-gray-900 mb-2">Additional Notes</h3>
+                <p className="text-gray-700 whitespace-pre-line">{job.additional_notes}</p>
+              </div>
+            )}
 
-          {/* Cancel Job Button - Available for both user types on active jobs */}
-          {job.status !== 'Completed' && job.status !== 'Cancelled' && (
-            <button
-              onClick={() => onCancelJob(job.id)}
-              className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors border-2 border-red-600"
-            >
-              Cancel Job
-            </button>
-          )}
-
-          {/* Additional Actions for Completed Jobs */}
-          {job.status === 'Completed' && (
-            <div className="flex gap-2">
-              {userType === 'customer' && (
+            {/* Job Actions */}
+            <div className="flex flex-wrap gap-3 mb-6">
+              {/* Status Update Buttons for Tradesmen */}
+              {userType === 'tradesman' && (
                 <>
-                  <button className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors">
-                    Leave Review
-                  </button>
-                  <button className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors">
-                    Hire Again
-                  </button>
+                  {job.status === 'Accepted' && (
+                    <button
+                      onClick={() => onUpdateJobStatus(job.id, 'In Progress')}
+                      className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+                    >
+                      Mark In Progress
+                    </button>
+                  )}
+                  {job.status === 'In Progress' && (
+                    <button
+                      onClick={() => onUpdateJobStatus(job.id, 'Completed')}
+                      className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                    >
+                      Mark Complete
+                    </button>
+                  )}
                 </>
               )}
-            </div>
-          )}
 
-          {/* Show cancellation details if job was cancelled */}
-          {job.status === 'Cancelled' && (
-            <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mt-2">
-              <div className="flex items-center gap-2 text-red-800 mb-2">
-                <span className="text-lg">🚫</span>
-                <span className="font-semibold">Job Cancelled</span>
-              </div>
-              <div className="text-red-700 text-sm space-y-1">
-                <p><strong>Cancelled on:</strong> {new Date(job.cancelled_at || job.updated_at).toLocaleDateString()}</p>
-                <p><strong>Cancelled by:</strong> {job.cancelled_by === 'customer' ? 'Customer' : 'Tradesman'}</p>
-                {job.cancelled_by === 'customer' && job.cancellation_fee_applied > 0 && (
-                  <>
-                    <p><strong>Cancellation fee:</strong> £{job.cancellation_fee_applied} ({job.cancellation_percentage}%)</p>
-                    {job.refund_amount && (
-                      <p><strong>Refund amount:</strong> £{job.refund_amount}</p>
-                    )}
-                  </>
-                )}
-                {job.cancelled_by === 'tradesman' && (
-                  <p className="text-orange-700 font-medium">⚠️ Tradesman cancellation may affect future reviews</p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+              {/* Cancel Job Button */}
+              {job.status !== 'Completed' && job.status !== 'Cancelled' && (
+                <button
+                  onClick={() => onCancelJob(job.id)}
+                  className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors border-2 border-red-600"
+                >
+                  Cancel Job
+                </button>
+              )}
 
-        {/* Discussion Section */}
-        <div className="border-t pt-6">
-          <h3 className="font-medium text-gray-900 mb-4">Complete Discussion History</h3>
-          
-          {/* Comments List */}
-          <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
-            {comments && comments.length > 0 ? (
-              comments.map(comment => (
-                <div key={comment.id} className="bg-white rounded-lg p-3 shadow-sm border">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-sm text-gray-900">
-                      {comment.user_name}
-                      <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                        comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' :
-                        comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {comment.user_type === 'system' ? 'System' : 
-                         comment.user_type.charAt(0).toUpperCase() + comment.user_type.slice(1)}
-                      </span>
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {formatDate(comment.timestamp || comment.created_at)}
-                    </span>
-                  </div>
-                  <p className="text-gray-700 text-sm whitespace-pre-line">{comment.comment}</p>
+              {/* Additional Actions for Completed Jobs */}
+              {job.status === 'Completed' && (
+                <div className="flex gap-2">
+                  {userType === 'customer' && (
+                    <>
+                      <button className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors">
+                        Leave Review
+                      </button>
+                      <button className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors">
+                        Hire Again
+                      </button>
+                    </>
+                  )}
                 </div>
-              ))
-            ) : (
-              <p className="text-gray-500 text-center py-4">No comments yet for this job.</p>
-            )}
-          </div>
+              )}
 
-          {/* Add New Comment */}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newComments[job.id] || ''}
-              onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
-              placeholder="Add a comment about this job..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              onKeyPress={(e) => e.key === 'Enter' && onSubmitComment(job.id)}
-              disabled={submittingComment[job.id]}
-            />
-            <button
-              onClick={() => onSubmitComment(job.id)}
-              disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              {submittingComment[job.id] ? 'Posting...' : 'Comment'}
-            </button>
-          </div>
-        </div>
+              {/* Cancellation details */}
+              {job.status === 'Cancelled' && (
+                <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mt-2">
+                  <div className="flex items-center gap-2 text-red-800 mb-2">
+                    <span className="text-lg">🚫</span>
+                    <span className="font-semibold">Job Cancelled</span>
+                  </div>
+                  <div className="text-red-700 text-sm space-y-1">
+                    <p><strong>Cancelled on:</strong> {new Date(job.cancelled_at || job.updated_at).toLocaleDateString()}</p>
+                    <p><strong>Cancelled by:</strong> {job.cancelled_by === 'customer' ? 'Customer' : 'Tradesman'}</p>
+                    {job.cancelled_by === 'customer' && job.cancellation_fee_applied > 0 && (
+                      <>
+                        <p><strong>Cancellation fee:</strong> £{job.cancellation_fee_applied} ({job.cancellation_percentage}%)</p>
+                        {job.refund_amount && (
+                          <p><strong>Refund amount:</strong> £{job.refund_amount}</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Discussion Section - Only when expanded */}
+            <div className="border-t pt-6">
+              <h3 className="font-medium text-gray-900 mb-4">Discussion History</h3>
+              
+              {/* Comments List */}
+              <div className="space-y-3 mb-6 max-h-60 overflow-y-auto">
+                {comments && comments.length > 0 ? (
+                  comments.map(comment => (
+                    <div key={comment.id} className="bg-gray-50 rounded-lg p-3 border">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm text-gray-900">
+                          {comment.user_name}
+                          <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                            comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' :
+                            comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {comment.user_type === 'system' ? 'System' : 
+                             comment.user_type.charAt(0).toUpperCase() + comment.user_type.slice(1)}
+                          </span>
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formatDate(comment.timestamp || comment.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-gray-700 text-sm whitespace-pre-line">{comment.comment}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-center py-4">No comments yet.</p>
+                )}
+              </div>
+
+              {/* Add New Comment */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newComments[job.id] || ''}
+                  onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
+                  placeholder="Add a comment..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onKeyPress={(e) => e.key === 'Enter' && onSubmitComment(job.id)}
+                  disabled={submittingComment[job.id]}
+                />
+                <button
+                  onClick={() => onSubmitComment(job.id)}
+                  disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+                >
+                  {submittingComment[job.id] ? 'Posting...' : 'Comment'}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -248,11 +274,13 @@ const BookedJobs = () => {
   const { currentUser, userType } = useAuth();
   const [bookedJobs, setBookedJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [comments, setComments] = useState({}); // Simplified to match BookingRequests
+  const [comments, setComments] = useState({}); 
   const [newComments, setNewComments] = useState({});
   const [submittingComment, setSubmittingComment] = useState({});
   const [showCompleted, setShowCompleted] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
+  const [expandedJobs, setExpandedJobs] = useState({}); // Track which jobs are expanded
+  const [commentsListeners, setCommentsListeners] = useState({}); // Track active listeners
 
   useEffect(() => {
     if (currentUser) {
@@ -260,21 +288,26 @@ const BookedJobs = () => {
     }
   }, [currentUser, userType]);
 
-  useEffect(() => {
-    // Auto-load comments for all booked jobs when jobs are loaded
-    if (bookedJobs.length > 0) {
-      bookedJobs.forEach(job => {
-        fetchJobComments(job.id);
-      });
-    }
-  }, [bookedJobs]);
+  // Only load comments when job is expanded
+  const handleToggleExpand = useCallback((jobId) => {
+    setExpandedJobs(prev => {
+      const isCurrentlyExpanded = prev[jobId];
+      const newExpanded = { ...prev, [jobId]: !isCurrentlyExpanded };
+      
+      // If expanding and don't have comments yet, load them
+      if (!isCurrentlyExpanded && !comments[jobId]) {
+        fetchJobComments(jobId);
+      }
+      
+      return newExpanded;
+    });
+  }, [comments]);
 
-  // Helper function to filter jobs by status
+  // Helper functions
   const getActiveJobs = () => bookedJobs.filter(job => job.status === 'Accepted' || job.status === 'In Progress');
   const getCompletedJobs = () => bookedJobs.filter(job => job.status === 'Completed');
   const getCancelledJobs = () => bookedJobs.filter(job => job.status === 'Cancelled');
 
-  // Helper function to get final agreed price
   const getFinalPrice = (job) => {
     if (job.customer_counter_quote && job.status === 'Accepted') {
       return job.customer_counter_quote;
@@ -287,7 +320,6 @@ const BookedJobs = () => {
     }
   };
 
-  // Helper function to extract numeric price for calculations
   const getNumericPrice = (job) => {
     let priceString = '';
     
@@ -296,14 +328,12 @@ const BookedJobs = () => {
     } else if (job.custom_quote && job.status === 'Accepted') {
       priceString = job.custom_quote;
     } else {
-      // For hourly rates, we'll use a default estimate of 4 hours
       const hourlyRate = job.tradesman_hourly_rate || 50;
-      return hourlyRate * 4; // 4 hour estimate
+      return hourlyRate * 4;
     }
     
-    // Extract numeric value from price string
     const priceMatch = priceString.match(/£?(\d+)/);
-    return priceMatch ? parseInt(priceMatch[1]) : 200; // Default to £200 if can't parse
+    return priceMatch ? parseInt(priceMatch[1]) : 200;
   };
 
   const fetchBookedJobs = async () => {
@@ -313,16 +343,16 @@ const BookedJobs = () => {
       let jobsQuery;
       
       if (userType === 'customer') {
-        // Show jobs where customer is the current user and status is NOT "Quote Requested"
         jobsQuery = query(
           collection(db, 'bookings'),
-          where('customer_id', '==', currentUser.uid)
+          where('customer_id', '==', currentUser.uid),
+          limit(JOBS_PER_PAGE) // Limit initial load
         );
       } else if (userType === 'tradesman') {
-        // Show jobs where tradesman is the current user and status is NOT "Quote Requested"
         jobsQuery = query(
           collection(db, 'bookings'),
-          where('tradesman_id', '==', currentUser.uid)
+          where('tradesman_id', '==', currentUser.uid),
+          limit(JOBS_PER_PAGE) // Limit initial load
         );
       }
 
@@ -333,7 +363,6 @@ const BookedJobs = () => {
         for (const jobDoc of querySnapshot.docs) {
           const jobData = jobDoc.data();
           
-          // Only include jobs that are NOT "Quote Requested" (i.e., agreed/contracted jobs)
           if (jobData.status !== 'Quote Requested') {
             // Get customer name
             const customerDoc = await getDoc(doc(db, 'users', jobData.customer_id));
@@ -356,7 +385,6 @@ const BookedJobs = () => {
           }
         }
 
-        // Sort by creation date (newest first)
         jobsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         setBookedJobs(jobsData);
       }
@@ -367,18 +395,14 @@ const BookedJobs = () => {
     }
   };
 
-  // SIMPLIFIED: Use the exact same logic as BookingRequests
+  // Only fetch comments when needed
   const fetchJobComments = async (jobId) => {
     try {
-      console.log('Setting up real-time listener for job:', jobId); // Debug
-
       const commentsQuery = query(
         collection(db, 'booking_comments'),
         where('booking_id', '==', jobId)
-        // Removed orderBy to match BookingRequests exactly
       );
 
-      // Use real-time listener for comments - with error handling (same as BookingRequests)
       const unsubscribe = onSnapshot(commentsQuery, 
         (snapshot) => {
           const jobComments = snapshot.docs.map(doc => ({
@@ -386,20 +410,15 @@ const BookedJobs = () => {
             ...doc.data()
           }));
           
-          // Sort manually by timestamp (same as BookingRequests)
           jobComments.sort((a, b) => new Date(a.timestamp || a.created_at || 0) - new Date(b.timestamp || b.created_at || 0));
           
-          console.log('Comments updated for job', jobId, ':', jobComments); // Debug
-          
-          // Use same state structure as BookingRequests
           setComments(prev => ({
             ...prev,
             [jobId]: jobComments
           }));
         },
         (error) => {
-          // Handle collection not existing yet (same as BookingRequests)
-          console.log('Comments collection may not exist yet, initializing empty:', error);
+          console.log('Comments collection may not exist yet:', error);
           setComments(prev => ({
             ...prev,
             [jobId]: []
@@ -407,11 +426,14 @@ const BookedJobs = () => {
         }
       );
 
-      return unsubscribe;
+      // Track listener for cleanup
+      setCommentsListeners(prev => ({
+        ...prev,
+        [jobId]: unsubscribe
+      }));
 
     } catch (error) {
       console.error('Error fetching comments:', error);
-      // Initialize empty comments for this job (same as BookingRequests)
       setComments(prev => ({
         ...prev,
         [jobId]: []
@@ -419,17 +441,13 @@ const BookedJobs = () => {
     }
   };
 
-  // Memoized callback functions to prevent unnecessary re-renders
   const handleSubmitComment = useCallback(async (jobId) => {
     const commentText = newComments[jobId]?.trim();
     if (!commentText) return;
 
-    console.log('Adding comment for job:', jobId, 'Comment:', commentText); // Debug
-
     setSubmittingComment(prev => ({ ...prev, [jobId]: true }));
 
     try {
-      // Match exactly how BookingRequests saves comments
       const job = bookedJobs.find(j => j.id === jobId);
       const userName = userType === 'customer' ? job?.customerName : job?.tradesmanName;
       
@@ -437,19 +455,13 @@ const BookedJobs = () => {
         booking_id: jobId,
         user_id: currentUser.uid,
         user_type: userType,
-        user_name: userName || 'Unknown', // Save name directly like BookingRequests
+        user_name: userName || 'Unknown',
         comment: commentText,
-        timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
+        timestamp: new Date().toISOString()
       };
 
-      console.log('Comment data being saved:', commentData); // Debug
-
       await addDoc(collection(db, 'booking_comments'), commentData);
-      
-      // Clear the comment input
       setNewComments(prev => ({ ...prev, [jobId]: '' }));
-
-      console.log('Comment saved successfully!'); // Debug
       
     } catch (error) {
       console.error('Error submitting comment:', error);
@@ -466,7 +478,6 @@ const BookedJobs = () => {
         updated_at: new Date().toISOString()
       });
       
-      // Refresh the jobs list
       fetchBookedJobs();
     } catch (error) {
       console.error('Error updating job status:', error);
@@ -482,16 +493,14 @@ const BookedJobs = () => {
       let confirmMessage;
       let cancellationFee = 0;
       let cancellationPercentage = 0;
-      const basePrice = getNumericPrice(job); // Calculate once for use throughout
+      const basePrice = getNumericPrice(job);
 
       if (userType === 'customer') {
-        // Calculate time until job
         const jobDate = new Date(job.requested_date);
         const currentDate = new Date();
         const timeDiff = jobDate.getTime() - currentDate.getTime();
         const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
 
-        // Determine cancellation percentage based on notice period
         if (daysDiff > 7) {
           cancellationPercentage = 10;
         } else if (daysDiff > 2) {
@@ -500,64 +509,25 @@ const BookedJobs = () => {
           cancellationPercentage = 50;
         }
 
-        // Calculate fee based on agreed price
         cancellationFee = Math.round((basePrice * cancellationPercentage) / 100);
-
-        let noticeText;
-        if (daysDiff > 7) {
-          noticeText = `More than 1 week notice (${daysDiff} days)`;
-        } else if (daysDiff > 2) {
-          noticeText = `Less than 1 week notice (${daysDiff} days)`;
-        } else if (daysDiff >= 0) {
-          noticeText = `2 days or less notice (${daysDiff} days)`;
-        } else {
-          noticeText = `Job date has passed`;
-        }
 
         confirmMessage = `⚠️ JOB CANCELLATION NOTICE ⚠️
 
 Job: ${job.job_title}
-Tradesman: ${job.tradesmanName}
-Scheduled Date: ${job.requested_date}
-Agreed Price: ${getFinalPrice(job)}
-
-CANCELLATION TERMS:
-${noticeText}
 Cancellation Fee: ${cancellationPercentage}% = £${cancellationFee}
+Refund: £${basePrice - cancellationFee}
 
-This fee compensates the tradesman for:
-• Blocking their calendar
-• Turning down other work
-• Preparation time invested
-
-The remaining amount (£${basePrice - cancellationFee}) will be refunded to you.
-
-Do you wish to proceed with the cancellation?`;
+Do you wish to proceed?`;
 
       } else {
-        // Tradesman cancellation
         confirmMessage = `⚠️ TRADESMAN CANCELLATION WARNING ⚠️
 
-Job: ${job.job_title}
-Customer: ${job.customerName}
-Scheduled Date: ${job.requested_date}
-
-CANCELLATION CONSEQUENCES:
-• This cancellation may negatively affect your reviews
-• Compensation may be deducted from your next completed job
-• Customer will be notified immediately
-• This may impact your future booking opportunities
-
-Professional tradesmen honor their commitments. Are you sure you want to cancel this job?
-
-Only proceed if you have a genuine emergency or unavoidable circumstance.`;
+This may negatively affect your reviews.
+Are you sure you want to cancel?`;
       }
 
-      if (!confirm(confirmMessage)) {
-        return;
-      }
+      if (!confirm(confirmMessage)) return;
 
-      // Update job status to cancelled
       const updateData = {
         status: 'Cancelled',
         cancelled_at: new Date().toISOString(),
@@ -573,263 +543,30 @@ Only proceed if you have a genuine emergency or unavoidable circumstance.`;
 
       await updateDoc(doc(db, 'bookings', jobId), updateData);
 
-      // Add system comment about cancellation (same format as BookingRequests)
-      try {
-        let cancellationMessage;
-        if (userType === 'customer') {
-          cancellationMessage = `Job cancelled by customer with ${cancellationPercentage}% fee (£${cancellationFee}). Refund amount: £${basePrice - cancellationFee}`;
-        } else {
-          cancellationMessage = 'Job cancelled by tradesman. Customer has been notified. This cancellation may affect future reviews and earnings.';
-        }
-
-        await addDoc(collection(db, 'booking_comments'), {
-          booking_id: jobId,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System', // Save name directly like BookingRequests
-          comment: cancellationMessage,
-          timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
-        });
-      } catch (commentError) {
-        console.error('Error adding cancellation comment:', commentError);
-      }
-
-      // Show confirmation message
+      // Add system comment
+      let cancellationMessage;
       if (userType === 'customer') {
-        alert(`✅ Job cancelled successfully.
-
-PAYMENT SUMMARY:
-• Cancellation fee: £${cancellationFee} (${cancellationPercentage}%)
-• Refund amount: £${basePrice - cancellationFee}
-
-The tradesman has been notified and compensated for their time.
-Your refund will be processed within 3-5 business days.`);
+        cancellationMessage = `Job cancelled by customer with ${cancellationPercentage}% fee (£${cancellationFee}). Refund: £${basePrice - cancellationFee}`;
       } else {
-        alert(`⚠️ Job cancelled.
-
-The customer has been notified of the cancellation.
-
-IMPORTANT REMINDERS:
-• This cancellation is recorded on your profile
-• Future customers may see cancellation history
-• Consider offering the customer priority booking for future jobs
-• Professional communication is essential for maintaining reputation`);
+        cancellationMessage = 'Job cancelled by tradesman. Customer notified.';
       }
-      
-      // Refresh the jobs list
-      fetchBookedJobs();
-      
-    } catch (error) {
-      console.error('Error cancelling job:', error);
-      alert('Error cancelling job. Please try again.');
-    }
-  }, [bookedJobs, userType, getFinalPrice, getNumericPrice, currentUser.uid]);
 
-  // SIMPLIFIED: Use the exact same logic as BookingRequests
-  const submitComment = async (jobId) => {
-    const commentText = newComments[jobId]?.trim();
-    if (!commentText) return;
-
-    console.log('Adding comment for job:', jobId, 'Comment:', commentText); // Debug
-
-    setSubmittingComment(prev => ({ ...prev, [jobId]: true }));
-
-    try {
-      // Match exactly how BookingRequests saves comments
-      const job = bookedJobs.find(j => j.id === jobId);
-      const userName = userType === 'customer' ? job?.customerName : job?.tradesmanName;
-      
-      const commentData = {
+      await addDoc(collection(db, 'booking_comments'), {
         booking_id: jobId,
         user_id: currentUser.uid,
-        user_type: userType,
-        user_name: userName || 'Unknown', // Save name directly like BookingRequests
-        comment: commentText,
-        timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
-      };
-
-      console.log('Comment data being saved:', commentData); // Debug
-
-      await addDoc(collection(db, 'booking_comments'), commentData);
-      
-      // Clear the comment input
-      setNewComments(prev => ({ ...prev, [jobId]: '' }));
-
-      console.log('Comment saved successfully!'); // Debug
-      
-    } catch (error) {
-      console.error('Error submitting comment:', error);
-      alert('Error submitting comment. Please try again.');
-    } finally {
-      setSubmittingComment(prev => ({ ...prev, [jobId]: false }));
-    }
-  };
-
-  const updateJobStatus = async (jobId, newStatus) => {
-    try {
-      await updateDoc(doc(db, 'bookings', jobId), {
-        status: newStatus,
-        updated_at: new Date().toISOString()
+        user_type: 'system',
+        user_name: 'System',
+        comment: cancellationMessage,
+        timestamp: new Date().toISOString()
       });
-      
-      // Refresh the jobs list
-      fetchBookedJobs();
-    } catch (error) {
-      console.error('Error updating job status:', error);
-      alert('Error updating job status. Please try again.');
-    }
-  };
 
-  const cancelJob = async (jobId) => {
-    try {
-      const job = bookedJobs.find(j => j.id === jobId);
-      if (!job) return;
-
-      let confirmMessage;
-      let cancellationFee = 0;
-      let cancellationPercentage = 0;
-      const basePrice = getNumericPrice(job); // Calculate once for use throughout
-
-      if (userType === 'customer') {
-        // Calculate time until job
-        const jobDate = new Date(job.requested_date);
-        const currentDate = new Date();
-        const timeDiff = jobDate.getTime() - currentDate.getTime();
-        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-
-        // Determine cancellation percentage based on notice period
-        if (daysDiff > 7) {
-          cancellationPercentage = 10;
-        } else if (daysDiff > 2) {
-          cancellationPercentage = 20;
-        } else {
-          cancellationPercentage = 50;
-        }
-
-        // Calculate fee based on agreed price
-        cancellationFee = Math.round((basePrice * cancellationPercentage) / 100);
-
-        let noticeText;
-        if (daysDiff > 7) {
-          noticeText = `More than 1 week notice (${daysDiff} days)`;
-        } else if (daysDiff > 2) {
-          noticeText = `Less than 1 week notice (${daysDiff} days)`;
-        } else if (daysDiff >= 0) {
-          noticeText = `2 days or less notice (${daysDiff} days)`;
-        } else {
-          noticeText = `Job date has passed`;
-        }
-
-        confirmMessage = `⚠️ JOB CANCELLATION NOTICE ⚠️
-
-Job: ${job.job_title}
-Tradesman: ${job.tradesmanName}
-Scheduled Date: ${job.requested_date}
-Agreed Price: ${getFinalPrice(job)}
-
-CANCELLATION TERMS:
-${noticeText}
-Cancellation Fee: ${cancellationPercentage}% = £${cancellationFee}
-
-This fee compensates the tradesman for:
-• Blocking their calendar
-• Turning down other work
-• Preparation time invested
-
-The remaining amount (£${basePrice - cancellationFee}) will be refunded to you.
-
-Do you wish to proceed with the cancellation?`;
-
-      } else {
-        // Tradesman cancellation
-        confirmMessage = `⚠️ TRADESMAN CANCELLATION WARNING ⚠️
-
-Job: ${job.job_title}
-Customer: ${job.customerName}
-Scheduled Date: ${job.requested_date}
-
-CANCELLATION CONSEQUENCES:
-• This cancellation may negatively affect your reviews
-• Compensation may be deducted from your next completed job
-• Customer will be notified immediately
-• This may impact your future booking opportunities
-
-Professional tradesmen honor their commitments. Are you sure you want to cancel this job?
-
-Only proceed if you have a genuine emergency or unavoidable circumstance.`;
-      }
-
-      if (!confirm(confirmMessage)) {
-        return;
-      }
-
-      // Update job status to cancelled
-      const updateData = {
-        status: 'Cancelled',
-        cancelled_at: new Date().toISOString(),
-        cancelled_by: userType,
-        updated_at: new Date().toISOString()
-      };
-
-      if (userType === 'customer') {
-        updateData.cancellation_fee_applied = cancellationFee;
-        updateData.cancellation_percentage = cancellationPercentage;
-        updateData.refund_amount = basePrice - cancellationFee;
-      }
-
-      await updateDoc(doc(db, 'bookings', jobId), updateData);
-
-      // Add system comment about cancellation (same format as BookingRequests)
-      try {
-        let cancellationMessage;
-        if (userType === 'customer') {
-          cancellationMessage = `Job cancelled by customer with ${cancellationPercentage}% fee (£${cancellationFee}). Refund amount: £${basePrice - cancellationFee}`;
-        } else {
-          cancellationMessage = 'Job cancelled by tradesman. Customer has been notified. This cancellation may affect future reviews and earnings.';
-        }
-
-        await addDoc(collection(db, 'booking_comments'), {
-          booking_id: jobId,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System', // Save name directly like BookingRequests
-          comment: cancellationMessage,
-          timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
-        });
-      } catch (commentError) {
-        console.error('Error adding cancellation comment:', commentError);
-      }
-
-      // Show confirmation message
-      if (userType === 'customer') {
-        alert(`✅ Job cancelled successfully.
-
-PAYMENT SUMMARY:
-• Cancellation fee: £${cancellationFee} (${cancellationPercentage}%)
-• Refund amount: £${basePrice - cancellationFee}
-
-The tradesman has been notified and compensated for their time.
-Your refund will be processed within 3-5 business days.`);
-      } else {
-        alert(`⚠️ Job cancelled.
-
-The customer has been notified of the cancellation.
-
-IMPORTANT REMINDERS:
-• This cancellation is recorded on your profile
-• Future customers may see cancellation history
-• Consider offering the customer priority booking for future jobs
-• Professional communication is essential for maintaining reputation`);
-      }
-      
-      // Refresh the jobs list
       fetchBookedJobs();
       
     } catch (error) {
       console.error('Error cancelling job:', error);
       alert('Error cancelling job. Please try again.');
     }
-  };
+  }, [bookedJobs, userType, getNumericPrice, currentUser.uid]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -844,17 +581,28 @@ IMPORTANT REMINDERS:
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-GB', {
       day: 'numeric',
-      month: 'long',
-      year: 'numeric',
+      month: 'short',
       hour: '2-digit',
       minute: '2-digit'
     });
   };
 
+  // Cleanup listeners on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(commentsListeners).forEach(unsubscribe => {
+        if (unsubscribe) unsubscribe();
+      });
+    };
+  }, [commentsListeners]);
+
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-4">
-        <div className="text-center py-8">Loading booked jobs...</div>
+        <div className="text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="mt-2 text-gray-600">Loading jobs...</p>
+        </div>
       </div>
     );
   }
@@ -879,12 +627,7 @@ IMPORTANT REMINDERS:
             <div className="text-gray-500 mb-4">
               <div className="text-4xl mb-2">📋</div>
               <h3 className="text-lg font-medium">No Active Jobs</h3>
-              <p className="text-sm">
-                {userType === 'customer' 
-                  ? 'Active jobs will appear here once quotes are accepted'
-                  : 'Accepted jobs will appear here'
-                }
-              </p>
+              <p className="text-sm">Active jobs will appear here once quotes are accepted</p>
             </div>
           </div>
         ) : (
@@ -894,6 +637,8 @@ IMPORTANT REMINDERS:
                 key={job.id} 
                 job={job}
                 userType={userType}
+                isExpanded={expandedJobs[job.id]}
+                onToggleExpand={handleToggleExpand}
                 comments={comments[job.id] || []}
                 newComments={newComments}
                 setNewComments={setNewComments}
@@ -920,7 +665,7 @@ IMPORTANT REMINDERS:
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           }`}
         >
-          {showCompleted ? 'Hide' : 'Show'} Completed Jobs ({getCompletedJobs().length})
+          {showCompleted ? 'Hide' : 'Show'} Completed ({getCompletedJobs().length})
         </button>
         
         <button
@@ -931,7 +676,7 @@ IMPORTANT REMINDERS:
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
           }`}
         >
-          {showCancelled ? 'Hide' : 'Show'} Cancelled Jobs ({getCancelledJobs().length})
+          {showCancelled ? 'Hide' : 'Show'} Cancelled ({getCancelledJobs().length})
         </button>
       </div>
 
@@ -939,8 +684,7 @@ IMPORTANT REMINDERS:
       {showCompleted && (
         <div className="mb-8">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-            <h2 className="text-xl font-semibold text-green-800 mb-2">✅ Completed Jobs</h2>
-            <p className="text-green-700 text-sm">Successfully finished projects</p>
+            <h2 className="text-xl font-semibold text-green-800">✅ Completed Jobs</h2>
           </div>
           
           {getCompletedJobs().length === 0 ? (
@@ -954,6 +698,8 @@ IMPORTANT REMINDERS:
                   key={job.id} 
                   job={job}
                   userType={userType}
+                  isExpanded={expandedJobs[job.id]}
+                  onToggleExpand={handleToggleExpand}
                   comments={comments[job.id] || []}
                   newComments={newComments}
                   setNewComments={setNewComments}
@@ -975,8 +721,7 @@ IMPORTANT REMINDERS:
       {showCancelled && (
         <div className="mb-8">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-            <h2 className="text-xl font-semibold text-red-800 mb-2">🚫 Cancelled Jobs</h2>
-            <p className="text-red-700 text-sm">Jobs that were cancelled before completion</p>
+            <h2 className="text-xl font-semibold text-red-800">🚫 Cancelled Jobs</h2>
           </div>
           
           {getCancelledJobs().length === 0 ? (
@@ -990,6 +735,8 @@ IMPORTANT REMINDERS:
                   key={job.id} 
                   job={job}
                   userType={userType}
+                  isExpanded={expandedJobs[job.id]}
+                  onToggleExpand={handleToggleExpand}
                   comments={comments[job.id] || []}
                   newComments={newComments}
                   setNewComments={setNewComments}
