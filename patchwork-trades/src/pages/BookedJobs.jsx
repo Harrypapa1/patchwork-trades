@@ -18,9 +18,8 @@ const BookedJobs = () => {
   const { currentUser, userType } = useAuth();
   const [bookedJobs, setBookedJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedJobComments, setSelectedJobComments] = useState({});
+  const [comments, setComments] = useState({}); // Simplified to match BookingRequests
   const [newComments, setNewComments] = useState({});
-  const [loadingComments, setLoadingComments] = useState({});
   const [submittingComment, setSubmittingComment] = useState({});
   const [showCompleted, setShowCompleted] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
@@ -138,109 +137,64 @@ const BookedJobs = () => {
     }
   };
 
+  // SIMPLIFIED: Use the exact same logic as BookingRequests
   const fetchJobComments = async (jobId) => {
-    // Always fetch, don't skip if already loaded (to ensure fresh data)
-    setLoadingComments(prev => ({ ...prev, [jobId]: true }));
-
     try {
-      // First try with orderBy, fallback if index doesn't exist
-      let commentsQuery;
-      try {
-        commentsQuery = query(
-          collection(db, 'booking_comments'),
-          where('booking_id', '==', jobId),
-          orderBy('timestamp', 'asc') // Use timestamp field like BookingRequests
-        );
-      } catch (indexError) {
-        // Fallback query without orderBy if index doesn't exist
-        commentsQuery = query(
-          collection(db, 'booking_comments'),
-          where('booking_id', '==', jobId)
-        );
-      }
+      console.log('Setting up real-time listener for job:', jobId); // Debug
 
-      // Set up real-time listener
-      const unsubscribe = onSnapshot(commentsQuery, async (snapshot) => {
-        const commentsData = [];
-        
-        for (const commentDoc of snapshot.docs) {
-          const commentData = commentDoc.data();
+      const commentsQuery = query(
+        collection(db, 'booking_comments'),
+        where('booking_id', '==', jobId)
+        // Removed orderBy to match BookingRequests exactly
+      );
+
+      // Use real-time listener for comments - with error handling (same as BookingRequests)
+      const unsubscribe = onSnapshot(commentsQuery, 
+        (snapshot) => {
+          const jobComments = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
           
-          // Use the saved user_name from BookingRequests instead of fetching separately
-          let commenterName = commentData.user_name || 'Unknown';
-          let commenterPhoto = null;
+          // Sort manually by timestamp (same as BookingRequests)
+          jobComments.sort((a, b) => new Date(a.timestamp || a.created_at || 0) - new Date(b.timestamp || b.created_at || 0));
           
-          // Only fetch photos if we have user_id and don't already have user_name
-          if (!commentData.user_name && commentData.user_id) {
-            if (commentData.user_type === 'customer') {
-              try {
-                const userDoc = await getDoc(doc(db, 'users', commentData.user_id));
-                if (userDoc.exists()) {
-                  commenterName = userDoc.data().name;
-                  commenterPhoto = userDoc.data().profilePhoto;
-                }
-              } catch (userError) {
-                console.log('Could not fetch user details:', userError);
-              }
-            } else if (commentData.user_type === 'tradesman') {
-              try {
-                const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', commentData.user_id));
-                if (tradesmanDoc.exists()) {
-                  commenterName = tradesmanDoc.data().name;
-                  commenterPhoto = tradesmanDoc.data().profilePhoto;
-                }
-              } catch (tradesmanError) {
-                console.log('Could not fetch tradesman details:', tradesmanError);
-              }
-            }
-          }
+          console.log('Comments updated for job', jobId, ':', jobComments); // Debug
           
-          commentsData.push({
-            id: commentDoc.id,
-            ...commentData,
-            commenterName,
-            commenterPhoto
-          });
+          // Use same state structure as BookingRequests
+          setComments(prev => ({
+            ...prev,
+            [jobId]: jobComments
+          }));
+        },
+        (error) => {
+          // Handle collection not existing yet (same as BookingRequests)
+          console.log('Comments collection may not exist yet, initializing empty:', error);
+          setComments(prev => ({
+            ...prev,
+            [jobId]: []
+          }));
         }
+      );
 
-        // Sort manually by timestamp (primary) or created_at (fallback)
-        commentsData.sort((a, b) => {
-          const timeA = new Date(a.timestamp || a.created_at || 0);
-          const timeB = new Date(b.timestamp || b.created_at || 0);
-          return timeA - timeB;
-        });
-        
-        console.log(`Loaded ${commentsData.length} comments for job ${jobId}:`, commentsData); // Debug log
-        
-        setSelectedJobComments(prev => ({
-          ...prev,
-          [jobId]: { comments: commentsData, unsubscribe }
-        }));
-        setLoadingComments(prev => ({ ...prev, [jobId]: false }));
-      }, (error) => {
-        console.error('Error in comments listener:', error);
-        setLoadingComments(prev => ({ ...prev, [jobId]: false }));
-        // Set empty comments array on error
-        setSelectedJobComments(prev => ({
-          ...prev,
-          [jobId]: { comments: [], unsubscribe: null }
-        }));
-      });
+      return unsubscribe;
 
     } catch (error) {
-      console.error('Error setting up comments listener:', error);
-      setLoadingComments(prev => ({ ...prev, [jobId]: false }));
-      // Set empty comments array on error
-      setSelectedJobComments(prev => ({
+      console.error('Error fetching comments:', error);
+      // Initialize empty comments for this job (same as BookingRequests)
+      setComments(prev => ({
         ...prev,
-        [jobId]: { comments: [], unsubscribe: null }
+        [jobId]: []
       }));
     }
   };
 
+  // SIMPLIFIED: Use the exact same logic as BookingRequests
   const submitComment = async (jobId) => {
     const commentText = newComments[jobId]?.trim();
     if (!commentText) return;
+
+    console.log('Adding comment for job:', jobId, 'Comment:', commentText); // Debug
 
     setSubmittingComment(prev => ({ ...prev, [jobId]: true }));
 
@@ -249,17 +203,24 @@ const BookedJobs = () => {
       const job = bookedJobs.find(j => j.id === jobId);
       const userName = userType === 'customer' ? job?.customerName : job?.tradesmanName;
       
-      await addDoc(collection(db, 'booking_comments'), {
+      const commentData = {
         booking_id: jobId,
         user_id: currentUser.uid,
         user_type: userType,
         user_name: userName || 'Unknown', // Save name directly like BookingRequests
         comment: commentText,
         timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
-      });
+      };
+
+      console.log('Comment data being saved:', commentData); // Debug
+
+      await addDoc(collection(db, 'booking_comments'), commentData);
       
       // Clear the comment input
       setNewComments(prev => ({ ...prev, [jobId]: '' }));
+
+      console.log('Comment saved successfully!'); // Debug
+      
     } catch (error) {
       console.error('Error submitting comment:', error);
       alert('Error submitting comment. Please try again.');
@@ -382,7 +343,7 @@ Only proceed if you have a genuine emergency or unavoidable circumstance.`;
 
       await updateDoc(doc(db, 'bookings', jobId), updateData);
 
-      // Add system comment about cancellation
+      // Add system comment about cancellation (same format as BookingRequests)
       try {
         let cancellationMessage;
         if (userType === 'customer') {
@@ -442,6 +403,16 @@ IMPORTANT REMINDERS:
       case 'Cancelled': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   // Job Card Component
@@ -603,75 +574,64 @@ IMPORTANT REMINDERS:
             )}
           </div>
 
-          {/* Discussion Section - Always Visible */}
+          {/* SIMPLIFIED Discussion Section - Same as BookingRequests */}
           <div className="border-t pt-6">
             <h3 className="font-medium text-gray-900 mb-4">Complete Discussion History</h3>
             
-            {selectedJobComments[job.id] ? (
-              <>
-                <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
-                  {selectedJobComments[job.id].comments.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No comments yet for this job.</p>
-                  ) : (
-                    selectedJobComments[job.id].comments.map((comment) => (
-                      <div key={comment.id} className="flex gap-3 p-4 bg-gray-50 rounded-lg">
-                        <div className="flex-shrink-0">
-                          {comment.commenterPhoto ? (
-                            <img 
-                              src={comment.commenterPhoto} 
-                              alt={comment.commenterName}
-                              className="w-10 h-10 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium">
-                              {comment.commenterName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="font-medium text-sm">{comment.commenterName}</span>
-                            <span className={`text-xs px-2 py-1 rounded ${
-                              comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' : 
-                              comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {comment.user_type === 'customer' ? 'Customer' : 
-                               comment.user_type === 'tradesman' ? 'Tradesman' : 'System'}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {new Date(comment.timestamp || comment.created_at || new Date()).toLocaleString()}
-                            </span>
-                          </div>
-                          <p className="text-gray-700 whitespace-pre-line">{comment.comment}</p>
-                        </div>
+            {/* Comments List - Same format as BookingRequests */}
+            <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+              {comments[job.id] && comments[job.id].length > 0 ? (
+                <>
+                  {console.log('Displaying comments for job', job.id, ':', comments[job.id])}
+                  {comments[job.id].map(comment => (
+                    <div key={comment.id} className="bg-white rounded-lg p-3 shadow-sm border">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm text-gray-900">
+                          {comment.user_name}
+                          <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
+                            comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' :
+                            comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {comment.user_type === 'system' ? 'System' : 
+                             comment.user_type.charAt(0).toUpperCase() + comment.user_type.slice(1)}
+                          </span>
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {formatDate(comment.timestamp || comment.created_at)}
+                        </span>
                       </div>
-                    ))
-                  )}
-                </div>
+                      <p className="text-gray-700 text-sm whitespace-pre-line">{comment.comment}</p>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {console.log('No comments to display for job', job.id, 'Comments:', comments[job.id])}
+                  <p className="text-gray-500 text-center py-4">No comments yet for this job.</p>
+                </>
+              )}
+            </div>
 
-                {/* Add New Comment */}
-                <div className="flex gap-3">
-                  <textarea
-                    value={newComments[job.id] || ''}
-                    onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
-                    placeholder="Add a comment about this job..."
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                    rows={3}
-                    disabled={submittingComment[job.id]}
-                  />
-                  <button
-                    onClick={() => submitComment(job.id)}
-                    disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
-                    className="bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors self-end"
-                  >
-                    {submittingComment[job.id] ? 'Posting...' : 'Post Comment'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-6 text-gray-500">Loading discussion history...</div>
-            )}
+            {/* Add New Comment - Same format as BookingRequests */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newComments[job.id] || ''}
+                onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
+                placeholder="Add a comment about this job..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onKeyPress={(e) => e.key === 'Enter' && submitComment(job.id)}
+                disabled={submittingComment[job.id]}
+              />
+              <button
+                onClick={() => submitComment(job.id)}
+                disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
+                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {submittingComment[job.id] ? 'Posting...' : 'Comment'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
