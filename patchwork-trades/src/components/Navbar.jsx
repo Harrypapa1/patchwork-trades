@@ -27,7 +27,7 @@ const Navbar = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Listen for booking requests
+  // Listen for booking requests AND booked jobs
   useEffect(() => {
     if (!currentUser) {
       setBookingRequestsCount(0);
@@ -36,14 +36,14 @@ const Navbar = () => {
 
     let bookingQuery;
     if (userType === 'customer') {
-      // Customers see their own requests
+      // Customers see their own requests (Quote Requested only)
       bookingQuery = query(
         collection(db, 'bookings'),
         where('customer_id', '==', currentUser.uid),
         where('status', '==', 'Quote Requested')
       );
     } else if (userType === 'tradesman') {
-      // Tradesmen see requests for them
+      // Tradesmen see requests for them (Quote Requested only)
       bookingQuery = query(
         collection(db, 'bookings'),
         where('tradesman_id', '==', currentUser.uid),
@@ -114,6 +114,11 @@ const Navbar = () => {
                         {bookingRequestsCount}
                       </span>
                     )}
+                  </Link>
+
+                  {/* Booked Jobs - Both user types */}
+                  <Link to="/booked-jobs" className="hover:text-blue-200">
+                    Booked Jobs
                   </Link>
 
                   {userType === 'tradesman' && (
@@ -202,6 +207,16 @@ const Navbar = () => {
                       {bookingRequestsCount}
                     </span>
                   )}
+                </Link>
+
+                {/* Booked Jobs - Mobile */}
+                <Link 
+                  to="/booked-jobs" 
+                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                  onClick={closeMenu}
+                  style={{ border: '2px solid white' }}
+                >
+                  ✅ BOOKED JOBS
                 </Link>
 
                 {userType === 'tradesman' && (
