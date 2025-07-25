@@ -61,11 +61,24 @@ const BookingRequest = () => {
         where('is_booked', '==', false)
       );
       const availabilitySnapshot = await getDocs(availabilityQuery);
-      const dates = availabilitySnapshot.docs.map(doc => ({
+      const allDates = availabilitySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      setAvailableDates(dates);
+
+      // Filter out past dates and sort chronologically
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Set to start of today
+      
+      const futureDates = allDates
+        .filter(dateItem => {
+          const availableDate = new Date(dateItem.date_available);
+          availableDate.setHours(0, 0, 0, 0); // Set to start of day for comparison
+          return availableDate >= today; // Only include today and future dates
+        })
+        .sort((a, b) => new Date(a.date_available) - new Date(b.date_available)); // Sort chronologically
+      
+      setAvailableDates(futureDates);
       
     } catch (error) {
       console.error('Error fetching tradesman details:', error);
@@ -466,7 +479,10 @@ Thanks!`,
               Select Preferred Dates * (Choose at least one)
             </label>
             {availableDates.length === 0 ? (
-              <p className="text-gray-500">No dates currently available</p>
+              <div className="text-center py-8 bg-gray-50 rounded-lg border">
+                <p className="text-gray-500 mb-2">No future dates currently available</p>
+                <p className="text-gray-400 text-sm">The tradesman hasn't set any available dates, or all their dates have passed</p>
+              </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {availableDates.map(date => (
@@ -487,7 +503,8 @@ Thanks!`,
                     {new Date(date.date_available).toLocaleDateString('en-GB', {
                       weekday: 'short',
                       day: 'numeric',
-                      month: 'short'
+                      month: 'short',
+                      year: 'numeric'
                     })}
                   </label>
                 ))}
