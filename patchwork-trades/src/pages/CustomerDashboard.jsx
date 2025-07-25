@@ -1,27 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   doc, 
   getDoc, 
-  collection, 
-  query, 
-  where, 
-  getDocs,
   updateDoc
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
+import { signOut } from 'firebase/auth';
 
 const CustomerDashboard = () => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
-  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     fetchProfile();
-    fetchBookings();
   }, [currentUser]);
 
   const fetchProfile = async () => {
@@ -34,37 +30,6 @@ const CustomerDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
-    }
-  };
-
-  const fetchBookings = async () => {
-    if (!currentUser) return;
-    
-    try {
-      const q = query(
-        collection(db, 'bookings'),
-        where('customer_id', '==', currentUser.uid)
-      );
-      const querySnapshot = await getDocs(q);
-      const bookingsData = [];
-      
-      for (const bookingDoc of querySnapshot.docs) {
-        const bookingData = bookingDoc.data();
-        
-        // Fetch tradesman name
-        const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', bookingData.tradesman_id));
-        const tradesmanName = tradesmanDoc.exists() ? tradesmanDoc.data().name : 'Unknown';
-        
-        bookingsData.push({
-          id: bookingDoc.id,
-          ...bookingData,
-          tradesmanName
-        });
-      }
-      
-      setBookings(bookingsData);
-    } catch (error) {
-      console.error('Error fetching bookings:', error);
     } finally {
       setLoading(false);
     }
@@ -135,6 +100,17 @@ const CustomerDashboard = () => {
       alert('Error uploading photo. Please try again.');
     } finally {
       setUploadingImage(false);
+    }
+  };
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      alert('Error signing out. Please try again.');
     }
   };
 
@@ -210,40 +186,14 @@ const CustomerDashboard = () => {
         </Link>
       </div>
 
-      {/* Bookings List */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold mb-4">Your Bookings</h2>
-        {bookings.length === 0 ? (
-          <p className="text-gray-500">No bookings yet. <Link to="/browse" className="text-blue-600 hover:underline">Browse tradesmen</Link> to get started.</p>
-        ) : (
-          <div className="space-y-4">
-            {bookings.map(booking => (
-              <div key={booking.id} className="border rounded-lg p-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-semibold">{booking.tradesmanName}</h3>
-                    <p className="text-gray-600">Date: {booking.date_booked}</p>
-                    <span className={`px-2 py-1 rounded text-xs ${
-                      booking.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                      booking.status === 'Confirmed' ? 'bg-green-100 text-green-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {booking.status}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Link 
-                      to={`/messaging/${booking.id}`}
-                      className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
-                    >
-                      Message
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Logout Button */}
+      <div className="bg-white rounded-lg shadow-md p-6 text-center">
+        <button
+          onClick={handleLogout}
+          className="bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 font-medium"
+        >
+          Logout
+        </button>
       </div>
     </div>
   );
