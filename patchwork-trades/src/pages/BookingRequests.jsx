@@ -259,6 +259,9 @@ const BookingRequests = () => {
       await updateDoc(doc(db, 'bookings', bookingId), {
         custom_quote: null,
         has_custom_quote: false,
+        customer_counter_quote: null,
+        has_customer_counter: false,
+        quote_reasoning: null,
         // Keep status as 'Quote Requested' so job stays for negotiation
         status: 'Quote Requested'
       });
@@ -283,6 +286,107 @@ const BookingRequests = () => {
     } catch (error) {
       console.error('Error rejecting custom quote:', error);
       alert('Error rejecting custom quote. Please try again.');
+    }
+  };
+
+  // NEW: Handle customer counter-offer
+  const proposeCustomerCounter = async (bookingId, counterQuote, reasoning) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        customer_counter_quote: counterQuote,
+        has_customer_counter: true,
+        customer_reasoning: reasoning,
+        // Clear tradesman quote since customer is countering
+        has_custom_quote: false,
+        custom_quote: null,
+        // Keep status as 'Quote Requested' so job stays for negotiation
+        status: 'Quote Requested'
+      });
+      
+      // Refresh the list
+      fetchBookingRequests();
+      
+      // Add system comment
+      try {
+        await addDoc(collection(db, 'booking_comments'), {
+          booking_id: bookingId,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          user_name: 'System',
+          comment: `Customer counter-offer: ${counterQuote}${reasoning ? `\nReason: ${reasoning}` : ''}`,
+          timestamp: new Date().toISOString()
+        });
+      } catch (commentError) {
+        console.log('Could not add system comment:', commentError);
+      }
+
+    } catch (error) {
+      console.error('Error proposing counter-offer:', error);
+      alert('Error proposing counter-offer. Please try again.');
+    }
+  };
+
+  // NEW: Handle tradesman accepting customer counter
+  const acceptCustomerCounter = async (bookingId) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        status: 'Accepted'
+      });
+      
+      // Refresh the list (job will now move to BookedJobs)
+      fetchBookingRequests();
+      
+      // Add system comment
+      try {
+        await addDoc(collection(db, 'booking_comments'), {
+          booking_id: bookingId,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          user_name: 'System',
+          comment: 'Tradesman accepted the customer counter-offer',
+          timestamp: new Date().toISOString()
+        });
+      } catch (commentError) {
+        console.log('Could not add system comment:', commentError);
+      }
+
+    } catch (error) {
+      console.error('Error accepting customer counter:', error);
+      alert('Error accepting customer counter. Please try again.');
+    }
+  };
+
+  // NEW: Handle tradesman rejecting customer counter
+  const rejectCustomerCounter = async (bookingId) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        customer_counter_quote: null,
+        has_customer_counter: false,
+        customer_reasoning: null,
+        // Keep status as 'Quote Requested' so job stays for negotiation
+        status: 'Quote Requested'
+      });
+      
+      // Refresh the list
+      fetchBookingRequests();
+      
+      // Add system comment
+      try {
+        await addDoc(collection(db, 'booking_comments'), {
+          booking_id: bookingId,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          user_name: 'System',
+          comment: 'Tradesman rejected the customer counter-offer - job available for new response',
+          timestamp: new Date().toISOString()
+        });
+      } catch (commentError) {
+        console.log('Could not add system comment:', commentError);
+      }
+
+    } catch (error) {
+      console.error('Error rejecting customer counter:', error);
+      alert('Error rejecting customer counter. Please try again.');
     }
   };
 
@@ -364,10 +468,15 @@ const BookingRequests = () => {
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${getUrgencyColor(request.urgency)}`}>
                       {request.urgency.charAt(0).toUpperCase() + request.urgency.slice(1)} Priority
                     </span>
-                    {/* NEW: Show custom quote status */}
+                    {/* NEW: Show custom quote OR customer counter status */}
                     {request.has_custom_quote && (
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                        Custom Quote: {request.custom_quote}
+                        Tradesman Quote: {request.custom_quote}
+                      </span>
+                    )}
+                    {request.has_customer_counter && (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        Customer Counter: {request.customer_counter_quote}
                       </span>
                     )}
                   </div>
@@ -440,99 +549,188 @@ const BookingRequests = () => {
 
                 {/* Actions Section */}
                 <div className="mt-6 pt-4 border-t border-gray-200">
-                  {/* Tradesman Actions */}
-                  {userType === 'tradesman' && !request.has_custom_quote && (
+                  {/* TRADESMAN ACTIONS */}
+                  {userType === 'tradesman' && (
                     <>
-                      <h3 className="font-medium text-gray-900 mb-3">Your Response</h3>
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => updateBookingStatus(request.id, 'Accepted')}
-                          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                        >
-                          Accept (£{request.tradesman_hourly_rate || 'Standard Rate'}/hour)
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            const customQuote = prompt('Enter your custom quote (e.g., £200 fixed price, or £50/hour):');
-                            if (customQuote) {
-                              proposeCustomQuote(request.id, customQuote);
-                            }
-                          }}
-                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                        >
-                          Custom Quote
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            if (confirm('Are you sure you want to reject this request?')) {
-                              updateBookingStatus(request.id, 'Rejected');
-                            }
-                          }}
-                          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                        >
-                          Reject
-                        </button>
-                      </div>
+                      {/* No quotes sent yet - original buttons */}
+                      {!request.has_custom_quote && !request.has_customer_counter && (
+                        <>
+                          <h3 className="font-medium text-gray-900 mb-3">Your Response</h3>
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => updateBookingStatus(request.id, 'Accepted')}
+                              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                            >
+                              Accept (£{request.tradesman_hourly_rate || 'Standard Rate'}/hour)
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                const customQuote = prompt('Enter your custom quote (e.g., £200 fixed price, or £50/hour):');
+                                if (customQuote) {
+                                  proposeCustomQuote(request.id, customQuote);
+                                }
+                              }}
+                              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                            >
+                              Custom Quote
+                            </button>
+                            
+                            <button
+                              onClick={() => {
+                                if (confirm('Are you sure you want to reject this request?')) {
+                                  updateBookingStatus(request.id, 'Rejected');
+                                }
+                              }}
+                              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Tradesman sent quote, waiting for customer */}
+                      {request.has_custom_quote && !request.has_customer_counter && (
+                        <>
+                          <h3 className="font-medium text-gray-900 mb-3">Custom Quote Sent</h3>
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <p className="text-blue-800">
+                              ✅ You've sent a custom quote: <strong>{request.custom_quote}</strong>
+                            </p>
+                            <p className="text-blue-600 text-sm mt-1">
+                              Waiting for customer response...
+                            </p>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Customer sent counter-offer */}
+                      {request.has_customer_counter && (
+                        <>
+                          <h3 className="font-medium text-gray-900 mb-3">Customer Counter-Offer</h3>
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+                            <p className="text-orange-800 mb-2">
+                              💬 <strong>{request.customer_name}</strong> has counter-offered: 
+                              <span className="font-bold text-lg ml-2">{request.customer_counter_quote}</span>
+                            </p>
+                            {request.customer_reasoning && (
+                              <p className="text-orange-700 text-sm mb-3 italic">
+                                Reason: "{request.customer_reasoning}"
+                              </p>
+                            )}
+                            <div className="flex gap-3">
+                              <button
+                                onClick={() => acceptCustomerCounter(request.id)}
+                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                              >
+                                Accept Counter-Offer
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const newQuote = prompt('Enter your new counter-quote:');
+                                  if (newQuote) {
+                                    proposeCustomQuote(request.id, newQuote);
+                                  }
+                                }}
+                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                              >
+                                New Counter-Quote
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Reject this counter-offer? You can then propose a new quote.')) {
+                                    rejectCustomerCounter(request.id);
+                                  }
+                                }}
+                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                              >
+                                Reject Counter
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
 
-                  {/* Tradesman - Custom Quote Already Sent */}
-                  {userType === 'tradesman' && request.has_custom_quote && (
+                  {/* CUSTOMER ACTIONS */}
+                  {userType === 'customer' && (
                     <>
-                      <h3 className="font-medium text-gray-900 mb-3">Custom Quote Sent</h3>
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <p className="text-blue-800">
-                          ✅ You've sent a custom quote: <strong>{request.custom_quote}</strong>
-                        </p>
-                        <p className="text-blue-600 text-sm mt-1">
-                          Waiting for customer response...
-                        </p>
-                      </div>
-                    </>
-                  )}
+                      {/* Customer sent counter, waiting for tradesman */}
+                      {request.has_customer_counter && (
+                        <>
+                          <h3 className="font-medium text-gray-900 mb-3">Counter-Offer Sent</h3>
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                            <p className="text-orange-800">
+                              ✅ You've sent a counter-offer: <strong>{request.customer_counter_quote}</strong>
+                            </p>
+                            {request.customer_reasoning && (
+                              <p className="text-orange-700 text-sm mt-1">
+                                Your reason: "{request.customer_reasoning}"
+                              </p>
+                            )}
+                            <p className="text-orange-600 text-sm mt-1">
+                              Waiting for <strong>{request.tradesman_name}</strong> to respond...
+                            </p>
+                          </div>
+                        </>
+                      )}
 
-                  {/* Customer Actions - Custom Quote Received */}
-                  {userType === 'customer' && request.has_custom_quote && (
-                    <>
-                      <h3 className="font-medium text-gray-900 mb-3">Custom Quote Received</h3>
-                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-                        <p className="text-purple-800 mb-3">
-                          💼 <strong>{request.tradesman_name}</strong> has sent you a custom quote: 
-                          <span className="font-bold text-lg ml-2">{request.custom_quote}</span>
-                        </p>
-                        <div className="flex gap-3">
-                          <button
-                            onClick={() => acceptCustomQuote(request.id)}
-                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                          >
-                            Accept Custom Quote
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm('Are you sure you want to reject this custom quote? The job will return to the tradesman for a new response.')) {
-                                rejectCustomQuote(request.id);
-                              }
-                            }}
-                            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                          >
-                            Reject Quote
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
+                      {/* Tradesman sent quote, customer can respond */}
+                      {request.has_custom_quote && !request.has_customer_counter && (
+                        <>
+                          <h3 className="font-medium text-gray-900 mb-3">Custom Quote Received</h3>
+                          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                            <p className="text-purple-800 mb-3">
+                              💼 <strong>{request.tradesman_name}</strong> has sent you a custom quote: 
+                              <span className="font-bold text-lg ml-2">{request.custom_quote}</span>
+                            </p>
+                            <div className="flex gap-3 flex-wrap">
+                              <button
+                                onClick={() => acceptCustomQuote(request.id)}
+                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                              >
+                                Accept Quote
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const counterQuote = prompt('Enter your counter-offer (e.g., £150 fixed price, or £40/hour):');
+                                  if (counterQuote) {
+                                    const reasoning = prompt('Why this price? (optional - helps with negotiation):') || '';
+                                    proposeCustomerCounter(request.id, counterQuote, reasoning);
+                                  }
+                                }}
+                                className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                              >
+                                Counter-Offer
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to reject this quote? The job will return to the tradesman.')) {
+                                    rejectCustomQuote(request.id);
+                                  }
+                                }}
+                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                              >
+                                Reject Quote
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
 
-                  {/* Customer - No Custom Quote Yet */}
-                  {userType === 'customer' && !request.has_custom_quote && (
-                    <>
-                      <h3 className="font-medium text-gray-900 mb-3">Request Status</h3>
-                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <p className="text-yellow-800">
-                          ⏳ Waiting for <strong>{request.tradesman_name}</strong> to respond to your quote request...
-                        </p>
-                      </div>
+                      {/* No quotes yet - waiting */}
+                      {!request.has_custom_quote && !request.has_customer_counter && (
+                        <>
+                          <h3 className="font-medium text-gray-900 mb-3">Request Status</h3>
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                            <p className="text-yellow-800">
+                              ⏳ Waiting for <strong>{request.tradesman_name}</strong> to respond to your quote request...
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </div>
