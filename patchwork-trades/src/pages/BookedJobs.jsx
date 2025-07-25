@@ -241,12 +241,14 @@ const BookedJobs = () => {
     setSubmittingComment(prev => ({ ...prev, [jobId]: true }));
 
     try {
+      // Use same field names as BookingRequests for consistency
       await addDoc(collection(db, 'booking_comments'), {
         booking_id: jobId,
         user_id: currentUser.uid,
         user_type: userType,
         comment: commentText,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        timestamp: new Date().toISOString() // Also add timestamp for backwards compatibility
       });
       
       // Clear the comment input
@@ -434,124 +436,8 @@ IMPORTANT REMINDERS:
     }
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto p-4">
-        <div className="text-center py-8">Loading booked jobs...</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-6xl mx-auto p-4">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Booked Jobs</h1>
-        <p className="text-gray-600 mt-2">
-          {userType === 'customer' 
-            ? 'Your contractually agreed jobs' 
-            : 'Jobs you\'ve been hired for'
-          }
-        </p>
-      </div>
-
-      {/* Active Jobs Section */}
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Active Jobs</h2>
-        {getActiveJobs().length === 0 ? (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <div className="text-gray-500 mb-4">
-              <div className="text-4xl mb-2">📋</div>
-              <h3 className="text-lg font-medium">No Active Jobs</h3>
-              <p className="text-sm">
-                {userType === 'customer' 
-                  ? 'Active jobs will appear here once quotes are accepted'
-                  : 'Accepted jobs will appear here'
-                }
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {getActiveJobs().map((job) => (
-              <JobCard key={job.id} job={job} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Toggle Buttons */}
-      <div className="flex gap-4 mb-6">
-        <button
-          onClick={() => setShowCompleted(!showCompleted)}
-          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-            showCompleted 
-              ? 'bg-green-600 text-white' 
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          {showCompleted ? 'Hide' : 'Show'} Completed Jobs ({getCompletedJobs().length})
-        </button>
-        
-        <button
-          onClick={() => setShowCancelled(!showCancelled)}
-          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
-            showCancelled 
-              ? 'bg-red-600 text-white' 
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          }`}
-        >
-          {showCancelled ? 'Hide' : 'Show'} Cancelled Jobs ({getCancelledJobs().length})
-        </button>
-      </div>
-
-      {/* Completed Jobs Section */}
-      {showCompleted && (
-        <div className="mb-8">
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-            <h2 className="text-xl font-semibold text-green-800 mb-2">✅ Completed Jobs</h2>
-            <p className="text-green-700 text-sm">Successfully finished projects</p>
-          </div>
-          
-          {getCompletedJobs().length === 0 ? (
-            <div className="bg-white rounded-lg shadow-md p-6 text-center">
-              <p className="text-gray-500">No completed jobs yet.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {getCompletedJobs().map((job) => (
-                <JobCard key={job.id} job={job} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Cancelled Jobs Section */}
-      {showCancelled && (
-        <div className="mb-8">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-            <h2 className="text-xl font-semibold text-red-800 mb-2">🚫 Cancelled Jobs</h2>
-            <p className="text-red-700 text-sm">Jobs that were cancelled before completion</p>
-          </div>
-          
-          {getCancelledJobs().length === 0 ? (
-            <div className="bg-white rounded-lg shadow-md p-6 text-center">
-              <p className="text-gray-500">No cancelled jobs.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {getCancelledJobs().map((job) => (
-                <JobCard key={job.id} job={job} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
   // Job Card Component
-  function JobCard({ job }) {
+  const JobCard = ({ job }) => {
     return (
       <div className={`bg-white rounded-lg shadow-md border-l-4 ${
         job.status === 'Completed' ? 'border-green-500' :
@@ -746,7 +632,7 @@ IMPORTANT REMINDERS:
                                comment.user_type === 'tradesman' ? 'Tradesman' : 'System'}
                             </span>
                             <span className="text-xs text-gray-500">
-                              {new Date(comment.created_at).toLocaleString()}
+                              {new Date(comment.created_at || comment.timestamp || new Date()).toLocaleString()}
                             </span>
                           </div>
                           <p className="text-gray-700 whitespace-pre-line">{comment.comment}</p>
@@ -782,14 +668,123 @@ IMPORTANT REMINDERS:
         </div>
       </div>
     );
-  }
-          </div>
-        </div>
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto p-4">
+        <div className="text-center py-8">Loading booked jobs...</div>
       </div>
     );
   }
-};
 
-export default BookedJobs;
+  return (
+    <div className="max-w-6xl mx-auto p-4">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Booked Jobs</h1>
+        <p className="text-gray-600 mt-2">
+          {userType === 'customer' 
+            ? 'Your contractually agreed jobs' 
+            : 'Jobs you\'ve been hired for'
+          }
+        </p>
+      </div>
+
+      {/* Active Jobs Section */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Active Jobs</h2>
+        {getActiveJobs().length === 0 ? (
+          <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="text-gray-500 mb-4">
+              <div className="text-4xl mb-2">📋</div>
+              <h3 className="text-lg font-medium">No Active Jobs</h3>
+              <p className="text-sm">
+                {userType === 'customer' 
+                  ? 'Active jobs will appear here once quotes are accepted'
+                  : 'Accepted jobs will appear here'
+                }
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {getActiveJobs().map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Toggle Buttons */}
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => setShowCompleted(!showCompleted)}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            showCompleted 
+              ? 'bg-green-600 text-white' 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          {showCompleted ? 'Hide' : 'Show'} Completed Jobs ({getCompletedJobs().length})
+        </button>
+        
+        <button
+          onClick={() => setShowCancelled(!showCancelled)}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            showCancelled 
+              ? 'bg-red-600 text-white' 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          {showCancelled ? 'Hide' : 'Show'} Cancelled Jobs ({getCancelledJobs().length})
+        </button>
+      </div>
+
+      {/* Completed Jobs Section */}
+      {showCompleted && (
+        <div className="mb-8">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <h2 className="text-xl font-semibold text-green-800 mb-2">✅ Completed Jobs</h2>
+            <p className="text-green-700 text-sm">Successfully finished projects</p>
+          </div>
+          
+          {getCompletedJobs().length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-6 text-center">
+              <p className="text-gray-500">No completed jobs yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {getCompletedJobs().map((job) => (
+                <JobCard key={job.id} job={job} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cancelled Jobs Section */}
+      {showCancelled && (
+        <div className="mb-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <h2 className="text-xl font-semibold text-red-800 mb-2">🚫 Cancelled Jobs</h2>
+            <p className="text-red-700 text-sm">Jobs that were cancelled before completion</p>
+          </div>
+          
+          {getCancelledJobs().length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-6 text-center">
+              <p className="text-gray-500">No cancelled jobs.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {getCancelledJobs().map((job) => (
+                <JobCard key={job.id} job={job} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default BookedJobs;
