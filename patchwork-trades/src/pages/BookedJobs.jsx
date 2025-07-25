@@ -50,6 +50,8 @@ const BookedJobs = () => {
       return 'Standard Rate';
     }
   };
+
+  const fetchBookedJobs = async () => {
     if (!currentUser) return;
     
     try {
@@ -165,23 +167,6 @@ const BookedJobs = () => {
     } catch (error) {
       console.error('Error fetching comments:', error);
       setLoadingComments(prev => ({ ...prev, [jobId]: false }));
-    }
-  };
-
-  const toggleJobComments = (jobId) => {
-    if (selectedJobComments[jobId]) {
-      // Close comments and cleanup listener
-      if (selectedJobComments[jobId].unsubscribe) {
-        selectedJobComments[jobId].unsubscribe();
-      }
-      setSelectedJobComments(prev => {
-        const newState = { ...prev };
-        delete newState[jobId];
-        return newState;
-      });
-    } else {
-      // Open comments
-      fetchJobComments(jobId);
     }
   };
 
