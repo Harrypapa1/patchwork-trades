@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -20,6 +19,11 @@ import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
 import ManageAvailability from './pages/ManageAvailability';
+// Import legal pages
+import TermsOfService from './pages/TermsOfService';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import CookiePolicy from './pages/CookiePolicy';
+import ContactHelp from './pages/ContactHelp';
 
 function App() {
   return (
@@ -34,6 +38,12 @@ function App() {
               <Route path="/register-tradesman" element={<TradesmanRegister />} />
               <Route path="/register-customer" element={<CustomerRegister />} />
               <Route path="/browse" element={<BrowseTradesmen />} />
+              
+              {/* Legal & Information Pages - Public Access */}
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/cookies" element={<CookiePolicy />} />
+              <Route path="/contact" element={<ContactHelp />} />
               
               <Route
                 path="/tradesman-dashboard"
