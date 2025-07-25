@@ -5,805 +5,794 @@ import {
   query, 
   where, 
   getDocs, 
-  addDoc, 
-  updateDoc,
-  doc,
+  doc, 
+  getDoc,
+  addDoc,
+  onSnapshot,
   orderBy,
-  onSnapshot
+  updateDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-const BookingRequests = () => {
+const BookedJobs = () => {
   const { currentUser, userType } = useAuth();
-  const [bookingRequests, setBookingRequests] = useState([]);
-  const [comments, setComments] = useState({});
-  const [newComments, setNewComments] = useState({});
+  const [bookedJobs, setBookedJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedJobComments, setSelectedJobComments] = useState({});
+  const [newComments, setNewComments] = useState({});
+  const [loadingComments, setLoadingComments] = useState({});
+  const [submittingComment, setSubmittingComment] = useState({});
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
-      fetchBookingRequests();
+      fetchBookedJobs();
     }
   }, [currentUser, userType]);
 
-  const fetchBookingRequests = async () => {
+  useEffect(() => {
+    // Auto-load comments for all booked jobs when jobs are loaded
+    if (bookedJobs.length > 0) {
+      bookedJobs.forEach(job => {
+        fetchJobComments(job.id);
+      });
+    }
+  }, [bookedJobs]);
+
+  // Helper function to filter jobs by status
+  const getActiveJobs = () => bookedJobs.filter(job => job.status === 'Accepted' || job.status === 'In Progress');
+  const getCompletedJobs = () => bookedJobs.filter(job => job.status === 'Completed');
+  const getCancelledJobs = () => bookedJobs.filter(job => job.status === 'Cancelled');
+
+  // Helper function to get final agreed price
+  const getFinalPrice = (job) => {
+    if (job.customer_counter_quote && job.status === 'Accepted') {
+      return job.customer_counter_quote;
+    } else if (job.custom_quote && job.status === 'Accepted') {
+      return job.custom_quote;
+    } else if (job.tradesman_hourly_rate) {
+      return `£${job.tradesman_hourly_rate}/hour`;
+    } else {
+      return 'Standard Rate';
+    }
+  };
+
+  // Helper function to extract numeric price for calculations
+  const getNumericPrice = (job) => {
+    let priceString = '';
+    
+    if (job.customer_counter_quote && job.status === 'Accepted') {
+      priceString = job.customer_counter_quote;
+    } else if (job.custom_quote && job.status === 'Accepted') {
+      priceString = job.custom_quote;
+    } else {
+      // For hourly rates, we'll use a default estimate of 4 hours
+      const hourlyRate = job.tradesman_hourly_rate || 50;
+      return hourlyRate * 4; // 4 hour estimate
+    }
+    
+    // Extract numeric value from price string
+    const priceMatch = priceString.match(/£?(\d+)/);
+    return priceMatch ? parseInt(priceMatch[1]) : 200; // Default to £200 if can't parse
+  };
+
+  const fetchBookedJobs = async () => {
+    if (!currentUser) return;
+    
     try {
-      let bookingsQuery;
+      let jobsQuery;
       
       if (userType === 'customer') {
-        // Customers see their own requests
-        bookingsQuery = query(
+        // Show jobs where customer is the current user and status is NOT "Quote Requested"
+        jobsQuery = query(
           collection(db, 'bookings'),
-          where('customer_id', '==', currentUser.uid),
-          where('status', '==', 'Quote Requested')
+          where('customer_id', '==', currentUser.uid)
         );
-      } else {
-        // Tradesmen see requests for them
-        bookingsQuery = query(
+      } else if (userType === 'tradesman') {
+        // Show jobs where tradesman is the current user and status is NOT "Quote Requested"
+        jobsQuery = query(
           collection(db, 'bookings'),
-          where('tradesman_id', '==', currentUser.uid),
-          where('status', '==', 'Quote Requested')
+          where('tradesman_id', '==', currentUser.uid)
         );
       }
 
-      const bookingsSnapshot = await getDocs(bookingsQuery);
-      const requests = bookingsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      if (jobsQuery) {
+        const querySnapshot = await getDocs(jobsQuery);
+        const jobsData = [];
 
-      console.log('Found booking requests:', requests); // Debug log
-      setBookingRequests(requests);
+        for (const jobDoc of querySnapshot.docs) {
+          const jobData = jobDoc.data();
+          
+          // Only include jobs that are NOT "Quote Requested" (i.e., agreed/contracted jobs)
+          if (jobData.status !== 'Quote Requested') {
+            // Get customer name
+            const customerDoc = await getDoc(doc(db, 'users', jobData.customer_id));
+            const customerName = customerDoc.exists() ? customerDoc.data().name : 'Unknown Customer';
+            const customerPhoto = customerDoc.exists() ? customerDoc.data().profilePhoto : null;
 
-      // Fetch comments for each request
-      for (const request of requests) {
-        fetchComments(request.id);
+            // Get tradesman name
+            const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', jobData.tradesman_id));
+            const tradesmanName = tradesmanDoc.exists() ? tradesmanDoc.data().name : 'Unknown Tradesman';
+            const tradesmanPhoto = tradesmanDoc.exists() ? tradesmanDoc.data().profilePhoto : null;
+
+            jobsData.push({
+              id: jobDoc.id,
+              ...jobData,
+              customerName,
+              customerPhoto,
+              tradesmanName,
+              tradesmanPhoto
+            });
+          }
+        }
+
+        // Sort by creation date (newest first)
+        jobsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        setBookedJobs(jobsData);
       }
-
     } catch (error) {
-      console.error('Error fetching booking requests:', error);
+      console.error('Error fetching booked jobs:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchComments = async (bookingId) => {
+  const fetchJobComments = async (jobId) => {
+    // Always fetch, don't skip if already loaded (to ensure fresh data)
+    setLoadingComments(prev => ({ ...prev, [jobId]: true }));
+
     try {
-      const commentsQuery = query(
-        collection(db, 'booking_comments'),
-        where('booking_id', '==', bookingId)
-        // Removed orderBy temporarily to fix the real-time listener
-      );
+      // First try with orderBy, fallback if index doesn't exist
+      let commentsQuery;
+      try {
+        commentsQuery = query(
+          collection(db, 'booking_comments'),
+          where('booking_id', '==', jobId),
+          orderBy('timestamp', 'asc') // Use timestamp field like BookingRequests
+        );
+      } catch (indexError) {
+        // Fallback query without orderBy if index doesn't exist
+        commentsQuery = query(
+          collection(db, 'booking_comments'),
+          where('booking_id', '==', jobId)
+        );
+      }
 
-      console.log('Setting up real-time listener for booking:', bookingId); // Debug
-
-      // Use real-time listener for comments - with error handling
-      const unsubscribe = onSnapshot(commentsQuery, 
-        (snapshot) => {
-          const bookingComments = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
+      // Set up real-time listener
+      const unsubscribe = onSnapshot(commentsQuery, async (snapshot) => {
+        const commentsData = [];
+        
+        for (const commentDoc of snapshot.docs) {
+          const commentData = commentDoc.data();
           
-          // Sort manually by timestamp
-          bookingComments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+          // Use the saved user_name from BookingRequests instead of fetching separately
+          let commenterName = commentData.user_name || 'Unknown';
+          let commenterPhoto = null;
           
-          console.log('Comments updated for booking', bookingId, ':', bookingComments); // Debug
+          // Only fetch photos if we have user_id and don't already have user_name
+          if (!commentData.user_name && commentData.user_id) {
+            if (commentData.user_type === 'customer') {
+              try {
+                const userDoc = await getDoc(doc(db, 'users', commentData.user_id));
+                if (userDoc.exists()) {
+                  commenterName = userDoc.data().name;
+                  commenterPhoto = userDoc.data().profilePhoto;
+                }
+              } catch (userError) {
+                console.log('Could not fetch user details:', userError);
+              }
+            } else if (commentData.user_type === 'tradesman') {
+              try {
+                const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', commentData.user_id));
+                if (tradesmanDoc.exists()) {
+                  commenterName = tradesmanDoc.data().name;
+                  commenterPhoto = tradesmanDoc.data().profilePhoto;
+                }
+              } catch (tradesmanError) {
+                console.log('Could not fetch tradesman details:', tradesmanError);
+              }
+            }
+          }
           
-          setComments(prev => ({
-            ...prev,
-            [bookingId]: bookingComments
-          }));
-        },
-        (error) => {
-          // Handle collection not existing yet
-          console.log('Comments collection may not exist yet, initializing empty:', error);
-          setComments(prev => ({
-            ...prev,
-            [bookingId]: []
-          }));
+          commentsData.push({
+            id: commentDoc.id,
+            ...commentData,
+            commenterName,
+            commenterPhoto
+          });
         }
-      );
 
-      return unsubscribe;
+        // Sort manually by timestamp (primary) or created_at (fallback)
+        commentsData.sort((a, b) => {
+          const timeA = new Date(a.timestamp || a.created_at || 0);
+          const timeB = new Date(b.timestamp || b.created_at || 0);
+          return timeA - timeB;
+        });
+        
+        console.log(`Loaded ${commentsData.length} comments for job ${jobId}:`, commentsData); // Debug log
+        
+        setSelectedJobComments(prev => ({
+          ...prev,
+          [jobId]: { comments: commentsData, unsubscribe }
+        }));
+        setLoadingComments(prev => ({ ...prev, [jobId]: false }));
+      }, (error) => {
+        console.error('Error in comments listener:', error);
+        setLoadingComments(prev => ({ ...prev, [jobId]: false }));
+        // Set empty comments array on error
+        setSelectedJobComments(prev => ({
+          ...prev,
+          [jobId]: { comments: [], unsubscribe: null }
+        }));
+      });
 
     } catch (error) {
-      console.error('Error fetching comments:', error);
-      // Initialize empty comments for this booking
-      setComments(prev => ({
+      console.error('Error setting up comments listener:', error);
+      setLoadingComments(prev => ({ ...prev, [jobId]: false }));
+      // Set empty comments array on error
+      setSelectedJobComments(prev => ({
         ...prev,
-        [bookingId]: []
+        [jobId]: { comments: [], unsubscribe: null }
       }));
     }
   };
 
-  const addComment = async (bookingId) => {
-    const commentText = newComments[bookingId]?.trim();
+  const submitComment = async (jobId) => {
+    const commentText = newComments[jobId]?.trim();
     if (!commentText) return;
 
-    console.log('Adding comment for booking:', bookingId, 'Comment:', commentText); // Debug
+    setSubmittingComment(prev => ({ ...prev, [jobId]: true }));
 
     try {
-      const commentData = {
-        booking_id: bookingId,
+      // Match exactly how BookingRequests saves comments
+      const job = bookedJobs.find(j => j.id === jobId);
+      const userName = userType === 'customer' ? job?.customerName : job?.tradesmanName;
+      
+      await addDoc(collection(db, 'booking_comments'), {
+        booking_id: jobId,
         user_id: currentUser.uid,
         user_type: userType,
-        user_name: userType === 'customer' ? 
-          bookingRequests.find(b => b.id === bookingId)?.customer_name : 
-          bookingRequests.find(b => b.id === bookingId)?.tradesman_name,
+        user_name: userName || 'Unknown', // Save name directly like BookingRequests
         comment: commentText,
-        timestamp: new Date().toISOString()
-      };
-
-      console.log('Comment data being saved:', commentData); // Debug
-
-      await addDoc(collection(db, 'booking_comments'), commentData);
-
-      // Clear the input
-      setNewComments(prev => ({
-        ...prev,
-        [bookingId]: ''
-      }));
-
-      console.log('Comment saved successfully!'); // Debug
-
+        timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
+      });
+      
+      // Clear the comment input
+      setNewComments(prev => ({ ...prev, [jobId]: '' }));
     } catch (error) {
-      console.error('Error adding comment:', error);
-      alert('Error adding comment. Please try again.');
+      console.error('Error submitting comment:', error);
+      alert('Error submitting comment. Please try again.');
+    } finally {
+      setSubmittingComment(prev => ({ ...prev, [jobId]: false }));
     }
   };
 
-  const updateBookingStatus = async (bookingId, newStatus, customQuote = null) => {
+  const updateJobStatus = async (jobId, newStatus) => {
     try {
-      const updateData = { status: newStatus };
-      if (customQuote) {
-        updateData.custom_quote = customQuote;
-        updateData.has_custom_quote = true;
-      }
-
-      await updateDoc(doc(db, 'bookings', bookingId), updateData);
+      await updateDoc(doc(db, 'bookings', jobId), {
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      });
       
-      // Refresh the list
-      fetchBookingRequests();
-      
-      // Add system comment
-      try {
-        await addDoc(collection(db, 'booking_comments'), {
-          booking_id: bookingId,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System',
-          comment: customQuote ? 
-            `Custom quote proposed: ${customQuote}` : 
-            `Booking ${newStatus.toLowerCase()}`,
-          timestamp: new Date().toISOString()
-        });
-      } catch (commentError) {
-        console.log('Could not add system comment (collection may not exist yet):', commentError);
-      }
-
+      // Refresh the jobs list
+      fetchBookedJobs();
     } catch (error) {
-      console.error('Error updating booking status:', error);
-      alert('Error updating booking. Please try again.');
+      console.error('Error updating job status:', error);
+      alert('Error updating job status. Please try again.');
     }
   };
 
-  // NEW: Handle custom quote proposal (keeps status as Quote Requested)
-  const proposeCustomQuote = async (bookingId, customQuote) => {
+  const cancelJob = async (jobId) => {
     try {
+      const job = bookedJobs.find(j => j.id === jobId);
+      if (!job) return;
+
+      let confirmMessage;
+      let cancellationFee = 0;
+      let cancellationPercentage = 0;
+      const basePrice = getNumericPrice(job); // Calculate once for use throughout
+
+      if (userType === 'customer') {
+        // Calculate time until job
+        const jobDate = new Date(job.requested_date);
+        const currentDate = new Date();
+        const timeDiff = jobDate.getTime() - currentDate.getTime();
+        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+        // Determine cancellation percentage based on notice period
+        if (daysDiff > 7) {
+          cancellationPercentage = 10;
+        } else if (daysDiff > 2) {
+          cancellationPercentage = 20;
+        } else {
+          cancellationPercentage = 50;
+        }
+
+        // Calculate fee based on agreed price
+        cancellationFee = Math.round((basePrice * cancellationPercentage) / 100);
+
+        let noticeText;
+        if (daysDiff > 7) {
+          noticeText = `More than 1 week notice (${daysDiff} days)`;
+        } else if (daysDiff > 2) {
+          noticeText = `Less than 1 week notice (${daysDiff} days)`;
+        } else if (daysDiff >= 0) {
+          noticeText = `2 days or less notice (${daysDiff} days)`;
+        } else {
+          noticeText = `Job date has passed`;
+        }
+
+        confirmMessage = `⚠️ JOB CANCELLATION NOTICE ⚠️
+
+Job: ${job.job_title}
+Tradesman: ${job.tradesmanName}
+Scheduled Date: ${job.requested_date}
+Agreed Price: ${getFinalPrice(job)}
+
+CANCELLATION TERMS:
+${noticeText}
+Cancellation Fee: ${cancellationPercentage}% = £${cancellationFee}
+
+This fee compensates the tradesman for:
+• Blocking their calendar
+• Turning down other work
+• Preparation time invested
+
+The remaining amount (£${basePrice - cancellationFee}) will be refunded to you.
+
+Do you wish to proceed with the cancellation?`;
+
+      } else {
+        // Tradesman cancellation
+        confirmMessage = `⚠️ TRADESMAN CANCELLATION WARNING ⚠️
+
+Job: ${job.job_title}
+Customer: ${job.customerName}
+Scheduled Date: ${job.requested_date}
+
+CANCELLATION CONSEQUENCES:
+• This cancellation may negatively affect your reviews
+• Compensation may be deducted from your next completed job
+• Customer will be notified immediately
+• This may impact your future booking opportunities
+
+Professional tradesmen honor their commitments. Are you sure you want to cancel this job?
+
+Only proceed if you have a genuine emergency or unavoidable circumstance.`;
+      }
+
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      // Update job status to cancelled
       const updateData = {
-        custom_quote: customQuote,
-        has_custom_quote: true,
-        // Keep status as 'Quote Requested' so job stays on this page
-        status: 'Quote Requested'
+        status: 'Cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: userType,
+        updated_at: new Date().toISOString()
       };
 
-      await updateDoc(doc(db, 'bookings', bookingId), updateData);
-      
-      // Refresh the list
-      fetchBookingRequests();
-      
-      // Add system comment
-      try {
-        await addDoc(collection(db, 'booking_comments'), {
-          booking_id: bookingId,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System',
-          comment: `Custom quote proposed: ${customQuote}`,
-          timestamp: new Date().toISOString()
-        });
-      } catch (commentError) {
-        console.log('Could not add system comment (collection may not exist yet):', commentError);
+      if (userType === 'customer') {
+        updateData.cancellation_fee_applied = cancellationFee;
+        updateData.cancellation_percentage = cancellationPercentage;
+        updateData.refund_amount = basePrice - cancellationFee;
       }
 
-    } catch (error) {
-      console.error('Error proposing custom quote:', error);
-      alert('Error proposing custom quote. Please try again.');
-    }
-  };
+      await updateDoc(doc(db, 'bookings', jobId), updateData);
 
-  // NEW: Handle customer accepting custom quote
-  const acceptCustomQuote = async (bookingId) => {
-    try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        status: 'Accepted'
-      });
-      
-      // Refresh the list (job will now move to BookedJobs)
-      fetchBookingRequests();
-      
-      // Add system comment
+      // Add system comment about cancellation
       try {
+        let cancellationMessage;
+        if (userType === 'customer') {
+          cancellationMessage = `Job cancelled by customer with ${cancellationPercentage}% fee (£${cancellationFee}). Refund amount: £${basePrice - cancellationFee}`;
+        } else {
+          cancellationMessage = 'Job cancelled by tradesman. Customer has been notified. This cancellation may affect future reviews and earnings.';
+        }
+
         await addDoc(collection(db, 'booking_comments'), {
-          booking_id: bookingId,
+          booking_id: jobId,
           user_id: currentUser.uid,
           user_type: 'system',
-          user_name: 'System',
-          comment: 'Customer accepted the custom quote',
-          timestamp: new Date().toISOString()
+          user_name: 'System', // Save name directly like BookingRequests
+          comment: cancellationMessage,
+          timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
         });
       } catch (commentError) {
-        console.log('Could not add system comment:', commentError);
+        console.error('Error adding cancellation comment:', commentError);
       }
 
-    } catch (error) {
-      console.error('Error accepting custom quote:', error);
-      alert('Error accepting custom quote. Please try again.');
-    }
-  };
+      // Show confirmation message
+      if (userType === 'customer') {
+        alert(`✅ Job cancelled successfully.
 
-  // NEW: Handle customer rejecting custom quote (bounce back to tradesman)
-  const rejectCustomQuote = async (bookingId) => {
-    try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        custom_quote: null,
-        has_custom_quote: false,
-        customer_counter_quote: null,
-        has_customer_counter: false,
-        quote_reasoning: null,
-        // Keep status as 'Quote Requested' so job stays for negotiation
-        status: 'Quote Requested'
-      });
-      
-      // Refresh the list
-      fetchBookingRequests();
-      
-      // Add system comment
-      try {
-        await addDoc(collection(db, 'booking_comments'), {
-          booking_id: bookingId,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System',
-          comment: 'Customer rejected the custom quote - job available for new response',
-          timestamp: new Date().toISOString()
-        });
-      } catch (commentError) {
-        console.log('Could not add system comment:', commentError);
+PAYMENT SUMMARY:
+• Cancellation fee: £${cancellationFee} (${cancellationPercentage}%)
+• Refund amount: £${basePrice - cancellationFee}
+
+The tradesman has been notified and compensated for their time.
+Your refund will be processed within 3-5 business days.`);
+      } else {
+        alert(`⚠️ Job cancelled.
+
+The customer has been notified of the cancellation.
+
+IMPORTANT REMINDERS:
+• This cancellation is recorded on your profile
+• Future customers may see cancellation history
+• Consider offering the customer priority booking for future jobs
+• Professional communication is essential for maintaining reputation`);
       }
-
+      
+      // Refresh the jobs list
+      fetchBookedJobs();
+      
     } catch (error) {
-      console.error('Error rejecting custom quote:', error);
-      alert('Error rejecting custom quote. Please try again.');
+      console.error('Error cancelling job:', error);
+      alert('Error cancelling job. Please try again.');
     }
   };
 
-  // NEW: Handle customer counter-offer
-  const proposeCustomerCounter = async (bookingId, counterQuote, reasoning) => {
-    try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        customer_counter_quote: counterQuote,
-        has_customer_counter: true,
-        customer_reasoning: reasoning,
-        // Clear tradesman quote since customer is countering
-        has_custom_quote: false,
-        custom_quote: null,
-        // Keep status as 'Quote Requested' so job stays for negotiation
-        status: 'Quote Requested'
-      });
-      
-      // Refresh the list
-      fetchBookingRequests();
-      
-      // Add system comment
-      try {
-        await addDoc(collection(db, 'booking_comments'), {
-          booking_id: bookingId,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System',
-          comment: `Customer counter-offer: ${counterQuote}${reasoning ? `\nReason: ${reasoning}` : ''}`,
-          timestamp: new Date().toISOString()
-        });
-      } catch (commentError) {
-        console.log('Could not add system comment:', commentError);
-      }
-
-    } catch (error) {
-      console.error('Error proposing counter-offer:', error);
-      alert('Error proposing counter-offer. Please try again.');
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Accepted': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'In Progress': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'Completed': return 'bg-green-100 text-green-800 border-green-200';
+      case 'Cancelled': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  // NEW: Handle tradesman accepting customer counter
-  const acceptCustomerCounter = async (bookingId) => {
-    try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        status: 'Accepted'
-      });
-      
-      // Refresh the list (job will now move to BookedJobs)
-      fetchBookingRequests();
-      
-      // Add system comment
-      try {
-        await addDoc(collection(db, 'booking_comments'), {
-          booking_id: bookingId,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System',
-          comment: 'Tradesman accepted the customer counter-offer',
-          timestamp: new Date().toISOString()
-        });
-      } catch (commentError) {
-        console.log('Could not add system comment:', commentError);
-      }
+  // Job Card Component
+  const JobCard = ({ job }) => {
+    return (
+      <div className={`bg-white rounded-lg shadow-md border-l-4 ${
+        job.status === 'Completed' ? 'border-green-500' :
+        job.status === 'Cancelled' ? 'border-red-500' :
+        'border-blue-500'
+      }`}>
+        <div className="p-6">
+          {/* Job Header */}
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <h2 className="text-xl font-semibold text-gray-900">{job.job_title}</h2>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(job.status)}`}>
+                  {job.status}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                <div className="flex items-center gap-2">
+                  {userType === 'customer' ? (
+                    <>
+                      {job.tradesmanPhoto ? (
+                        <img src={job.tradesmanPhoto} alt="Tradesman" className="w-6 h-6 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-gray-300"></div>
+                      )}
+                      <span><strong>Tradesman:</strong> {job.tradesmanName}</span>
+                    </>
+                  ) : (
+                    <>
+                      {job.customerPhoto ? (
+                        <img src={job.customerPhoto} alt="Customer" className="w-6 h-6 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-gray-300"></div>
+                      )}
+                      <span><strong>Customer:</strong> {job.customerName}</span>
+                    </>
+                  )}
+                </div>
+                <span><strong>Date:</strong> {job.requested_date}</span>
+                <span className="text-green-600 font-semibold"><strong>Final Price:</strong> {getFinalPrice(job)}</span>
+              </div>
 
-    } catch (error) {
-      console.error('Error accepting customer counter:', error);
-      alert('Error accepting customer counter. Please try again.');
-    }
-  };
+              <div className="text-sm text-gray-500 mb-3">
+                <span>Requested: {new Date(job.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          </div>
 
-  // NEW: Handle tradesman rejecting customer counter
-  const rejectCustomerCounter = async (bookingId) => {
-    try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        customer_counter_quote: null,
-        has_customer_counter: false,
-        customer_reasoning: null,
-        // Keep status as 'Quote Requested' so job stays for negotiation
-        status: 'Quote Requested'
-      });
-      
-      // Refresh the list
-      fetchBookingRequests();
-      
-      // Add system comment
-      try {
-        await addDoc(collection(db, 'booking_comments'), {
-          booking_id: bookingId,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System',
-          comment: 'Tradesman rejected the customer counter-offer - job available for new response',
-          timestamp: new Date().toISOString()
-        });
-      } catch (commentError) {
-        console.log('Could not add system comment:', commentError);
-      }
+          {/* Job Description */}
+          <div className="mb-4">
+            <h3 className="font-medium text-gray-900 mb-2">Job Description</h3>
+            <p className="text-gray-700 whitespace-pre-line">{job.job_description}</p>
+          </div>
 
-    } catch (error) {
-      console.error('Error rejecting customer counter:', error);
-      alert('Error rejecting customer counter. Please try again.');
-    }
-  };
+          {/* Job Photos - Always visible if they exist */}
+          {job.photos && job.photos.length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-medium text-gray-900 mb-3">Job Photos</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {job.photos.map((photo, index) => (
+                  <img 
+                    key={index}
+                    src={photo} 
+                    alt={`Job photo ${index + 1}`}
+                    className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => window.open(photo, '_blank')}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+          {/* Additional Details */}
+          {job.additional_notes && (
+            <div className="mb-4">
+              <h3 className="font-medium text-gray-900 mb-2">Additional Notes</h3>
+              <p className="text-gray-700 whitespace-pre-line">{job.additional_notes}</p>
+            </div>
+          )}
 
-  const getUrgencyColor = (urgency) => {
-    switch (urgency) {
-      case 'urgent': return 'bg-red-100 text-red-800';
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'normal': return 'bg-blue-100 text-blue-800';
-      case 'low': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+          {/* Job Actions */}
+          <div className="flex flex-wrap gap-3 mb-6">
+            {/* Status Update Buttons for Tradesmen */}
+            {userType === 'tradesman' && (
+              <>
+                {job.status === 'Accepted' && (
+                  <button
+                    onClick={() => updateJobStatus(job.id, 'In Progress')}
+                    className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+                  >
+                    Mark In Progress
+                  </button>
+                )}
+                {job.status === 'In Progress' && (
+                  <button
+                    onClick={() => updateJobStatus(job.id, 'Completed')}
+                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                  >
+                    Mark Complete
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Cancel Job Button - Available for both user types on active jobs */}
+            {job.status !== 'Completed' && job.status !== 'Cancelled' && (
+              <button
+                onClick={() => cancelJob(job.id)}
+                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors border-2 border-red-600"
+              >
+                Cancel Job
+              </button>
+            )}
+
+            {/* Additional Actions for Completed Jobs */}
+            {job.status === 'Completed' && (
+              <div className="flex gap-2">
+                {userType === 'customer' && (
+                  <>
+                    <button className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors">
+                      Leave Review
+                    </button>
+                    <button className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors">
+                      Hire Again
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Show cancellation details if job was cancelled */}
+            {job.status === 'Cancelled' && (
+              <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mt-2">
+                <div className="flex items-center gap-2 text-red-800 mb-2">
+                  <span className="text-lg">🚫</span>
+                  <span className="font-semibold">Job Cancelled</span>
+                </div>
+                <div className="text-red-700 text-sm space-y-1">
+                  <p><strong>Cancelled on:</strong> {new Date(job.cancelled_at || job.updated_at).toLocaleDateString()}</p>
+                  <p><strong>Cancelled by:</strong> {job.cancelled_by === 'customer' ? 'Customer' : 'Tradesman'}</p>
+                  {job.cancelled_by === 'customer' && job.cancellation_fee_applied > 0 && (
+                    <>
+                      <p><strong>Cancellation fee:</strong> £{job.cancellation_fee_applied} ({job.cancellation_percentage}%)</p>
+                      {job.refund_amount && (
+                        <p><strong>Refund amount:</strong> £{job.refund_amount}</p>
+                      )}
+                    </>
+                  )}
+                  {job.cancelled_by === 'tradesman' && (
+                    <p className="text-orange-700 font-medium">⚠️ Tradesman cancellation may affect future reviews</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Discussion Section - Always Visible */}
+          <div className="border-t pt-6">
+            <h3 className="font-medium text-gray-900 mb-4">Complete Discussion History</h3>
+            
+            {selectedJobComments[job.id] ? (
+              <>
+                <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+                  {selectedJobComments[job.id].comments.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No comments yet for this job.</p>
+                  ) : (
+                    selectedJobComments[job.id].comments.map((comment) => (
+                      <div key={comment.id} className="flex gap-3 p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-shrink-0">
+                          {comment.commenterPhoto ? (
+                            <img 
+                              src={comment.commenterPhoto} 
+                              alt={comment.commenterName}
+                              className="w-10 h-10 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium">
+                              {comment.commenterName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-medium text-sm">{comment.commenterName}</span>
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' : 
+                              comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {comment.user_type === 'customer' ? 'Customer' : 
+                               comment.user_type === 'tradesman' ? 'Tradesman' : 'System'}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {new Date(comment.timestamp || comment.created_at || new Date()).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-gray-700 whitespace-pre-line">{comment.comment}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Add New Comment */}
+                <div className="flex gap-3">
+                  <textarea
+                    value={newComments[job.id] || ''}
+                    onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
+                    placeholder="Add a comment about this job..."
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    rows={3}
+                    disabled={submittingComment[job.id]}
+                  />
+                  <button
+                    onClick={() => submitComment(job.id)}
+                    disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
+                    className="bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors self-end"
+                  >
+                    {submittingComment[job.id] ? 'Posting...' : 'Post Comment'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-6 text-gray-500">Loading discussion history...</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
-    return <div className="text-center py-8">Loading booking requests...</div>;
+    return (
+      <div className="max-w-6xl mx-auto p-4">
+        <div className="text-center py-8">Loading booked jobs...</div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto p-4">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">
-          {userType === 'customer' ? 'My Quote Requests' : 'Incoming Quote Requests'}
-        </h1>
+        <h1 className="text-3xl font-bold text-gray-900">Booked Jobs</h1>
         <p className="text-gray-600 mt-2">
-          {userType === 'customer' ? 
-            'Track your submitted requests and communicate with tradesmen' : 
-            'Review customer requests and provide quotes'}
+          {userType === 'customer' 
+            ? 'Your contractually agreed jobs' 
+            : 'Jobs you\'ve been hired for'
+          }
         </p>
       </div>
 
-      {bookingRequests.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg shadow-md">
-          <p className="text-gray-500 text-lg">
-            {userType === 'customer' ? 
-              'No quote requests submitted yet.' : 
-              'No new quote requests at the moment.'}
-          </p>
-          {userType === 'customer' && (
-            <button
-              onClick={() => window.location.href = '/browse'}
-              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-            >
-              Browse Tradesmen
-            </button>
+      {/* Active Jobs Section */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Active Jobs</h2>
+        {getActiveJobs().length === 0 ? (
+          <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="text-gray-500 mb-4">
+              <div className="text-4xl mb-2">📋</div>
+              <h3 className="text-lg font-medium">No Active Jobs</h3>
+              <p className="text-sm">
+                {userType === 'customer' 
+                  ? 'Active jobs will appear here once quotes are accepted'
+                  : 'Accepted jobs will appear here'
+                }
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {getActiveJobs().map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Toggle Buttons */}
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => setShowCompleted(!showCompleted)}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            showCompleted 
+              ? 'bg-green-600 text-white' 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          {showCompleted ? 'Hide' : 'Show'} Completed Jobs ({getCompletedJobs().length})
+        </button>
+        
+        <button
+          onClick={() => setShowCancelled(!showCancelled)}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            showCancelled 
+              ? 'bg-red-600 text-white' 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          {showCancelled ? 'Hide' : 'Show'} Cancelled Jobs ({getCancelledJobs().length})
+        </button>
+      </div>
+
+      {/* Completed Jobs Section */}
+      {showCompleted && (
+        <div className="mb-8">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <h2 className="text-xl font-semibold text-green-800 mb-2">✅ Completed Jobs</h2>
+            <p className="text-green-700 text-sm">Successfully finished projects</p>
+          </div>
+          
+          {getCompletedJobs().length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-6 text-center">
+              <p className="text-gray-500">No completed jobs yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {getCompletedJobs().map((job) => (
+                <JobCard key={job.id} job={job} />
+              ))}
+            </div>
           )}
         </div>
-      ) : (
-        <div className="space-y-6">
-          {bookingRequests.map(request => (
-            <div key={request.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-              {/* Job Header */}
-              <div className="bg-gray-50 px-6 py-4 border-b">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h2 className="text-xl font-semibold text-gray-900">
-                      {request.job_title}
-                    </h2>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {userType === 'customer' ? 
-                        `Request to: ${request.tradesman_name}` : 
-                        `Request from: ${request.customer_name}`}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Submitted: {formatDate(request.created_at)}
-                    </p>
-                  </div>
-                  
-                  <div className="flex gap-2 items-center">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getUrgencyColor(request.urgency)}`}>
-                      {request.urgency.charAt(0).toUpperCase() + request.urgency.slice(1)} Priority
-                    </span>
-                    {/* NEW: Show custom quote OR customer counter status */}
-                    {request.has_custom_quote && (
-                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                        Tradesman Quote: {request.custom_quote}
-                      </span>
-                    )}
-                    {request.has_customer_counter && (
-                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                        Customer Counter: {request.customer_counter_quote}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+      )}
 
-              {/* Job Details */}
-              <div className="px-6 py-4">
-                <div className="grid md:grid-cols-2 gap-6">
-                  {/* Left Column */}
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="font-medium text-gray-900 mb-2">Job Description</h3>
-                      <p className="text-gray-700 whitespace-pre-line">{request.job_description}</p>
-                    </div>
-                    
-                    {request.budget_expectation && (
-                      <div>
-                        <h3 className="font-medium text-gray-900 mb-1">Budget Expectation</h3>
-                        <p className="text-gray-700">{request.budget_expectation}</p>
-                      </div>
-                    )}
-
-                    {request.additional_notes && (
-                      <div>
-                        <h3 className="font-medium text-gray-900 mb-1">Additional Notes</h3>
-                        <p className="text-gray-700 whitespace-pre-line">{request.additional_notes}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Column */}
-                  <div className="space-y-4">
-                    {/* Preferred Dates */}
-                    <div>
-                      <h3 className="font-medium text-gray-900 mb-2">Preferred Dates</h3>
-                      <div className="text-sm text-gray-700">
-                        {request.preferred_dates_list && request.preferred_dates_list.length > 0 ? (
-                          <p>Customer selected {request.preferred_dates_list.length} available dates</p>
-                        ) : (
-                          <p>No specific dates mentioned</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Job Photos */}
-                    {request.job_images && request.job_images.length > 0 && (
-                      <div>
-                        <h3 className="font-medium text-gray-900 mb-2">Job Photos ({request.job_images.length})</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {request.job_images.slice(0, 4).map((image, index) => (
-                            <img
-                              key={index}
-                              src={image.image}
-                              alt={`Job photo ${index + 1}`}
-                              className="w-full h-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                              onClick={() => window.open(image.image, '_blank')}
-                            />
-                          ))}
-                        </div>
-                        {request.job_images.length > 4 && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            +{request.job_images.length - 4} more photos
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions Section */}
-                <div className="mt-6 pt-4 border-t border-gray-200">
-                  {/* TRADESMAN ACTIONS */}
-                  {userType === 'tradesman' && (
-                    <>
-                      {/* No quotes sent yet - original buttons */}
-                      {!request.has_custom_quote && !request.has_customer_counter && (
-                        <>
-                          <h3 className="font-medium text-gray-900 mb-3">Your Response</h3>
-                          <div className="flex gap-3">
-                            <button
-                              onClick={() => updateBookingStatus(request.id, 'Accepted')}
-                              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                            >
-                              Accept (£{request.tradesman_hourly_rate || 'Standard Rate'}/hour)
-                            </button>
-                            
-                            <button
-                              onClick={() => {
-                                const customQuote = prompt('Enter your custom quote (e.g., £200 fixed price, or £50/hour):');
-                                if (customQuote) {
-                                  proposeCustomQuote(request.id, customQuote);
-                                }
-                              }}
-                              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                            >
-                              Custom Quote
-                            </button>
-                            
-                            <button
-                              onClick={() => {
-                                if (confirm('Are you sure you want to reject this request?')) {
-                                  updateBookingStatus(request.id, 'Rejected');
-                                }
-                              }}
-                              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Tradesman sent quote, waiting for customer */}
-                      {request.has_custom_quote && !request.has_customer_counter && (
-                        <>
-                          <h3 className="font-medium text-gray-900 mb-3">Custom Quote Sent</h3>
-                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                            <p className="text-blue-800">
-                              ✅ You've sent a custom quote: <strong>{request.custom_quote}</strong>
-                            </p>
-                            <p className="text-blue-600 text-sm mt-1">
-                              Waiting for customer response...
-                            </p>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Customer sent counter-offer */}
-                      {request.has_customer_counter && (
-                        <>
-                          <h3 className="font-medium text-gray-900 mb-3">Customer Counter-Offer</h3>
-                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
-                            <p className="text-orange-800 mb-2">
-                              💬 <strong>{request.customer_name}</strong> has counter-offered: 
-                              <span className="font-bold text-lg ml-2">{request.customer_counter_quote}</span>
-                            </p>
-                            {request.customer_reasoning && (
-                              <p className="text-orange-700 text-sm mb-3 italic">
-                                Reason: "{request.customer_reasoning}"
-                              </p>
-                            )}
-                            <div className="flex gap-3">
-                              <button
-                                onClick={() => acceptCustomerCounter(request.id)}
-                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                              >
-                                Accept Counter-Offer
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const newQuote = prompt('Enter your new counter-quote:');
-                                  if (newQuote) {
-                                    proposeCustomQuote(request.id, newQuote);
-                                  }
-                                }}
-                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                              >
-                                New Counter-Quote
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (confirm('Reject this counter-offer? You can then propose a new quote.')) {
-                                    rejectCustomerCounter(request.id);
-                                  }
-                                }}
-                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                              >
-                                Reject Counter
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-
-                  {/* CUSTOMER ACTIONS */}
-                  {userType === 'customer' && (
-                    <>
-                      {/* Customer sent counter, waiting for tradesman */}
-                      {request.has_customer_counter && (
-                        <>
-                          <h3 className="font-medium text-gray-900 mb-3">Counter-Offer Sent</h3>
-                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                            <p className="text-orange-800">
-                              ✅ You've sent a counter-offer: <strong>{request.customer_counter_quote}</strong>
-                            </p>
-                            {request.customer_reasoning && (
-                              <p className="text-orange-700 text-sm mt-1">
-                                Your reason: "{request.customer_reasoning}"
-                              </p>
-                            )}
-                            <p className="text-orange-600 text-sm mt-1">
-                              Waiting for <strong>{request.tradesman_name}</strong> to respond...
-                            </p>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Tradesman sent quote, customer can respond */}
-                      {request.has_custom_quote && !request.has_customer_counter && (
-                        <>
-                          <h3 className="font-medium text-gray-900 mb-3">Custom Quote Received</h3>
-                          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-                            <p className="text-purple-800 mb-3">
-                              💼 <strong>{request.tradesman_name}</strong> has sent you a custom quote: 
-                              <span className="font-bold text-lg ml-2">{request.custom_quote}</span>
-                            </p>
-                            <div className="flex gap-3 flex-wrap">
-                              <button
-                                onClick={() => acceptCustomQuote(request.id)}
-                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                              >
-                                Accept Quote
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const counterQuote = prompt('Enter your counter-offer (e.g., £150 fixed price, or £40/hour):');
-                                  if (counterQuote) {
-                                    const reasoning = prompt('Why this price? (optional - helps with negotiation):') || '';
-                                    proposeCustomerCounter(request.id, counterQuote, reasoning);
-                                  }
-                                }}
-                                className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
-                              >
-                                Counter-Offer
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (confirm('Are you sure you want to reject this quote? The job will return to the tradesman.')) {
-                                    rejectCustomQuote(request.id);
-                                  }
-                                }}
-                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                              >
-                                Reject Quote
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* No quotes yet - waiting */}
-                      {!request.has_custom_quote && !request.has_customer_counter && (
-                        <>
-                          <h3 className="font-medium text-gray-900 mb-3">Request Status</h3>
-                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                            <p className="text-yellow-800">
-                              ⏳ Waiting for <strong>{request.tradesman_name}</strong> to respond to your quote request...
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Comments Section */}
-              <div className="border-t border-gray-200 bg-gray-50">
-                <div className="px-6 py-4">
-                  <h3 className="font-medium text-gray-900 mb-3">Discussion</h3>
-                  
-                  {/* Comments List */}
-                  <div className="space-y-3 mb-4">
-                    {comments[request.id] && comments[request.id].length > 0 ? (
-                      <>
-                        {console.log('Displaying comments for booking', request.id, ':', comments[request.id])}
-                        {comments[request.id].map(comment => (
-                          <div key={comment.id} className="bg-white rounded-lg p-3 shadow-sm">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-sm text-gray-900">
-                                {comment.user_name}
-                                <span className={`ml-2 px-2 py-0.5 rounded text-xs ${
-                                  comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' :
-                                  comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
-                                  'bg-gray-100 text-gray-800'
-                                }`}>
-                                  {comment.user_type === 'system' ? 'System' : 
-                                   comment.user_type.charAt(0).toUpperCase() + comment.user_type.slice(1)}
-                                </span>
-                              </span>
-                              <span className="text-xs text-gray-500">
-                                {formatDate(comment.timestamp)}
-                              </span>
-                            </div>
-                            <p className="text-gray-700 text-sm whitespace-pre-line">{comment.comment}</p>
-                          </div>
-                        ))}
-                      </>
-                    ) : (
-                      <>
-                        {console.log('No comments to display for booking', request.id, 'Comments:', comments[request.id])}
-                        <p className="text-gray-500 text-sm italic">No comments yet. Start the conversation!</p>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Add Comment */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newComments[request.id] || ''}
-                      onChange={(e) => setNewComments(prev => ({
-                        ...prev,
-                        [request.id]: e.target.value
-                      }))}
-                      placeholder="Ask a question or add a comment..."
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      onKeyPress={(e) => e.key === 'Enter' && addComment(request.id)}
-                    />
-                    <button
-                      onClick={() => addComment(request.id)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    >
-                      Comment
-                    </button>
-                  </div>
-                </div>
-              </div>
+      {/* Cancelled Jobs Section */}
+      {showCancelled && (
+        <div className="mb-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <h2 className="text-xl font-semibold text-red-800 mb-2">🚫 Cancelled Jobs</h2>
+            <p className="text-red-700 text-sm">Jobs that were cancelled before completion</p>
+          </div>
+          
+          {getCancelledJobs().length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-6 text-center">
+              <p className="text-gray-500">No cancelled jobs.</p>
             </div>
-          ))}
+          ) : (
+            <div className="space-y-6">
+              {getCancelledJobs().map((job) => (
+                <JobCard key={job.id} job={job} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
 
-export default BookingRequests;
+export default BookedJobs;
