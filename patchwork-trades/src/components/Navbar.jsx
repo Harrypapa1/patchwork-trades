@@ -211,24 +211,24 @@ const Navbar = () => {
         {/* Mobile Menu - Only show on mobile when open */}
         {isMobile && isMenuOpen && (
           <div 
-            className="bg-blue-700 rounded-md mt-2 p-2 shadow-lg"
+            className="bg-blue-700 rounded-md mt-2 p-1 shadow-lg border border-blue-500"
             onClick={handleMenuClick}
           >
             {!currentUser ? (
               <>
                 <Link 
                   to="/login" 
-                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
-                  🔑 Login
+                  Login
                 </Link>
                 <Link 
                   to="/register-customer" 
-                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
-                  📝 Register
+                  Register
                 </Link>
               </>
             ) : (
@@ -236,78 +236,74 @@ const Navbar = () => {
                 {userType !== 'tradesman' && (
                   <Link 
                     to="/browse" 
-                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
+                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                     onClick={closeMenu}
                   >
-                    🔍 Browse Tradesmen
+                    Browse Tradesmen
                   </Link>
                 )}
                 
-                {/* Booking Requests - Mobile */}
+                {/* Booking Requests - Clean professional style */}
                 <Link 
                   to="/booking-requests" 
-                  className={`block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors relative ${
-                    bookingRequestsCount > 0 ? 'font-bold' : ''
+                  className={`block px-4 py-3 text-white hover:bg-blue-600 transition-colors relative ${
+                    bookingRequestsCount > 0 ? 'font-bold bg-blue-600' : 'font-medium'
                   }`}
                   onClick={closeMenu}
-                  style={{ 
-                    backgroundColor: bookingRequestsCount > 0 ? '#f59e0b' : 'transparent', 
-                    border: bookingRequestsCount > 0 ? '2px solid white' : 'none'
-                  }}
                 >
-                  📋 BOOKING REQUESTS
+                  Booking Requests
                   {bookingRequestsCount > 0 && (
-                    <span className="absolute top-1 right-2 bg-white text-yellow-600 text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    <span className="absolute top-2 right-3 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
                       {bookingRequestsCount}
                     </span>
                   )}
                 </Link>
 
-                {/* Booked Jobs - Mobile */}
+                {/* Booked Jobs - Clean professional style */}
                 <Link 
                   to="/booked-jobs" 
-                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors border border-white border-opacity-30"
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
-                  ✅ BOOKED JOBS
+                  Booked Jobs
                 </Link>
 
                 {userType === 'tradesman' && (
                   <Link 
                     to="/manage-availability" 
-                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
+                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                     onClick={closeMenu}
                   >
-                    📅 Manage Availability
+                    Manage Availability
                   </Link>
                 )}
                 
                 {userType === 'customer' && (
                   <Link 
                     to="/customer-dashboard" 
-                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
+                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                     onClick={closeMenu}
                   >
-                    📊 Customer Dashboard
+                    Dashboard
                   </Link>
                 )}
                 
                 {userType === 'tradesman' && (
                   <Link 
                     to="/tradesman-dashboard" 
-                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
+                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                     onClick={closeMenu}
                   >
-                    🔧 Tradesman Dashboard
+                    Dashboard
                   </Link>
                 )}
                 
-                <div className="border-t border-blue-500 mt-2 pt-2">
+                <div className="border-t border-blue-500 mt-1">
                   <button
                     onClick={handleLogout}
-                    className="block w-full text-left px-3 py-2 rounded-md text-white hover:bg-red-600 transition-colors"
+                    className="block w-full text-left px-4 py-3 text-white hover:bg-red-600 transition-colors font-medium"
                   >
-                    🚪 Logout
+                    Logout
                   </button>
                 </div>
               </>
