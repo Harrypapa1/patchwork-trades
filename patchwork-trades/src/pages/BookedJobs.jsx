@@ -16,35 +16,34 @@ import { db } from '../config/firebase';
 
 const BookedJobs = () => {
   const { currentUser, userType } = useAuth();
-  const [activeJobs, setActiveJobs] = useState([]);
-  const [completedJobs, setCompletedJobs] = useState([]);
-  const [cancelledJobs, setCancelledJobs] = useState([]);
+  const [bookedJobs, setBookedJobs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingCompleted, setLoadingCompleted] = useState(false);
-  const [loadingCancelled, setLoadingCancelled] = useState(false);
   const [selectedJobComments, setSelectedJobComments] = useState({});
   const [newComments, setNewComments] = useState({});
   const [loadingComments, setLoadingComments] = useState({});
   const [submittingComment, setSubmittingComment] = useState({});
   const [showCompleted, setShowCompleted] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
-  const [completedLoaded, setCompletedLoaded] = useState(false);
-  const [cancelledLoaded, setCancelledLoaded] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
-      fetchActiveJobs();
+      fetchBookedJobs();
     }
   }, [currentUser, userType]);
 
   useEffect(() => {
-    // Auto-load comments for all active jobs
-    activeJobs.forEach(job => {
-      if (!selectedJobComments[job.id]) {
+    // Auto-load comments for all booked jobs when jobs are loaded
+    if (bookedJobs.length > 0) {
+      bookedJobs.forEach(job => {
         fetchJobComments(job.id);
-      }
-    });
-  }, [activeJobs]);
+      });
+    }
+  }, [bookedJobs]);
+
+  // Helper function to filter jobs by status
+  const getActiveJobs = () => bookedJobs.filter(job => job.status === 'Accepted' || job.status === 'In Progress');
+  const getCompletedJobs = () => bookedJobs.filter(job => job.status === 'Completed');
+  const getCancelledJobs = () => bookedJobs.filter(job => job.status === 'Cancelled');
 
   // Helper function to get final agreed price
   const getFinalPrice = (job) => {
@@ -78,18 +77,20 @@ const BookedJobs = () => {
     return priceMatch ? parseInt(priceMatch[1]) : 200; // Default to £200 if can't parse
   };
 
-  const fetchActiveJobs = async () => {
+  const fetchBookedJobs = async () => {
     if (!currentUser) return;
     
     try {
       let jobsQuery;
       
       if (userType === 'customer') {
+        // Show jobs where customer is the current user and status is NOT "Quote Requested"
         jobsQuery = query(
           collection(db, 'bookings'),
           where('customer_id', '==', currentUser.uid)
         );
       } else if (userType === 'tradesman') {
+        // Show jobs where tradesman is the current user and status is NOT "Quote Requested"
         jobsQuery = query(
           collection(db, 'bookings'),
           where('tradesman_id', '==', currentUser.uid)
@@ -103,8 +104,8 @@ const BookedJobs = () => {
         for (const jobDoc of querySnapshot.docs) {
           const jobData = jobDoc.data();
           
-          // Only include ACTIVE jobs (Accepted or In Progress)
-          if (jobData.status === 'Accepted' || jobData.status === 'In Progress') {
+          // Only include jobs that are NOT "Quote Requested" (i.e., agreed/contracted jobs)
+          if (jobData.status !== 'Quote Requested') {
             // Get customer name
             const customerDoc = await getDoc(doc(db, 'users', jobData.customer_id));
             const customerName = customerDoc.exists() ? customerDoc.data().name : 'Unknown Customer';
@@ -128,168 +129,35 @@ const BookedJobs = () => {
 
         // Sort by creation date (newest first)
         jobsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-        setActiveJobs(jobsData);
+        setBookedJobs(jobsData);
       }
     } catch (error) {
-      console.error('Error fetching active jobs:', error);
+      console.error('Error fetching booked jobs:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchCompletedJobs = async () => {
-    if (!currentUser || completedLoaded) return;
-    
-    setLoadingCompleted(true);
-    
-    try {
-      let jobsQuery;
-      
-      if (userType === 'customer') {
-        jobsQuery = query(
-          collection(db, 'bookings'),
-          where('customer_id', '==', currentUser.uid),
-          where('status', '==', 'Completed')
-        );
-      } else if (userType === 'tradesman') {
-        jobsQuery = query(
-          collection(db, 'bookings'),
-          where('tradesman_id', '==', currentUser.uid),
-          where('status', '==', 'Completed')
-        );
-      }
-
-      if (jobsQuery) {
-        const querySnapshot = await getDocs(jobsQuery);
-        const jobsData = [];
-
-        for (const jobDoc of querySnapshot.docs) {
-          const jobData = jobDoc.data();
-          
-          // Get customer name
-          const customerDoc = await getDoc(doc(db, 'users', jobData.customer_id));
-          const customerName = customerDoc.exists() ? customerDoc.data().name : 'Unknown Customer';
-          const customerPhoto = customerDoc.exists() ? customerDoc.data().profilePhoto : null;
-
-          // Get tradesman name
-          const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', jobData.tradesman_id));
-          const tradesmanName = tradesmanDoc.exists() ? tradesmanDoc.data().name : 'Unknown Tradesman';
-          const tradesmanPhoto = tradesmanDoc.exists() ? tradesmanDoc.data().profilePhoto : null;
-
-          jobsData.push({
-            id: jobDoc.id,
-            ...jobData,
-            customerName,
-            customerPhoto,
-            tradesmanName,
-            tradesmanPhoto
-          });
-
-          // Load comments for completed jobs
-          fetchJobComments(jobDoc.id);
-        }
-
-        // Sort by completion date (newest first)
-        jobsData.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-        setCompletedJobs(jobsData);
-        setCompletedLoaded(true);
-      }
-    } catch (error) {
-      console.error('Error fetching completed jobs:', error);
-    } finally {
-      setLoadingCompleted(false);
-    }
-  };
-
-  const fetchCancelledJobs = async () => {
-    if (!currentUser || cancelledLoaded) return;
-    
-    setLoadingCancelled(true);
-    
-    try {
-      let jobsQuery;
-      
-      if (userType === 'customer') {
-        jobsQuery = query(
-          collection(db, 'bookings'),
-          where('customer_id', '==', currentUser.uid),
-          where('status', '==', 'Cancelled')
-        );
-      } else if (userType === 'tradesman') {
-        jobsQuery = query(
-          collection(db, 'bookings'),
-          where('tradesman_id', '==', currentUser.uid),
-          where('status', '==', 'Cancelled')
-        );
-      }
-
-      if (jobsQuery) {
-        const querySnapshot = await getDocs(jobsQuery);
-        const jobsData = [];
-
-        for (const jobDoc of querySnapshot.docs) {
-          const jobData = jobDoc.data();
-          
-          // Get customer name
-          const customerDoc = await getDoc(doc(db, 'users', jobData.customer_id));
-          const customerName = customerDoc.exists() ? customerDoc.data().name : 'Unknown Customer';
-          const customerPhoto = customerDoc.exists() ? customerDoc.data().profilePhoto : null;
-
-          // Get tradesman name
-          const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', jobData.tradesman_id));
-          const tradesmanName = tradesmanDoc.exists() ? tradesmanDoc.data().name : 'Unknown Tradesman';
-          const tradesmanPhoto = tradesmanDoc.exists() ? tradesmanDoc.data().profilePhoto : null;
-
-          jobsData.push({
-            id: jobDoc.id,
-            ...jobData,
-            customerName,
-            customerPhoto,
-            tradesmanName,
-            tradesmanPhoto
-          });
-
-          // Load comments for cancelled jobs
-          fetchJobComments(jobDoc.id);
-        }
-
-        // Sort by cancellation date (newest first)
-        jobsData.sort((a, b) => new Date(b.cancelled_at || b.updated_at) - new Date(a.cancelled_at || a.updated_at));
-        setCancelledJobs(jobsData);
-        setCancelledLoaded(true);
-      }
-    } catch (error) {
-      console.error('Error fetching cancelled jobs:', error);
-    } finally {
-      setLoadingCancelled(false);
-    }
-  };
-
-  const handleShowCompleted = () => {
-    if (!showCompleted && !completedLoaded) {
-      fetchCompletedJobs();
-    }
-    setShowCompleted(!showCompleted);
-  };
-
-  const handleShowCancelled = () => {
-    if (!showCancelled && !cancelledLoaded) {
-      fetchCancelledJobs();
-    }
-    setShowCancelled(!showCancelled);
-  };
-
   const fetchJobComments = async (jobId) => {
-    if (selectedJobComments[jobId]) return; // Already loaded
-
+    // Always fetch, don't skip if already loaded (to ensure fresh data)
     setLoadingComments(prev => ({ ...prev, [jobId]: true }));
 
     try {
-      const commentsQuery = query(
-        collection(db, 'booking_comments'),
-        where('booking_id', '==', jobId),
-        orderBy('created_at', 'asc')
-      );
+      // First try with orderBy, fallback if index doesn't exist
+      let commentsQuery;
+      try {
+        commentsQuery = query(
+          collection(db, 'booking_comments'),
+          where('booking_id', '==', jobId),
+          orderBy('created_at', 'asc')
+        );
+      } catch (indexError) {
+        // Fallback query without orderBy if index doesn't exist
+        commentsQuery = query(
+          collection(db, 'booking_comments'),
+          where('booking_id', '==', jobId)
+        );
+      }
 
       // Set up real-time listener
       const unsubscribe = onSnapshot(commentsQuery, async (snapshot) => {
@@ -303,17 +171,28 @@ const BookedJobs = () => {
           let commenterPhoto = null;
           
           if (commentData.user_type === 'customer') {
-            const userDoc = await getDoc(doc(db, 'users', commentData.user_id));
-            if (userDoc.exists()) {
-              commenterName = userDoc.data().name;
-              commenterPhoto = userDoc.data().profilePhoto;
+            try {
+              const userDoc = await getDoc(doc(db, 'users', commentData.user_id));
+              if (userDoc.exists()) {
+                commenterName = userDoc.data().name;
+                commenterPhoto = userDoc.data().profilePhoto;
+              }
+            } catch (userError) {
+              console.log('Could not fetch user details:', userError);
+            }
+          } else if (commentData.user_type === 'tradesman') {
+            try {
+              const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', commentData.user_id));
+              if (tradesmanDoc.exists()) {
+                commenterName = tradesmanDoc.data().name;
+                commenterPhoto = tradesmanDoc.data().profilePhoto;
+              }
+            } catch (tradesmanError) {
+              console.log('Could not fetch tradesman details:', tradesmanError);
             }
           } else {
-            const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', commentData.user_id));
-            if (tradesmanDoc.exists()) {
-              commenterName = tradesmanDoc.data().name;
-              commenterPhoto = tradesmanDoc.data().profilePhoto;
-            }
+            // System comments
+            commenterName = 'System';
           }
           
           commentsData.push({
@@ -323,17 +202,35 @@ const BookedJobs = () => {
             commenterPhoto
           });
         }
+
+        // Sort manually by created_at if we couldn't use orderBy
+        commentsData.sort((a, b) => new Date(a.created_at || a.timestamp || 0) - new Date(b.created_at || b.timestamp || 0));
+        
+        console.log(`Loaded ${commentsData.length} comments for job ${jobId}:`, commentsData); // Debug log
         
         setSelectedJobComments(prev => ({
           ...prev,
           [jobId]: { comments: commentsData, unsubscribe }
         }));
         setLoadingComments(prev => ({ ...prev, [jobId]: false }));
+      }, (error) => {
+        console.error('Error in comments listener:', error);
+        setLoadingComments(prev => ({ ...prev, [jobId]: false }));
+        // Set empty comments array on error
+        setSelectedJobComments(prev => ({
+          ...prev,
+          [jobId]: { comments: [], unsubscribe: null }
+        }));
       });
 
     } catch (error) {
-      console.error('Error fetching comments:', error);
+      console.error('Error setting up comments listener:', error);
       setLoadingComments(prev => ({ ...prev, [jobId]: false }));
+      // Set empty comments array on error
+      setSelectedJobComments(prev => ({
+        ...prev,
+        [jobId]: { comments: [], unsubscribe: null }
+      }));
     }
   };
 
@@ -369,8 +266,8 @@ const BookedJobs = () => {
         updated_at: new Date().toISOString()
       });
       
-      // Refresh the active jobs list
-      fetchActiveJobs();
+      // Refresh the jobs list
+      fetchBookedJobs();
     } catch (error) {
       console.error('Error updating job status:', error);
       alert('Error updating job status. Please try again.');
@@ -379,7 +276,7 @@ const BookedJobs = () => {
 
   const cancelJob = async (jobId) => {
     try {
-      const job = activeJobs.find(j => j.id === jobId);
+      const job = bookedJobs.find(j => j.id === jobId);
       if (!job) return;
 
       let confirmMessage;
@@ -518,8 +415,8 @@ IMPORTANT REMINDERS:
 • Professional communication is essential for maintaining reputation`);
       }
       
-      // Refresh the active jobs list
-      fetchActiveJobs();
+      // Refresh the jobs list
+      fetchBookedJobs();
       
     } catch (error) {
       console.error('Error cancelling job:', error);
@@ -540,7 +437,7 @@ IMPORTANT REMINDERS:
   if (loading) {
     return (
       <div className="max-w-6xl mx-auto p-4">
-        <div className="text-center py-8">Loading your active jobs...</div>
+        <div className="text-center py-8">Loading booked jobs...</div>
       </div>
     );
   }
@@ -551,16 +448,16 @@ IMPORTANT REMINDERS:
         <h1 className="text-3xl font-bold text-gray-900">Booked Jobs</h1>
         <p className="text-gray-600 mt-2">
           {userType === 'customer' 
-            ? 'Your upcoming and active jobs' 
-            : 'Active jobs you\'ve been hired for'
+            ? 'Your contractually agreed jobs' 
+            : 'Jobs you\'ve been hired for'
           }
         </p>
       </div>
 
       {/* Active Jobs Section */}
       <div className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">🚀 Active Jobs</h2>
-        {activeJobs.length === 0 ? (
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Active Jobs</h2>
+        {getActiveJobs().length === 0 ? (
           <div className="bg-white rounded-lg shadow-md p-8 text-center">
             <div className="text-gray-500 mb-4">
               <div className="text-4xl mb-2">📋</div>
@@ -575,43 +472,35 @@ IMPORTANT REMINDERS:
           </div>
         ) : (
           <div className="space-y-6">
-            {activeJobs.map((job) => (
+            {getActiveJobs().map((job) => (
               <JobCard key={job.id} job={job} />
             ))}
           </div>
         )}
       </div>
 
-      {/* Load Additional Jobs Buttons */}
+      {/* Toggle Buttons */}
       <div className="flex gap-4 mb-6">
         <button
-          onClick={handleShowCompleted}
-          disabled={loadingCompleted}
+          onClick={() => setShowCompleted(!showCompleted)}
           className={`px-6 py-3 rounded-lg font-medium transition-colors ${
             showCompleted 
               ? 'bg-green-600 text-white' 
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          } ${loadingCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
+          }`}
         >
-          {loadingCompleted ? 'Loading...' : 
-           showCompleted ? 'Hide Completed Jobs' : 
-           completedLoaded ? `Show Completed Jobs (${completedJobs.length})` : 
-           'Load Completed Jobs'}
+          {showCompleted ? 'Hide' : 'Show'} Completed Jobs ({getCompletedJobs().length})
         </button>
         
         <button
-          onClick={handleShowCancelled}
-          disabled={loadingCancelled}
+          onClick={() => setShowCancelled(!showCancelled)}
           className={`px-6 py-3 rounded-lg font-medium transition-colors ${
             showCancelled 
               ? 'bg-red-600 text-white' 
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-          } ${loadingCancelled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          }`}
         >
-          {loadingCancelled ? 'Loading...' : 
-           showCancelled ? 'Hide Cancelled Jobs' : 
-           cancelledLoaded ? `Show Cancelled Jobs (${cancelledJobs.length})` : 
-           'Load Cancelled Jobs'}
+          {showCancelled ? 'Hide' : 'Show'} Cancelled Jobs ({getCancelledJobs().length})
         </button>
       </div>
 
@@ -623,13 +512,13 @@ IMPORTANT REMINDERS:
             <p className="text-green-700 text-sm">Successfully finished projects</p>
           </div>
           
-          {completedJobs.length === 0 ? (
+          {getCompletedJobs().length === 0 ? (
             <div className="bg-white rounded-lg shadow-md p-6 text-center">
               <p className="text-gray-500">No completed jobs yet.</p>
             </div>
           ) : (
             <div className="space-y-6">
-              {completedJobs.map((job) => (
+              {getCompletedJobs().map((job) => (
                 <JobCard key={job.id} job={job} />
               ))}
             </div>
@@ -645,13 +534,13 @@ IMPORTANT REMINDERS:
             <p className="text-red-700 text-sm">Jobs that were cancelled before completion</p>
           </div>
           
-          {cancelledJobs.length === 0 ? (
+          {getCancelledJobs().length === 0 ? (
             <div className="bg-white rounded-lg shadow-md p-6 text-center">
               <p className="text-gray-500">No cancelled jobs.</p>
             </div>
           ) : (
             <div className="space-y-6">
-              {cancelledJobs.map((job) => (
+              {getCancelledJobs().map((job) => (
                 <JobCard key={job.id} job={job} />
               ))}
             </div>
@@ -894,6 +783,10 @@ IMPORTANT REMINDERS:
       </div>
     );
   }
+      </div>
+    );
+  }
+
 };
 
 export default BookedJobs;
