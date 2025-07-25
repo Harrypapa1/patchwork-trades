@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   doc, 
   getDoc, 
@@ -490,6 +490,41 @@ const TradesmanDashboard = () => {
           )}
         </div>
       )}
+
+      {/* Legal & Support Links */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Information & Support</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Link 
+            to="/terms"
+            className="bg-gray-100 text-gray-700 px-4 py-3 rounded-md hover:bg-gray-200 text-center transition-colors border border-gray-300"
+          >
+            <div className="text-lg mb-1">📋</div>
+            <div className="text-sm font-medium">Terms of Service</div>
+          </Link>
+          <Link 
+            to="/privacy"
+            className="bg-gray-100 text-gray-700 px-4 py-3 rounded-md hover:bg-gray-200 text-center transition-colors border border-gray-300"
+          >
+            <div className="text-lg mb-1">🔒</div>
+            <div className="text-sm font-medium">Privacy Policy</div>
+          </Link>
+          <Link 
+            to="/cookies"
+            className="bg-gray-100 text-gray-700 px-4 py-3 rounded-md hover:bg-gray-200 text-center transition-colors border border-gray-300"
+          >
+            <div className="text-lg mb-1">🍪</div>
+            <div className="text-sm font-medium">Cookie Policy</div>
+          </Link>
+          <Link 
+            to="/contact"
+            className="bg-gray-100 text-gray-700 px-4 py-3 rounded-md hover:bg-gray-200 text-center transition-colors border border-gray-300"
+          >
+            <div className="text-lg mb-1">❓</div>
+            <div className="text-sm font-medium">Contact & Help</div>
+          </Link>
+        </div>
+      </div>
 
       {/* Logout Button */}
       <div className="bg-white rounded-lg shadow-md p-6 text-center">
