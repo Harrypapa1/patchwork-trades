@@ -149,7 +149,7 @@ const BookedJobs = () => {
         commentsQuery = query(
           collection(db, 'booking_comments'),
           where('booking_id', '==', jobId),
-          orderBy('created_at', 'asc')
+          orderBy('timestamp', 'asc') // Use timestamp field like BookingRequests
         );
       } catch (indexError) {
         // Fallback query without orderBy if index doesn't exist
@@ -166,33 +166,33 @@ const BookedJobs = () => {
         for (const commentDoc of snapshot.docs) {
           const commentData = commentDoc.data();
           
-          // Get commenter details
-          let commenterName = 'Unknown';
+          // Use the saved user_name from BookingRequests instead of fetching separately
+          let commenterName = commentData.user_name || 'Unknown';
           let commenterPhoto = null;
           
-          if (commentData.user_type === 'customer') {
-            try {
-              const userDoc = await getDoc(doc(db, 'users', commentData.user_id));
-              if (userDoc.exists()) {
-                commenterName = userDoc.data().name;
-                commenterPhoto = userDoc.data().profilePhoto;
+          // Only fetch photos if we have user_id and don't already have user_name
+          if (!commentData.user_name && commentData.user_id) {
+            if (commentData.user_type === 'customer') {
+              try {
+                const userDoc = await getDoc(doc(db, 'users', commentData.user_id));
+                if (userDoc.exists()) {
+                  commenterName = userDoc.data().name;
+                  commenterPhoto = userDoc.data().profilePhoto;
+                }
+              } catch (userError) {
+                console.log('Could not fetch user details:', userError);
               }
-            } catch (userError) {
-              console.log('Could not fetch user details:', userError);
-            }
-          } else if (commentData.user_type === 'tradesman') {
-            try {
-              const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', commentData.user_id));
-              if (tradesmanDoc.exists()) {
-                commenterName = tradesmanDoc.data().name;
-                commenterPhoto = tradesmanDoc.data().profilePhoto;
+            } else if (commentData.user_type === 'tradesman') {
+              try {
+                const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', commentData.user_id));
+                if (tradesmanDoc.exists()) {
+                  commenterName = tradesmanDoc.data().name;
+                  commenterPhoto = tradesmanDoc.data().profilePhoto;
+                }
+              } catch (tradesmanError) {
+                console.log('Could not fetch tradesman details:', tradesmanError);
               }
-            } catch (tradesmanError) {
-              console.log('Could not fetch tradesman details:', tradesmanError);
             }
-          } else {
-            // System comments
-            commenterName = 'System';
           }
           
           commentsData.push({
@@ -203,8 +203,12 @@ const BookedJobs = () => {
           });
         }
 
-        // Sort manually by created_at if we couldn't use orderBy
-        commentsData.sort((a, b) => new Date(a.created_at || a.timestamp || 0) - new Date(b.created_at || b.timestamp || 0));
+        // Sort manually by timestamp (primary) or created_at (fallback)
+        commentsData.sort((a, b) => {
+          const timeA = new Date(a.timestamp || a.created_at || 0);
+          const timeB = new Date(b.timestamp || b.created_at || 0);
+          return timeA - timeB;
+        });
         
         console.log(`Loaded ${commentsData.length} comments for job ${jobId}:`, commentsData); // Debug log
         
@@ -241,14 +245,17 @@ const BookedJobs = () => {
     setSubmittingComment(prev => ({ ...prev, [jobId]: true }));
 
     try {
-      // Use same field names as BookingRequests for consistency
+      // Match exactly how BookingRequests saves comments
+      const job = bookedJobs.find(j => j.id === jobId);
+      const userName = userType === 'customer' ? job?.customerName : job?.tradesmanName;
+      
       await addDoc(collection(db, 'booking_comments'), {
         booking_id: jobId,
         user_id: currentUser.uid,
         user_type: userType,
+        user_name: userName || 'Unknown', // Save name directly like BookingRequests
         comment: commentText,
-        created_at: new Date().toISOString(),
-        timestamp: new Date().toISOString() // Also add timestamp for backwards compatibility
+        timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
       });
       
       // Clear the comment input
@@ -388,8 +395,9 @@ Only proceed if you have a genuine emergency or unavoidable circumstance.`;
           booking_id: jobId,
           user_id: currentUser.uid,
           user_type: 'system',
+          user_name: 'System', // Save name directly like BookingRequests
           comment: cancellationMessage,
-          created_at: new Date().toISOString()
+          timestamp: new Date().toISOString() // Use timestamp field like BookingRequests
         });
       } catch (commentError) {
         console.error('Error adding cancellation comment:', commentError);
@@ -632,7 +640,7 @@ IMPORTANT REMINDERS:
                                comment.user_type === 'tradesman' ? 'Tradesman' : 'System'}
                             </span>
                             <span className="text-xs text-gray-500">
-                              {new Date(comment.created_at || comment.timestamp || new Date()).toLocaleString()}
+                              {new Date(comment.timestamp || comment.created_at || new Date()).toLocaleString()}
                             </span>
                           </div>
                           <p className="text-gray-700 whitespace-pre-line">{comment.comment}</p>
