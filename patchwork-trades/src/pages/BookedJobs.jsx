@@ -51,6 +51,25 @@ const BookedJobs = () => {
     }
   };
 
+  // Helper function to extract numeric price for calculations
+  const getNumericPrice = (job) => {
+    let priceString = '';
+    
+    if (job.customer_counter_quote && job.status === 'Accepted') {
+      priceString = job.customer_counter_quote;
+    } else if (job.custom_quote && job.status === 'Accepted') {
+      priceString = job.custom_quote;
+    } else {
+      // For hourly rates, we'll use a default estimate of 4 hours
+      const hourlyRate = job.tradesman_hourly_rate || 50;
+      return hourlyRate * 4; // 4 hour estimate
+    }
+    
+    // Extract numeric value from price string
+    const priceMatch = priceString.match(/£?(\d+)/);
+    return priceMatch ? parseInt(priceMatch[1]) : 200; // Default to £200 if can't parse
+  };
+
   const fetchBookedJobs = async () => {
     if (!currentUser) return;
     
@@ -210,6 +229,156 @@ const BookedJobs = () => {
     }
   };
 
+  const cancelJob = async (jobId) => {
+    try {
+      const job = bookedJobs.find(j => j.id === jobId);
+      if (!job) return;
+
+      let confirmMessage;
+      let cancellationFee = 0;
+      let cancellationPercentage = 0;
+      const basePrice = getNumericPrice(job); // Calculate once for use throughout
+
+      if (userType === 'customer') {
+        // Calculate time until job
+        const jobDate = new Date(job.requested_date);
+        const currentDate = new Date();
+        const timeDiff = jobDate.getTime() - currentDate.getTime();
+        const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+        // Determine cancellation percentage based on notice period
+        if (daysDiff > 7) {
+          cancellationPercentage = 10;
+        } else if (daysDiff > 2) {
+          cancellationPercentage = 20;
+        } else {
+          cancellationPercentage = 50;
+        }
+
+        // Calculate fee based on agreed price
+        cancellationFee = Math.round((basePrice * cancellationPercentage) / 100);
+
+        let noticeText;
+        if (daysDiff > 7) {
+          noticeText = `More than 1 week notice (${daysDiff} days)`;
+        } else if (daysDiff > 2) {
+          noticeText = `Less than 1 week notice (${daysDiff} days)`;
+        } else if (daysDiff >= 0) {
+          noticeText = `2 days or less notice (${daysDiff} days)`;
+        } else {
+          noticeText = `Job date has passed`;
+        }
+
+        confirmMessage = `⚠️ JOB CANCELLATION NOTICE ⚠️
+
+Job: ${job.job_title}
+Tradesman: ${job.tradesmanName}
+Scheduled Date: ${job.requested_date}
+Agreed Price: ${getFinalPrice(job)}
+
+CANCELLATION TERMS:
+${noticeText}
+Cancellation Fee: ${cancellationPercentage}% = £${cancellationFee}
+
+This fee compensates the tradesman for:
+• Blocking their calendar
+• Turning down other work
+• Preparation time invested
+
+The remaining amount (£${basePrice - cancellationFee}) will be refunded to you.
+
+Do you wish to proceed with the cancellation?`;
+
+      } else {
+        // Tradesman cancellation
+        confirmMessage = `⚠️ TRADESMAN CANCELLATION WARNING ⚠️
+
+Job: ${job.job_title}
+Customer: ${job.customerName}
+Scheduled Date: ${job.requested_date}
+
+CANCELLATION CONSEQUENCES:
+• This cancellation may negatively affect your reviews
+• Compensation may be deducted from your next completed job
+• Customer will be notified immediately
+• This may impact your future booking opportunities
+
+Professional tradesmen honor their commitments. Are you sure you want to cancel this job?
+
+Only proceed if you have a genuine emergency or unavoidable circumstance.`;
+      }
+
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      // Update job status to cancelled
+      const updateData = {
+        status: 'Cancelled',
+        cancelled_at: new Date().toISOString(),
+        cancelled_by: userType,
+        updated_at: new Date().toISOString()
+      };
+
+      if (userType === 'customer') {
+        updateData.cancellation_fee_applied = cancellationFee;
+        updateData.cancellation_percentage = cancellationPercentage;
+        updateData.refund_amount = basePrice - cancellationFee;
+      }
+
+      await updateDoc(doc(db, 'bookings', jobId), updateData);
+
+      // Add system comment about cancellation
+      try {
+        let cancellationMessage;
+        if (userType === 'customer') {
+          cancellationMessage = `Job cancelled by customer with ${cancellationPercentage}% fee (£${cancellationFee}). Refund amount: £${basePrice - cancellationFee}`;
+        } else {
+          cancellationMessage = 'Job cancelled by tradesman. Customer has been notified. This cancellation may affect future reviews and earnings.';
+        }
+
+        await addDoc(collection(db, 'booking_comments'), {
+          booking_id: jobId,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          comment: cancellationMessage,
+          created_at: new Date().toISOString()
+        });
+      } catch (commentError) {
+        console.error('Error adding cancellation comment:', commentError);
+      }
+
+      // Show confirmation message
+      if (userType === 'customer') {
+        alert(`✅ Job cancelled successfully.
+
+PAYMENT SUMMARY:
+• Cancellation fee: £${cancellationFee} (${cancellationPercentage}%)
+• Refund amount: £${basePrice - cancellationFee}
+
+The tradesman has been notified and compensated for their time.
+Your refund will be processed within 3-5 business days.`);
+      } else {
+        alert(`⚠️ Job cancelled.
+
+The customer has been notified of the cancellation.
+
+IMPORTANT REMINDERS:
+• This cancellation is recorded on your profile
+• Future customers may see cancellation history
+• Consider offering the customer priority booking for future jobs
+• Professional communication is essential for maintaining reputation`);
+      }
+      
+      // Refresh the jobs list
+      fetchBookedJobs();
+      
+    } catch (error) {
+      console.error('Error cancelling job:', error);
+      alert('Error cancelling job. Please try again.');
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Accepted': return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -356,6 +525,16 @@ const BookedJobs = () => {
                     </>
                   )}
 
+                  {/* Cancel Job Button - Available for both user types on active jobs */}
+                  {job.status !== 'Completed' && job.status !== 'Cancelled' && (
+                    <button
+                      onClick={() => cancelJob(job.id)}
+                      className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors border-2 border-red-600"
+                    >
+                      Cancel Job
+                    </button>
+                  )}
+
                   {/* Additional Actions for Completed Jobs */}
                   {job.status === 'Completed' && (
                     <div className="flex gap-2">
@@ -369,6 +548,31 @@ const BookedJobs = () => {
                           </button>
                         </>
                       )}
+                    </div>
+                  )}
+
+                  {/* Show cancellation details if job was cancelled */}
+                  {job.status === 'Cancelled' && (
+                    <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mt-2">
+                      <div className="flex items-center gap-2 text-red-800 mb-2">
+                        <span className="text-lg">🚫</span>
+                        <span className="font-semibold">Job Cancelled</span>
+                      </div>
+                      <div className="text-red-700 text-sm space-y-1">
+                        <p><strong>Cancelled on:</strong> {new Date(job.cancelled_at || job.updated_at).toLocaleDateString()}</p>
+                        <p><strong>Cancelled by:</strong> {job.cancelled_by === 'customer' ? 'Customer' : 'Tradesman'}</p>
+                        {job.cancelled_by === 'customer' && job.cancellation_fee_applied > 0 && (
+                          <>
+                            <p><strong>Cancellation fee:</strong> £{job.cancellation_fee_applied} ({job.cancellation_percentage}%)</p>
+                            {job.refund_amount && (
+                              <p><strong>Refund amount:</strong> £{job.refund_amount}</p>
+                            )}
+                          </>
+                        )}
+                        {job.cancelled_by === 'tradesman' && (
+                          <p className="text-orange-700 font-medium">⚠️ Tradesman cancellation may affect future reviews</p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
