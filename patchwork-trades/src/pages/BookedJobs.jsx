@@ -783,10 +783,13 @@ IMPORTANT REMINDERS:
       </div>
     );
   }
+          </div>
+        </div>
       </div>
     );
   }
-
 };
+
+export default BookedJobs;
 
 export default BookedJobs;
