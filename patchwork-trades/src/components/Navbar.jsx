@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { signOut } from 'firebase/auth';
-import { auth, db } from '../config/firebase';
+import { db } from '../config/firebase';
 import { 
   collection, 
   query, 
@@ -12,7 +11,6 @@ import {
 
 const Navbar = () => {
   const { currentUser, userType } = useAuth();
-  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [bookingRequestsCount, setBookingRequestsCount] = useState(0);
@@ -61,16 +59,6 @@ const Navbar = () => {
       return () => unsubscribe();
     }
   }, [currentUser, userType]);
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      navigate('/');
-      setIsMenuOpen(false);
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
 
   const closeMenu = () => setIsMenuOpen(false);
 
@@ -149,13 +137,6 @@ const Navbar = () => {
                       Dashboard
                     </Link>
                   )}
-                  
-                  <button
-                    onClick={handleLogout}
-                    className="hover:text-blue-200"
-                  >
-                    Logout
-                  </button>
                 </>
               )}
             </div>
