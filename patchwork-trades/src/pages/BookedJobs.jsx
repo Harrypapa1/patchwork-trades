@@ -29,7 +29,27 @@ const BookedJobs = () => {
     }
   }, [currentUser, userType]);
 
-  const fetchBookedJobs = async () => {
+  useEffect(() => {
+    // Auto-load comments for all booked jobs
+    bookedJobs.forEach(job => {
+      if (!selectedJobComments[job.id]) {
+        fetchJobComments(job.id);
+      }
+    });
+  }, [bookedJobs]);
+
+  // Helper function to get final agreed price
+  const getFinalPrice = (job) => {
+    if (job.customer_counter_quote && job.status === 'Accepted') {
+      return job.customer_counter_quote;
+    } else if (job.custom_quote && job.status === 'Accepted') {
+      return job.custom_quote;
+    } else if (job.tradesman_hourly_rate) {
+      return `£${job.tradesman_hourly_rate}/hour`;
+    } else {
+      return 'Standard Rate';
+    }
+  };
     if (!currentUser) return;
     
     try {
@@ -286,7 +306,7 @@ const BookedJobs = () => {
                         )}
                       </div>
                       <span><strong>Date:</strong> {job.requested_date}</span>
-                      <span><strong>Budget:</strong> £{job.budget_min} - £{job.budget_max}</span>
+                      <span className="text-green-600 font-semibold"><strong>Final Price:</strong> {getFinalPrice(job)}</span>
                     </div>
 
                     <div className="text-sm text-gray-500 mb-3">
@@ -301,17 +321,17 @@ const BookedJobs = () => {
                   <p className="text-gray-700 whitespace-pre-line">{job.job_description}</p>
                 </div>
 
-                {/* Job Photos */}
+                {/* Job Photos - Always visible if they exist */}
                 {job.photos && job.photos.length > 0 && (
-                  <div className="mb-4">
-                    <h3 className="font-medium text-gray-900 mb-2">Photos</h3>
-                    <div className="flex gap-2 overflow-x-auto">
+                  <div className="mb-6">
+                    <h3 className="font-medium text-gray-900 mb-3">Job Photos</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                       {job.photos.map((photo, index) => (
                         <img 
                           key={index}
                           src={photo} 
                           alt={`Job photo ${index + 1}`}
-                          className="w-20 h-20 object-cover rounded border cursor-pointer"
+                          className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() => window.open(photo, '_blank')}
                         />
                       ))}
@@ -328,14 +348,7 @@ const BookedJobs = () => {
                 )}
 
                 {/* Job Actions */}
-                <div className="flex flex-wrap gap-3 mb-4">
-                  <button
-                    onClick={() => toggleJobComments(job.id)}
-                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
-                  >
-                    {selectedJobComments[job.id] ? 'Hide Comments' : 'View Comments & Discussion'}
-                  </button>
-
+                <div className="flex flex-wrap gap-3 mb-6">
                   {/* Status Update Buttons for Tradesmen */}
                   {userType === 'tradesman' && (
                     <>
@@ -375,75 +388,76 @@ const BookedJobs = () => {
                   )}
                 </div>
 
-                {/* Comments Section */}
-                {selectedJobComments[job.id] && (
-                  <div className="border-t pt-4">
-                    <h3 className="font-medium text-gray-900 mb-3">Discussion</h3>
-                    
-                    {loadingComments[job.id] ? (
-                      <div className="text-center py-4 text-gray-500">Loading comments...</div>
-                    ) : (
-                      <>
-                        <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
-                          {selectedJobComments[job.id].comments.length === 0 ? (
-                            <p className="text-gray-500 text-center py-4">No comments yet. Start the discussion!</p>
-                          ) : (
-                            selectedJobComments[job.id].comments.map((comment) => (
-                              <div key={comment.id} className="flex gap-3 p-3 bg-gray-50 rounded">
-                                <div className="flex-shrink-0">
-                                  {comment.commenterPhoto ? (
-                                    <img 
-                                      src={comment.commenterPhoto} 
-                                      alt={comment.commenterName}
-                                      className="w-8 h-8 rounded-full object-cover"
-                                    />
-                                  ) : (
-                                    <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-xs">
-                                      {comment.commenterName.charAt(0).toUpperCase()}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-medium text-sm">{comment.commenterName}</span>
-                                    <span className={`text-xs px-2 py-0.5 rounded ${
-                                      comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
-                                    }`}>
-                                      {comment.user_type === 'customer' ? 'Customer' : 'Tradesman'}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {new Date(comment.created_at).toLocaleString()}
-                                    </span>
+                {/* Discussion Section - Always Visible */}
+                <div className="border-t pt-6">
+                  <h3 className="font-medium text-gray-900 mb-4">Complete Discussion History</h3>
+                  
+                  {selectedJobComments[job.id] ? (
+                    <>
+                      <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+                        {selectedJobComments[job.id].comments.length === 0 ? (
+                          <p className="text-gray-500 text-center py-4">No comments yet for this job.</p>
+                        ) : (
+                          selectedJobComments[job.id].comments.map((comment) => (
+                            <div key={comment.id} className="flex gap-3 p-4 bg-gray-50 rounded-lg">
+                              <div className="flex-shrink-0">
+                                {comment.commenterPhoto ? (
+                                  <img 
+                                    src={comment.commenterPhoto} 
+                                    alt={comment.commenterName}
+                                    className="w-10 h-10 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium">
+                                    {comment.commenterName.charAt(0).toUpperCase()}
                                   </div>
-                                  <p className="text-gray-700 text-sm whitespace-pre-line">{comment.comment}</p>
-                                </div>
+                                )}
                               </div>
-                            ))
-                          )}
-                        </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="font-medium text-sm">{comment.commenterName}</span>
+                                  <span className={`text-xs px-2 py-1 rounded ${
+                                    comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' : 
+                                    comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {comment.user_type === 'customer' ? 'Customer' : 
+                                     comment.user_type === 'tradesman' ? 'Tradesman' : 'System'}
+                                  </span>
+                                  <span className="text-xs text-gray-500">
+                                    {new Date(comment.created_at).toLocaleString()}
+                                  </span>
+                                </div>
+                                <p className="text-gray-700 whitespace-pre-line">{comment.comment}</p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
 
-                        {/* Add Comment */}
-                        <div className="flex gap-3">
-                          <textarea
-                            value={newComments[job.id] || ''}
-                            onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
-                            placeholder="Add a comment to continue the discussion..."
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                            rows={2}
-                            disabled={submittingComment[job.id]}
-                          />
-                          <button
-                            onClick={() => submitComment(job.id)}
-                            disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
-                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors self-end"
-                          >
-                            {submittingComment[job.id] ? 'Posting...' : 'Post'}
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                      {/* Add New Comment */}
+                      <div className="flex gap-3">
+                        <textarea
+                          value={newComments[job.id] || ''}
+                          onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
+                          placeholder="Add a comment about this job..."
+                          className="flex-1 px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                          rows={3}
+                          disabled={submittingComment[job.id]}
+                        />
+                        <button
+                          onClick={() => submitComment(job.id)}
+                          disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
+                          className="bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors self-end"
+                        >
+                          {submittingComment[job.id] ? 'Posting...' : 'Post Comment'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500">Loading discussion history...</div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
