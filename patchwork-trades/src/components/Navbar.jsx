@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
+import { signOut } from 'firebase/auth';
 import { 
   collection, 
   query, 
@@ -11,6 +12,7 @@ import {
 
 const Navbar = () => {
   const { currentUser, userType } = useAuth();
+  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [bookingRequestsCount, setBookingRequestsCount] = useState(0);
@@ -27,40 +29,83 @@ const Navbar = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Listen for booking requests AND booked jobs
+  // Close mobile menu when clicking outside or on route change
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (isMenuOpen) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    if (isMenuOpen) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [isMenuOpen]);
+
+  // Listen for booking requests with error handling
   useEffect(() => {
     if (!currentUser) {
       setBookingRequestsCount(0);
       return;
     }
 
-    let bookingQuery;
-    if (userType === 'customer') {
-      // Customers see their own requests (Quote Requested only)
-      bookingQuery = query(
-        collection(db, 'bookings'),
-        where('customer_id', '==', currentUser.uid),
-        where('status', '==', 'Quote Requested')
-      );
-    } else if (userType === 'tradesman') {
-      // Tradesmen see requests for them (Quote Requested only)
-      bookingQuery = query(
-        collection(db, 'bookings'),
-        where('tradesman_id', '==', currentUser.uid),
-        where('status', '==', 'Quote Requested')
-      );
-    }
+    try {
+      let bookingQuery;
+      if (userType === 'customer') {
+        // Customers see their own requests (Quote Requested only)
+        bookingQuery = query(
+          collection(db, 'bookings'),
+          where('customer_id', '==', currentUser.uid),
+          where('status', '==', 'Quote Requested')
+        );
+      } else if (userType === 'tradesman') {
+        // Tradesmen see requests for them (Quote Requested only)
+        bookingQuery = query(
+          collection(db, 'bookings'),
+          where('tradesman_id', '==', currentUser.uid),
+          where('status', '==', 'Quote Requested')
+        );
+      }
 
-    if (bookingQuery) {
-      const unsubscribe = onSnapshot(bookingQuery, (snapshot) => {
-        setBookingRequestsCount(snapshot.docs.length);
-      });
+      if (bookingQuery) {
+        const unsubscribe = onSnapshot(
+          bookingQuery, 
+          (snapshot) => {
+            setBookingRequestsCount(snapshot.docs.length);
+          },
+          (error) => {
+            console.error('Error listening to booking requests:', error);
+            setBookingRequestsCount(0);
+          }
+        );
 
-      return () => unsubscribe();
+        return () => unsubscribe();
+      }
+    } catch (error) {
+      console.error('Error setting up booking requests listener:', error);
+      setBookingRequestsCount(0);
     }
   }, [currentUser, userType]);
 
+  // Handle logout function
+  const handleLogout = async () => {
+    try {
+      setIsMenuOpen(false); // Close mobile menu first
+      await signOut(auth);
+      navigate('/');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      alert('Error signing out. Please try again.');
+    }
+  };
+
   const closeMenu = () => setIsMenuOpen(false);
+
+  // Prevent menu clicks from bubbling up
+  const handleMenuClick = (e) => {
+    e.stopPropagation();
+  };
 
   return (
     <nav className="bg-blue-600 text-white shadow-lg">
@@ -69,7 +114,7 @@ const Navbar = () => {
           {/* Logo and Brand */}
           <Link to="/" className="flex items-center space-x-3" onClick={closeMenu}>
             <img 
-              src="/src/assets/patchwork-logo.png" 
+              src="/patchwork-logo.png" 
               alt="Patchwork Trades Logo" 
               className="h-10 w-10 object-contain"
               onError={(e) => {
@@ -84,17 +129,17 @@ const Navbar = () => {
             <div className="flex items-center space-x-4">
               {!currentUser ? (
                 <>
-                  <Link to="/login" className="hover:text-blue-200">
+                  <Link to="/login" className="hover:text-blue-200 transition-colors">
                     Login
                   </Link>
-                  <Link to="/register-customer" className="hover:text-blue-200">
+                  <Link to="/register-customer" className="hover:text-blue-200 transition-colors">
                     Register
                   </Link>
                 </>
               ) : (
                 <>
                   {userType !== 'tradesman' && (
-                    <Link to="/browse" className="hover:text-blue-200">
+                    <Link to="/browse" className="hover:text-blue-200 transition-colors">
                       Browse
                     </Link>
                   )}
@@ -102,7 +147,7 @@ const Navbar = () => {
                   {/* Booking Requests - Both user types */}
                   <Link 
                     to="/booking-requests" 
-                    className={`relative ${
+                    className={`relative transition-colors ${
                       bookingRequestsCount > 0 
                         ? 'text-yellow-300 hover:text-yellow-200 font-semibold' 
                         : 'hover:text-blue-200'
@@ -117,24 +162,24 @@ const Navbar = () => {
                   </Link>
 
                   {/* Booked Jobs - Both user types */}
-                  <Link to="/booked-jobs" className="hover:text-blue-200">
+                  <Link to="/booked-jobs" className="hover:text-blue-200 transition-colors">
                     Booked Jobs
                   </Link>
 
                   {userType === 'tradesman' && (
-                    <Link to="/manage-availability" className="hover:text-blue-200">
+                    <Link to="/manage-availability" className="hover:text-blue-200 transition-colors">
                       Manage Availability
                     </Link>
                   )}
                   
                   {userType === 'customer' && (
-                    <Link to="/customer-dashboard" className="hover:text-blue-200">
+                    <Link to="/customer-dashboard" className="hover:text-blue-200 transition-colors">
                       Dashboard
                     </Link>
                   )}
                   
                   {userType === 'tradesman' && (
-                    <Link to="/tradesman-dashboard" className="hover:text-blue-200">
+                    <Link to="/tradesman-dashboard" className="hover:text-blue-200 transition-colors">
                       Dashboard
                     </Link>
                   )}
@@ -147,11 +192,17 @@ const Navbar = () => {
           {isMobile && (
             <div>
               <button
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="inline-flex items-center justify-center p-2 rounded-md text-white hover:text-blue-200 hover:bg-blue-700"
-                style={{ fontSize: '24px' }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsMenuOpen(!isMenuOpen);
+                }}
+                className="inline-flex items-center justify-center p-2 rounded-md text-white hover:text-blue-200 hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
+                aria-expanded={isMenuOpen}
+                aria-label="Toggle menu"
               >
-                {isMenuOpen ? '✕' : '☰'}
+                <span className="text-2xl">
+                  {isMenuOpen ? '✕' : '☰'}
+                </span>
               </button>
             </div>
           )}
@@ -159,19 +210,22 @@ const Navbar = () => {
 
         {/* Mobile Menu - Only show on mobile when open */}
         {isMobile && isMenuOpen && (
-          <div className="bg-blue-700 rounded-md mt-2 p-2">
+          <div 
+            className="bg-blue-700 rounded-md mt-2 p-2 shadow-lg"
+            onClick={handleMenuClick}
+          >
             {!currentUser ? (
               <>
                 <Link 
                   to="/login" 
-                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
                   onClick={closeMenu}
                 >
                   🔑 Login
                 </Link>
                 <Link 
                   to="/register-customer" 
-                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
                   onClick={closeMenu}
                 >
                   📝 Register
@@ -182,7 +236,7 @@ const Navbar = () => {
                 {userType !== 'tradesman' && (
                   <Link 
                     to="/browse" 
-                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
                     onClick={closeMenu}
                   >
                     🔍 Browse Tradesmen
@@ -192,13 +246,13 @@ const Navbar = () => {
                 {/* Booking Requests - Mobile */}
                 <Link 
                   to="/booking-requests" 
-                  className={`block px-3 py-2 rounded-md text-white hover:bg-blue-600 relative ${
+                  className={`block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors relative ${
                     bookingRequestsCount > 0 ? 'font-bold' : ''
                   }`}
                   onClick={closeMenu}
                   style={{ 
-                    backgroundColor: bookingRequestsCount > 0 ? '#f59e0b' : '#1e40af', 
-                    border: '2px solid white' 
+                    backgroundColor: bookingRequestsCount > 0 ? '#f59e0b' : 'transparent', 
+                    border: bookingRequestsCount > 0 ? '2px solid white' : 'none'
                   }}
                 >
                   📋 BOOKING REQUESTS
@@ -212,9 +266,8 @@ const Navbar = () => {
                 {/* Booked Jobs - Mobile */}
                 <Link 
                   to="/booked-jobs" 
-                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                  className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors border border-white border-opacity-30"
                   onClick={closeMenu}
-                  style={{ border: '2px solid white' }}
                 >
                   ✅ BOOKED JOBS
                 </Link>
@@ -222,7 +275,7 @@ const Navbar = () => {
                 {userType === 'tradesman' && (
                   <Link 
                     to="/manage-availability" 
-                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
                     onClick={closeMenu}
                   >
                     📅 Manage Availability
@@ -232,7 +285,7 @@ const Navbar = () => {
                 {userType === 'customer' && (
                   <Link 
                     to="/customer-dashboard" 
-                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
                     onClick={closeMenu}
                   >
                     📊 Customer Dashboard
@@ -242,19 +295,21 @@ const Navbar = () => {
                 {userType === 'tradesman' && (
                   <Link 
                     to="/tradesman-dashboard" 
-                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
+                    className="block px-3 py-2 rounded-md text-white hover:bg-blue-600 transition-colors"
                     onClick={closeMenu}
                   >
                     🔧 Tradesman Dashboard
                   </Link>
                 )}
                 
-                <button
-                  onClick={handleLogout}
-                  className="block w-full text-left px-3 py-2 rounded-md text-white hover:bg-blue-600"
-                >
-                  🚪 Logout
-                </button>
+                <div className="border-t border-blue-500 mt-2 pt-2">
+                  <button
+                    onClick={handleLogout}
+                    className="block w-full text-left px-3 py-2 rounded-md text-white hover:bg-red-600 transition-colors"
+                  >
+                    🚪 Logout
+                  </button>
+                </div>
               </>
             )}
           </div>
