@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -14,6 +15,7 @@ import BrowseTradesmen from './pages/BrowseTradesmen';
 import BookingConfirmation from './pages/BookingConfirmation';
 import BookingRequest from './pages/BookingRequest';
 import BookingRequests from './pages/BookingRequests';
+import BookedJobs from './pages/BookedJobs';
 import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
@@ -73,6 +75,15 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <BookingRequests />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/booked-jobs"
+                element={
+                  <ProtectedRoute>
+                    <BookedJobs />
                   </ProtectedRoute>
                 }
               />
