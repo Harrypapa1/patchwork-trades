@@ -158,6 +158,7 @@ const BookingRequests = () => {
       const updateData = { status: newStatus };
       if (customQuote) {
         updateData.custom_quote = customQuote;
+        updateData.has_custom_quote = true;
       }
 
       await updateDoc(doc(db, 'bookings', bookingId), updateData);
@@ -184,6 +185,71 @@ const BookingRequests = () => {
     } catch (error) {
       console.error('Error updating booking status:', error);
       alert('Error updating booking. Please try again.');
+    }
+  };
+
+  // NEW: Handle custom quote proposal (keeps status as Quote Requested)
+  const proposeCustomQuote = async (bookingId, customQuote) => {
+    try {
+      const updateData = {
+        custom_quote: customQuote,
+        has_custom_quote: true,
+        // Keep status as 'Quote Requested' so job stays on this page
+        status: 'Quote Requested'
+      };
+
+      await updateDoc(doc(db, 'bookings', bookingId), updateData);
+      
+      // Refresh the list
+      fetchBookingRequests();
+      
+      // Add system comment
+      try {
+        await addDoc(collection(db, 'booking_comments'), {
+          booking_id: bookingId,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          user_name: 'System',
+          comment: `Custom quote proposed: ${customQuote}`,
+          timestamp: new Date().toISOString()
+        });
+      } catch (commentError) {
+        console.log('Could not add system comment (collection may not exist yet):', commentError);
+      }
+
+    } catch (error) {
+      console.error('Error proposing custom quote:', error);
+      alert('Error proposing custom quote. Please try again.');
+    }
+  };
+
+  // NEW: Handle customer accepting custom quote
+  const acceptCustomQuote = async (bookingId) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        status: 'Accepted'
+      });
+      
+      // Refresh the list (job will now move to BookedJobs)
+      fetchBookingRequests();
+      
+      // Add system comment
+      try {
+        await addDoc(collection(db, 'booking_comments'), {
+          booking_id: bookingId,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          user_name: 'System',
+          comment: 'Customer accepted the custom quote',
+          timestamp: new Date().toISOString()
+        });
+      } catch (commentError) {
+        console.log('Could not add system comment:', commentError);
+      }
+
+    } catch (error) {
+      console.error('Error accepting custom quote:', error);
+      alert('Error accepting custom quote. Please try again.');
     }
   };
 
@@ -265,6 +331,12 @@ const BookingRequests = () => {
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${getUrgencyColor(request.urgency)}`}>
                       {request.urgency.charAt(0).toUpperCase() + request.urgency.slice(1)} Priority
                     </span>
+                    {/* NEW: Show custom quote status */}
+                    {request.has_custom_quote && (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        Custom Quote: {request.custom_quote}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -333,43 +405,104 @@ const BookingRequests = () => {
                   </div>
                 </div>
 
-                {/* Tradesman Actions */}
-                {userType === 'tradesman' && (
-                  <div className="mt-6 pt-4 border-t border-gray-200">
-                    <h3 className="font-medium text-gray-900 mb-3">Your Response</h3>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => updateBookingStatus(request.id, 'Confirmed')}
-                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                      >
-                        Accept (£{request.tradesman_hourly_rate || 'Standard Rate'}/hour)
-                      </button>
-                      
-                      <button
-                        onClick={() => {
-                          const customQuote = prompt('Enter your custom quote (e.g., £200 fixed price, or £50/hour):');
-                          if (customQuote) {
-                            updateBookingStatus(request.id, 'Custom Quote Proposed', customQuote);
-                          }
-                        }}
-                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                      >
-                        Custom Quote
-                      </button>
-                      
-                      <button
-                        onClick={() => {
-                          if (confirm('Are you sure you want to reject this request?')) {
-                            updateBookingStatus(request.id, 'Rejected');
-                          }
-                        }}
-                        className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* Actions Section */}
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  {/* Tradesman Actions */}
+                  {userType === 'tradesman' && !request.has_custom_quote && (
+                    <>
+                      <h3 className="font-medium text-gray-900 mb-3">Your Response</h3>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => updateBookingStatus(request.id, 'Accepted')}
+                          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                        >
+                          Accept (£{request.tradesman_hourly_rate || 'Standard Rate'}/hour)
+                        </button>
+                        
+                        <button
+                          onClick={() => {
+                            const customQuote = prompt('Enter your custom quote (e.g., £200 fixed price, or £50/hour):');
+                            if (customQuote) {
+                              proposeCustomQuote(request.id, customQuote);
+                            }
+                          }}
+                          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                        >
+                          Custom Quote
+                        </button>
+                        
+                        <button
+                          onClick={() => {
+                            if (confirm('Are you sure you want to reject this request?')) {
+                              updateBookingStatus(request.id, 'Rejected');
+                            }
+                          }}
+                          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Tradesman - Custom Quote Already Sent */}
+                  {userType === 'tradesman' && request.has_custom_quote && (
+                    <>
+                      <h3 className="font-medium text-gray-900 mb-3">Custom Quote Sent</h3>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-blue-800">
+                          ✅ You've sent a custom quote: <strong>{request.custom_quote}</strong>
+                        </p>
+                        <p className="text-blue-600 text-sm mt-1">
+                          Waiting for customer response...
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Customer Actions - Custom Quote Received */}
+                  {userType === 'customer' && request.has_custom_quote && (
+                    <>
+                      <h3 className="font-medium text-gray-900 mb-3">Custom Quote Received</h3>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                        <p className="text-purple-800 mb-3">
+                          💼 <strong>{request.tradesman_name}</strong> has sent you a custom quote: 
+                          <span className="font-bold text-lg ml-2">{request.custom_quote}</span>
+                        </p>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => acceptCustomQuote(request.id)}
+                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                          >
+                            Accept Custom Quote
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm('Are you sure you want to reject this custom quote?')) {
+                                updateBookingStatus(request.id, 'Rejected');
+                              }
+                            }}
+                            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                          >
+                            Reject Quote
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Customer - No Custom Quote Yet */}
+                  {userType === 'customer' && !request.has_custom_quote && (
+                    <>
+                      <h3 className="font-medium text-gray-900 mb-3">Request Status</h3>
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <p className="text-yellow-800">
+                          ⏳ Waiting for <strong>{request.tradesman_name}</strong> to respond to your quote request...
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
 
               {/* Comments Section */}
