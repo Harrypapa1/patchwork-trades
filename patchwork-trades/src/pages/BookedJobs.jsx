@@ -22,6 +22,8 @@ const BookedJobs = () => {
   const [newComments, setNewComments] = useState({});
   const [loadingComments, setLoadingComments] = useState({});
   const [submittingComment, setSubmittingComment] = useState({});
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
@@ -37,6 +39,11 @@ const BookedJobs = () => {
       }
     });
   }, [bookedJobs]);
+
+  // Helper function to filter jobs by status
+  const getActiveJobs = () => bookedJobs.filter(job => job.status === 'Accepted' || job.status === 'In Progress');
+  const getCompletedJobs = () => bookedJobs.filter(job => job.status === 'Completed');
+  const getCancelledJobs = () => bookedJobs.filter(job => job.status === 'Cancelled');
 
   // Helper function to get final agreed price
   const getFinalPrice = (job) => {
@@ -409,251 +416,339 @@ IMPORTANT REMINDERS:
         </p>
       </div>
 
-      {bookedJobs.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-md p-8 text-center">
-          <div className="text-gray-500 mb-4">
-            <div className="text-4xl mb-2">📋</div>
-            <h3 className="text-lg font-medium">No Booked Jobs Yet</h3>
-            <p className="text-sm">
-              {userType === 'customer' 
-                ? 'Jobs will appear here once quotes are accepted'
-                : 'Accepted jobs will appear here'
-              }
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {bookedJobs.map((job) => (
-            <div key={job.id} className="bg-white rounded-lg shadow-md border-l-4 border-green-500">
-              <div className="p-6">
-                {/* Job Header */}
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h2 className="text-xl font-semibold text-gray-900">{job.job_title}</h2>
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(job.status)}`}>
-                        {job.status}
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                      <div className="flex items-center gap-2">
-                        {userType === 'customer' ? (
-                          <>
-                            {job.tradesmanPhoto ? (
-                              <img src={job.tradesmanPhoto} alt="Tradesman" className="w-6 h-6 rounded-full object-cover" />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-gray-300"></div>
-                            )}
-                            <span><strong>Tradesman:</strong> {job.tradesmanName}</span>
-                          </>
-                        ) : (
-                          <>
-                            {job.customerPhoto ? (
-                              <img src={job.customerPhoto} alt="Customer" className="w-6 h-6 rounded-full object-cover" />
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-gray-300"></div>
-                            )}
-                            <span><strong>Customer:</strong> {job.customerName}</span>
-                          </>
-                        )}
-                      </div>
-                      <span><strong>Date:</strong> {job.requested_date}</span>
-                      <span className="text-green-600 font-semibold"><strong>Final Price:</strong> {getFinalPrice(job)}</span>
-                    </div>
-
-                    <div className="text-sm text-gray-500 mb-3">
-                      <span>Requested: {new Date(job.created_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Job Description */}
-                <div className="mb-4">
-                  <h3 className="font-medium text-gray-900 mb-2">Job Description</h3>
-                  <p className="text-gray-700 whitespace-pre-line">{job.job_description}</p>
-                </div>
-
-                {/* Job Photos - Always visible if they exist */}
-                {job.photos && job.photos.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="font-medium text-gray-900 mb-3">Job Photos</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                      {job.photos.map((photo, index) => (
-                        <img 
-                          key={index}
-                          src={photo} 
-                          alt={`Job photo ${index + 1}`}
-                          className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() => window.open(photo, '_blank')}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Additional Details */}
-                {job.additional_notes && (
-                  <div className="mb-4">
-                    <h3 className="font-medium text-gray-900 mb-2">Additional Notes</h3>
-                    <p className="text-gray-700 whitespace-pre-line">{job.additional_notes}</p>
-                  </div>
-                )}
-
-                {/* Job Actions */}
-                <div className="flex flex-wrap gap-3 mb-6">
-                  {/* Status Update Buttons for Tradesmen */}
-                  {userType === 'tradesman' && (
-                    <>
-                      {job.status === 'Accepted' && (
-                        <button
-                          onClick={() => updateJobStatus(job.id, 'In Progress')}
-                          className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
-                        >
-                          Mark In Progress
-                        </button>
-                      )}
-                      {job.status === 'In Progress' && (
-                        <button
-                          onClick={() => updateJobStatus(job.id, 'Completed')}
-                          className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
-                        >
-                          Mark Complete
-                        </button>
-                      )}
-                    </>
-                  )}
-
-                  {/* Cancel Job Button - Available for both user types on active jobs */}
-                  {job.status !== 'Completed' && job.status !== 'Cancelled' && (
-                    <button
-                      onClick={() => cancelJob(job.id)}
-                      className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors border-2 border-red-600"
-                    >
-                      Cancel Job
-                    </button>
-                  )}
-
-                  {/* Additional Actions for Completed Jobs */}
-                  {job.status === 'Completed' && (
-                    <div className="flex gap-2">
-                      {userType === 'customer' && (
-                        <>
-                          <button className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors">
-                            Leave Review
-                          </button>
-                          <button className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors">
-                            Hire Again
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Show cancellation details if job was cancelled */}
-                  {job.status === 'Cancelled' && (
-                    <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mt-2">
-                      <div className="flex items-center gap-2 text-red-800 mb-2">
-                        <span className="text-lg">🚫</span>
-                        <span className="font-semibold">Job Cancelled</span>
-                      </div>
-                      <div className="text-red-700 text-sm space-y-1">
-                        <p><strong>Cancelled on:</strong> {new Date(job.cancelled_at || job.updated_at).toLocaleDateString()}</p>
-                        <p><strong>Cancelled by:</strong> {job.cancelled_by === 'customer' ? 'Customer' : 'Tradesman'}</p>
-                        {job.cancelled_by === 'customer' && job.cancellation_fee_applied > 0 && (
-                          <>
-                            <p><strong>Cancellation fee:</strong> £{job.cancellation_fee_applied} ({job.cancellation_percentage}%)</p>
-                            {job.refund_amount && (
-                              <p><strong>Refund amount:</strong> £{job.refund_amount}</p>
-                            )}
-                          </>
-                        )}
-                        {job.cancelled_by === 'tradesman' && (
-                          <p className="text-orange-700 font-medium">⚠️ Tradesman cancellation may affect future reviews</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Discussion Section - Always Visible */}
-                <div className="border-t pt-6">
-                  <h3 className="font-medium text-gray-900 mb-4">Complete Discussion History</h3>
-                  
-                  {selectedJobComments[job.id] ? (
-                    <>
-                      <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
-                        {selectedJobComments[job.id].comments.length === 0 ? (
-                          <p className="text-gray-500 text-center py-4">No comments yet for this job.</p>
-                        ) : (
-                          selectedJobComments[job.id].comments.map((comment) => (
-                            <div key={comment.id} className="flex gap-3 p-4 bg-gray-50 rounded-lg">
-                              <div className="flex-shrink-0">
-                                {comment.commenterPhoto ? (
-                                  <img 
-                                    src={comment.commenterPhoto} 
-                                    alt={comment.commenterName}
-                                    className="w-10 h-10 rounded-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium">
-                                    {comment.commenterName.charAt(0).toUpperCase()}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="font-medium text-sm">{comment.commenterName}</span>
-                                  <span className={`text-xs px-2 py-1 rounded ${
-                                    comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' : 
-                                    comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}>
-                                    {comment.user_type === 'customer' ? 'Customer' : 
-                                     comment.user_type === 'tradesman' ? 'Tradesman' : 'System'}
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    {new Date(comment.created_at).toLocaleString()}
-                                  </span>
-                                </div>
-                                <p className="text-gray-700 whitespace-pre-line">{comment.comment}</p>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                      {/* Add New Comment */}
-                      <div className="flex gap-3">
-                        <textarea
-                          value={newComments[job.id] || ''}
-                          onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
-                          placeholder="Add a comment about this job..."
-                          className="flex-1 px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                          rows={3}
-                          disabled={submittingComment[job.id]}
-                        />
-                        <button
-                          onClick={() => submitComment(job.id)}
-                          disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
-                          className="bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors self-end"
-                        >
-                          {submittingComment[job.id] ? 'Posting...' : 'Post Comment'}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-6 text-gray-500">Loading discussion history...</div>
-                  )}
-                </div>
-              </div>
+      {/* Active Jobs Section */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Active Jobs</h2>
+        {getActiveJobs().length === 0 ? (
+          <div className="bg-white rounded-lg shadow-md p-8 text-center">
+            <div className="text-gray-500 mb-4">
+              <div className="text-4xl mb-2">📋</div>
+              <h3 className="text-lg font-medium">No Active Jobs</h3>
+              <p className="text-sm">
+                {userType === 'customer' 
+                  ? 'Active jobs will appear here once quotes are accepted'
+                  : 'Accepted jobs will appear here'
+                }
+              </p>
             </div>
-          ))}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {getActiveJobs().map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Toggle Buttons */}
+      <div className="flex gap-4 mb-6">
+        <button
+          onClick={() => setShowCompleted(!showCompleted)}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            showCompleted 
+              ? 'bg-green-600 text-white' 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          {showCompleted ? 'Hide' : 'Show'} Completed Jobs ({getCompletedJobs().length})
+        </button>
+        
+        <button
+          onClick={() => setShowCancelled(!showCancelled)}
+          className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+            showCancelled 
+              ? 'bg-red-600 text-white' 
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+          }`}
+        >
+          {showCancelled ? 'Hide' : 'Show'} Cancelled Jobs ({getCancelledJobs().length})
+        </button>
+      </div>
+
+      {/* Completed Jobs Section */}
+      {showCompleted && (
+        <div className="mb-8">
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <h2 className="text-xl font-semibold text-green-800 mb-2">✅ Completed Jobs</h2>
+            <p className="text-green-700 text-sm">Successfully finished projects</p>
+          </div>
+          
+          {getCompletedJobs().length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-6 text-center">
+              <p className="text-gray-500">No completed jobs yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {getCompletedJobs().map((job) => (
+                <JobCard key={job.id} job={job} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cancelled Jobs Section */}
+      {showCancelled && (
+        <div className="mb-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+            <h2 className="text-xl font-semibold text-red-800 mb-2">🚫 Cancelled Jobs</h2>
+            <p className="text-red-700 text-sm">Jobs that were cancelled before completion</p>
+          </div>
+          
+          {getCancelledJobs().length === 0 ? (
+            <div className="bg-white rounded-lg shadow-md p-6 text-center">
+              <p className="text-gray-500">No cancelled jobs.</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {getCancelledJobs().map((job) => (
+                <JobCard key={job.id} job={job} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+
+  // Job Card Component
+  function JobCard({ job }) {
+    return (
+      <div className={`bg-white rounded-lg shadow-md border-l-4 ${
+        job.status === 'Completed' ? 'border-green-500' :
+        job.status === 'Cancelled' ? 'border-red-500' :
+        'border-blue-500'
+      }`}>
+        <div className="p-6">
+          {/* Job Header */}
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <h2 className="text-xl font-semibold text-gray-900">{job.job_title}</h2>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(job.status)}`}>
+                  {job.status}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                <div className="flex items-center gap-2">
+                  {userType === 'customer' ? (
+                    <>
+                      {job.tradesmanPhoto ? (
+                        <img src={job.tradesmanPhoto} alt="Tradesman" className="w-6 h-6 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-gray-300"></div>
+                      )}
+                      <span><strong>Tradesman:</strong> {job.tradesmanName}</span>
+                    </>
+                  ) : (
+                    <>
+                      {job.customerPhoto ? (
+                        <img src={job.customerPhoto} alt="Customer" className="w-6 h-6 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-gray-300"></div>
+                      )}
+                      <span><strong>Customer:</strong> {job.customerName}</span>
+                    </>
+                  )}
+                </div>
+                <span><strong>Date:</strong> {job.requested_date}</span>
+                <span className="text-green-600 font-semibold"><strong>Final Price:</strong> {getFinalPrice(job)}</span>
+              </div>
+
+              <div className="text-sm text-gray-500 mb-3">
+                <span>Requested: {new Date(job.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Job Description */}
+          <div className="mb-4">
+            <h3 className="font-medium text-gray-900 mb-2">Job Description</h3>
+            <p className="text-gray-700 whitespace-pre-line">{job.job_description}</p>
+          </div>
+
+          {/* Job Photos - Always visible if they exist */}
+          {job.photos && job.photos.length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-medium text-gray-900 mb-3">Job Photos</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {job.photos.map((photo, index) => (
+                  <img 
+                    key={index}
+                    src={photo} 
+                    alt={`Job photo ${index + 1}`}
+                    className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => window.open(photo, '_blank')}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Additional Details */}
+          {job.additional_notes && (
+            <div className="mb-4">
+              <h3 className="font-medium text-gray-900 mb-2">Additional Notes</h3>
+              <p className="text-gray-700 whitespace-pre-line">{job.additional_notes}</p>
+            </div>
+          )}
+
+          {/* Job Actions */}
+          <div className="flex flex-wrap gap-3 mb-6">
+            {/* Status Update Buttons for Tradesmen */}
+            {userType === 'tradesman' && (
+              <>
+                {job.status === 'Accepted' && (
+                  <button
+                    onClick={() => updateJobStatus(job.id, 'In Progress')}
+                    className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+                  >
+                    Mark In Progress
+                  </button>
+                )}
+                {job.status === 'In Progress' && (
+                  <button
+                    onClick={() => updateJobStatus(job.id, 'Completed')}
+                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                  >
+                    Mark Complete
+                  </button>
+                )}
+              </>
+            )}
+
+            {/* Cancel Job Button - Available for both user types on active jobs */}
+            {job.status !== 'Completed' && job.status !== 'Cancelled' && (
+              <button
+                onClick={() => cancelJob(job.id)}
+                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors border-2 border-red-600"
+              >
+                Cancel Job
+              </button>
+            )}
+
+            {/* Additional Actions for Completed Jobs */}
+            {job.status === 'Completed' && (
+              <div className="flex gap-2">
+                {userType === 'customer' && (
+                  <>
+                    <button className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors">
+                      Leave Review
+                    </button>
+                    <button className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors">
+                      Hire Again
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Show cancellation details if job was cancelled */}
+            {job.status === 'Cancelled' && (
+              <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mt-2">
+                <div className="flex items-center gap-2 text-red-800 mb-2">
+                  <span className="text-lg">🚫</span>
+                  <span className="font-semibold">Job Cancelled</span>
+                </div>
+                <div className="text-red-700 text-sm space-y-1">
+                  <p><strong>Cancelled on:</strong> {new Date(job.cancelled_at || job.updated_at).toLocaleDateString()}</p>
+                  <p><strong>Cancelled by:</strong> {job.cancelled_by === 'customer' ? 'Customer' : 'Tradesman'}</p>
+                  {job.cancelled_by === 'customer' && job.cancellation_fee_applied > 0 && (
+                    <>
+                      <p><strong>Cancellation fee:</strong> £{job.cancellation_fee_applied} ({job.cancellation_percentage}%)</p>
+                      {job.refund_amount && (
+                        <p><strong>Refund amount:</strong> £{job.refund_amount}</p>
+                      )}
+                    </>
+                  )}
+                  {job.cancelled_by === 'tradesman' && (
+                    <p className="text-orange-700 font-medium">⚠️ Tradesman cancellation may affect future reviews</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Discussion Section - Always Visible */}
+          <div className="border-t pt-6">
+            <h3 className="font-medium text-gray-900 mb-4">Complete Discussion History</h3>
+            
+            {selectedJobComments[job.id] ? (
+              <>
+                <div className="space-y-3 mb-6 max-h-96 overflow-y-auto">
+                  {selectedJobComments[job.id].comments.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No comments yet for this job.</p>
+                  ) : (
+                    selectedJobComments[job.id].comments.map((comment) => (
+                      <div key={comment.id} className="flex gap-3 p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-shrink-0">
+                          {comment.commenterPhoto ? (
+                            <img 
+                              src={comment.commenterPhoto} 
+                              alt={comment.commenterName}
+                              className="w-10 h-10 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium">
+                              {comment.commenterName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-medium text-sm">{comment.commenterName}</span>
+                            <span className={`text-xs px-2 py-1 rounded ${
+                              comment.user_type === 'customer' ? 'bg-blue-100 text-blue-800' : 
+                              comment.user_type === 'tradesman' ? 'bg-green-100 text-green-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              {comment.user_type === 'customer' ? 'Customer' : 
+                               comment.user_type === 'tradesman' ? 'Tradesman' : 'System'}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {new Date(comment.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-gray-700 whitespace-pre-line">{comment.comment}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Add New Comment */}
+                <div className="flex gap-3">
+                  <textarea
+                    value={newComments[job.id] || ''}
+                    onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
+                    placeholder="Add a comment about this job..."
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    rows={3}
+                    disabled={submittingComment[job.id]}
+                  />
+                  <button
+                    onClick={() => submitComment(job.id)}
+                    disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
+                    className="bg-blue-500 text-white px-6 py-3 rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors self-end"
+                  >
+                    {submittingComment[job.id] ? 'Posting...' : 'Post Comment'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-6 text-gray-500">Loading discussion history...</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+      </div>
+    );
+  }
+
 };
 
 export default BookedJobs;
