@@ -82,10 +82,6 @@ const Navbar = () => {
           {/* Desktop Menu - Only show on desktop */}
           {!isMobile && (
             <div className="flex items-center space-x-4">
-              <Link to="/" className="hover:text-blue-200">
-                Home
-              </Link>
-              
               {!currentUser ? (
                 <>
                   <Link to="/login" className="hover:text-blue-200">
@@ -159,14 +155,6 @@ const Navbar = () => {
         {/* Mobile Menu - Only show on mobile when open */}
         {isMobile && isMenuOpen && (
           <div className="bg-blue-700 rounded-md mt-2 p-2">
-            <Link 
-              to="/" 
-              className="block px-3 py-2 rounded-md text-white hover:bg-blue-600"
-              onClick={closeMenu}
-            >
-              🏠 Home
-            </Link>
-            
             {!currentUser ? (
               <>
                 <Link 
