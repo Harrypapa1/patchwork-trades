@@ -253,6 +253,39 @@ const BookingRequests = () => {
     }
   };
 
+  // NEW: Handle customer rejecting custom quote (bounce back to tradesman)
+  const rejectCustomQuote = async (bookingId) => {
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        custom_quote: null,
+        has_custom_quote: false,
+        // Keep status as 'Quote Requested' so job stays for negotiation
+        status: 'Quote Requested'
+      });
+      
+      // Refresh the list
+      fetchBookingRequests();
+      
+      // Add system comment
+      try {
+        await addDoc(collection(db, 'booking_comments'), {
+          booking_id: bookingId,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          user_name: 'System',
+          comment: 'Customer rejected the custom quote - job available for new response',
+          timestamp: new Date().toISOString()
+        });
+      } catch (commentError) {
+        console.log('Could not add system comment:', commentError);
+      }
+
+    } catch (error) {
+      console.error('Error rejecting custom quote:', error);
+      alert('Error rejecting custom quote. Please try again.');
+    }
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-GB', {
       day: 'numeric',
@@ -478,8 +511,8 @@ const BookingRequests = () => {
                           </button>
                           <button
                             onClick={() => {
-                              if (confirm('Are you sure you want to reject this custom quote?')) {
-                                updateBookingStatus(request.id, 'Rejected');
+                              if (confirm('Are you sure you want to reject this custom quote? The job will return to the tradesman for a new response.')) {
+                                rejectCustomQuote(request.id);
                               }
                             }}
                             className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
