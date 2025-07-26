@@ -166,16 +166,16 @@ const BrowseTradesmen = () => {
   const renderPortfolioGallery = (images) => {
     if (!images || images.length === 0) {
       return (
-        <div className="bg-gray-50 p-4 rounded-lg text-center text-gray-500">
+        <div className="bg-gray-50 p-2 rounded text-center text-gray-500 text-sm">
           No portfolio images available
         </div>
       );
     }
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-1">
         {images.slice(0, 6).map((image, index) => (
-          <div key={index} className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
+          <div key={index} className="aspect-square bg-gray-100 rounded overflow-hidden">
             <LazyImage
               src={image}
               alt={`Portfolio ${index + 1}`}
@@ -184,7 +184,7 @@ const BrowseTradesmen = () => {
           </div>
         ))}
         {images.length > 6 && (
-          <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 text-sm">
+          <div className="aspect-square bg-gray-100 rounded flex items-center justify-center text-gray-500 text-xs">
             +{images.length - 6} more
           </div>
         )}
@@ -195,7 +195,7 @@ const BrowseTradesmen = () => {
   const renderReviews = (reviews) => {
     if (!reviews || reviews.length === 0) {
       return (
-        <div className="bg-gray-50 p-4 rounded-lg text-center text-gray-500">
+        <div className="bg-gray-50 p-2 rounded text-center text-gray-500 text-sm">
           No reviews available yet
         </div>
       );
@@ -204,24 +204,24 @@ const BrowseTradesmen = () => {
     const recentReviews = reviews.slice(0, 3);
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         {recentReviews.map((review, index) => (
-          <div key={index} className="bg-gray-50 p-3 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
+          <div key={index} className="bg-gray-50 p-2 rounded">
+            <div className="flex items-center justify-between mb-1">
               <div className="flex items-center space-x-2">
-                <div className="flex">{renderStars(review.rating)}</div>
-                <span className="text-sm text-gray-600">({review.rating}/5)</span>
+                <div className="flex text-sm">{renderStars(review.rating)}</div>
+                <span className="text-xs text-gray-600">({review.rating}/5)</span>
               </div>
               <span className="text-xs text-gray-500">
                 {new Date(review.date).toLocaleDateString()}
               </span>
             </div>
-            <p className="text-sm text-gray-700 mb-1">"{review.comment}"</p>
+            <p className="text-xs text-gray-700 mb-1">"{review.comment}"</p>
             <p className="text-xs text-gray-500">- {review.customer_name}</p>
           </div>
         ))}
         {reviews.length > 3 && (
-          <p className="text-sm text-gray-500 text-center">
+          <p className="text-xs text-gray-500 text-center">
             +{reviews.length - 3} more reviews
           </p>
         )}
@@ -334,9 +334,7 @@ const BrowseTradesmen = () => {
             const isExpanded = expandedCard === tradesman.id;
             
             return (
-              <div key={tradesman.id} className={`bg-white rounded-lg shadow-md transition-all duration-300 ${
-                isExpanded ? 'md:col-span-2 lg:col-span-3 relative z-20' : ''
-              }`}>
+              <div key={tradesman.id} className="relative">
                 {/* Dark Overlay */}
                 {isExpanded && (
                   <div 
@@ -345,16 +343,19 @@ const BrowseTradesmen = () => {
                   ></div>
                 )}
                 
-                {/* Basic Card View */}
-                <div 
-                  className="p-6 cursor-pointer relative z-20"
-                  onClick={(e) => {
-                    // Don't expand if clicking on quote button
-                    if (!e.target.closest('button')) {
-                      toggleExpanded(tradesman.id);
-                    }
-                  }}
-                >
+                <div className={`bg-white rounded-lg shadow-md transition-all duration-300 ${
+                  isExpanded ? 'relative z-20 transform scale-105 shadow-2xl ring-4 ring-blue-500' : ''
+                }`}>
+                  {/* Basic Card View */}
+                  <div 
+                    className="p-6 cursor-pointer"
+                    onClick={(e) => {
+                      // Don't expand if clicking on quote button
+                      if (!e.target.closest('button')) {
+                        toggleExpanded(tradesman.id);
+                      }
+                    }}
+                  >
                   {/* Profile Header */}
                   <div className="flex items-center mb-4">
                     {tradesman.profilePhoto ? (
@@ -442,12 +443,12 @@ const BrowseTradesmen = () => {
 
                   {/* Expanded Content */}
                   {isExpanded && (
-                    <div className="border-t pt-4 space-y-6">
+                    <div className="border-t pt-3 space-y-4">
                       {/* Full Services */}
                       {tradesman.servicesOffered && (
                         <div>
-                          <h4 className="font-medium mb-2">Services Offered:</h4>
-                          <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
+                          <h4 className="font-medium mb-2 text-sm">Services Offered:</h4>
+                          <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
                             {tradesman.servicesOffered}
                           </p>
                         </div>
@@ -455,13 +456,13 @@ const BrowseTradesmen = () => {
 
                       {/* Portfolio Gallery */}
                       <div>
-                        <h4 className="font-medium mb-3">Work Portfolio:</h4>
+                        <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
                         {renderPortfolioGallery(tradesman.portfolio_images)}
                       </div>
 
                       {/* Recent Reviews */}
                       <div>
-                        <h4 className="font-medium mb-3">Recent Reviews:</h4>
+                        <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
                         {renderReviews(tradesman.reviews)}
                       </div>
                     </div>
@@ -510,6 +511,7 @@ const BrowseTradesmen = () => {
                     </button>
                   </div>
                 </div>
+              </div>
               </div>
             );
           })}
