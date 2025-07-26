@@ -335,10 +335,26 @@ const BrowseTradesmen = () => {
             
             return (
               <div key={tradesman.id} className={`bg-white rounded-lg shadow-md transition-all duration-300 ${
-                isExpanded ? 'md:col-span-2 lg:col-span-3' : ''
+                isExpanded ? 'md:col-span-2 lg:col-span-3 relative z-20' : ''
               }`}>
+                {/* Dark Overlay */}
+                {isExpanded && (
+                  <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 z-10"
+                    onClick={() => setExpandedCard(null)}
+                  ></div>
+                )}
+                
                 {/* Basic Card View */}
-                <div className="p-6">
+                <div 
+                  className="p-6 cursor-pointer relative z-20"
+                  onClick={(e) => {
+                    // Don't expand if clicking on quote button
+                    if (!e.target.closest('button')) {
+                      toggleExpanded(tradesman.id);
+                    }
+                  }}
+                >
                   {/* Profile Header */}
                   <div className="flex items-center mb-4">
                     {tradesman.profilePhoto ? (
@@ -359,7 +375,10 @@ const BrowseTradesmen = () => {
                     
                     {/* Expand/Collapse Button */}
                     <button
-                      onClick={() => toggleExpanded(tradesman.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpanded(tradesman.id);
+                      }}
                       className="text-blue-600 hover:text-blue-800 ml-2 p-2"
                     >
                       {isExpanded ? '−' : '+'}
@@ -476,7 +495,10 @@ const BrowseTradesmen = () => {
                     
                     {/* Request Quote Button */}
                     <button
-                      onClick={() => handleBooking(tradesman.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleBooking(tradesman.id);
+                      }}
                       className={`w-full py-2 px-4 rounded font-medium transition-colors ${
                         tradesman.availableDates.length > 0 
                           ? 'bg-green-600 text-white hover:bg-green-700' 
