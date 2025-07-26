@@ -166,17 +166,18 @@ const JobCard = React.memo(({
                   )}
                   {job.status === 'In Progress' && (
                     <button
-                      onClick={() => onUpdateJobStatus(job.id, 'Completed')}
+                      onClick={() => onUpdateJobStatus(job.id, 'Pending Customer Approval')}
                       className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
                     >
-                      Mark Complete
+                      Submit for Approval
                     </button>
                   )}
                 </>
               )}
 
               {/* Cancel Job Button */}
-              {job.status !== 'Completed' && job.status !== 'Cancelled' && (
+              {job.status !== 'Completed' && job.status !== 'Cancelled' && 
+               !(userType === 'tradesman' && job.status === 'Pending Customer Approval') && (
                 <button
                   onClick={() => onCancelJob(job.id)}
                   className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors border-2 border-red-600"
@@ -276,6 +277,59 @@ const JobCard = React.memo(({
                   {submittingComment[job.id] ? 'Posting...' : 'Comment'}
                 </button>
               </div>
+
+              {/* Job Completion Workflow */}
+              <div className="mt-4 pt-4 border-t">
+                {/* Tradesman: Submit for Customer Approval */}
+                {userType === 'tradesman' && job.status === 'In Progress' && (
+                  <button
+                    onClick={() => onUpdateJobStatus(job.id, 'Pending Customer Approval')}
+                    className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                  >
+                    ✅ Submit Job for Customer Approval
+                  </button>
+                )}
+
+                {/* Customer: Approve Completion */}
+                {userType === 'customer' && job.status === 'Pending Customer Approval' && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-yellow-800 mb-3">
+                      <span className="text-lg">⏳</span>
+                      <span className="font-semibold">Job submitted for your approval</span>
+                    </div>
+                    <p className="text-yellow-700 text-sm mb-4">
+                      The tradesman has marked this job as complete. Please verify the work and approve if satisfied.
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => onUpdateJobStatus(job.id, 'Completed')}
+                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors font-medium"
+                      >
+                        ✅ Approve & Mark Complete
+                      </button>
+                      <button
+                        onClick={() => onUpdateJobStatus(job.id, 'In Progress')}
+                        className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 transition-colors"
+                      >
+                        🔄 Request Changes
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Pending Approval Status for Tradesman */}
+                {userType === 'tradesman' && job.status === 'Pending Customer Approval' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-blue-800">
+                      <span className="text-lg">⏳</span>
+                      <span className="font-semibold">Awaiting customer approval</span>
+                    </div>
+                    <p className="text-blue-700 text-sm mt-1">
+                      You've submitted this job for approval. The customer will review and confirm completion.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -318,7 +372,7 @@ const BookedJobs = () => {
   }, [comments]);
 
   // Helper functions
-  const getActiveJobs = () => bookedJobs.filter(job => job.status === 'Accepted' || job.status === 'In Progress');
+  const getActiveJobs = () => bookedJobs.filter(job => job.status === 'Accepted' || job.status === 'In Progress' || job.status === 'Pending Customer Approval');
   const getCompletedJobs = () => bookedJobs.filter(job => job.status === 'Completed');
   const getCancelledJobs = () => bookedJobs.filter(job => job.status === 'Cancelled');
 
@@ -492,12 +546,33 @@ const BookedJobs = () => {
         updated_at: new Date().toISOString()
       });
       
+      // Add system comment for status changes
+      let statusMessage = '';
+      if (newStatus === 'Pending Customer Approval') {
+        statusMessage = 'Tradesman has submitted job for customer approval';
+      } else if (newStatus === 'Completed') {
+        statusMessage = 'Customer approved job completion';
+      } else if (newStatus === 'In Progress') {
+        statusMessage = 'Customer requested changes - job returned to in progress';
+      } else {
+        statusMessage = `Job status updated to: ${newStatus}`;
+      }
+
+      await addDoc(collection(db, 'booking_comments'), {
+        booking_id: jobId,
+        user_id: currentUser.uid,
+        user_type: 'system',
+        user_name: 'System',
+        comment: statusMessage,
+        timestamp: new Date().toISOString()
+      });
+      
       fetchBookedJobs();
     } catch (error) {
       console.error('Error updating job status:', error);
       alert('Error updating job status. Please try again.');
     }
-  }, []);
+  }, [currentUser.uid]);
 
   const handleCancelJob = useCallback(async (jobId) => {
     try {
@@ -586,6 +661,7 @@ Are you sure you want to cancel?`;
     switch (status) {
       case 'Accepted': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'In Progress': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'Pending Customer Approval': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'Completed': return 'bg-green-100 text-green-800 border-green-200';
       case 'Cancelled': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
