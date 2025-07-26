@@ -229,18 +229,22 @@ const BookingRequest = () => {
     setSubmitting(true);
 
     try {
-      // Use existing booking structure that already works
+      // FIXED: Save tradesman hourly rate and convert date IDs to actual dates
       const bookingData = {
         customer_id: currentUser.uid,
         customer_name: customerProfile?.name || currentUser.email,
         tradesman_id: tradesmanId,
         tradesman_name: tradesman.name,
+        tradesman_hourly_rate: tradesman.hourlyRate, // SAVE HOURLY RATE
         date_booked: 'Quote Request', // Placeholder until date selected
         status: 'Quote Requested',
         job_title: formData.jobTitle,
         job_description: formData.jobDescription,
         urgency: formData.urgency,
-        preferred_dates_list: formData.preferredDates,
+        preferred_dates_list: formData.preferredDates.map(dateId => {
+          const date = availableDates.find(d => d.id === dateId);
+          return date ? date.date_available : dateId;
+        }), // CONVERT DATE IDs TO ACTUAL DATES
         budget_expectation: formData.budgetExpectation,
         additional_notes: formData.additionalNotes,
         job_images: formData.jobImages,
