@@ -5,7 +5,9 @@ import {
   collection, 
   getDocs, 
   query, 
-  where 
+  where,
+  doc,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import LazyImage from '../components/LazyImage';
@@ -17,6 +19,8 @@ const BrowseTradesmen = () => {
   const [filteredTradesmen, setFilteredTradesmen] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedCard, setExpandedCard] = useState(null);
+  const [detailedData, setDetailedData] = useState({}); // Cache for portfolio/reviews
+  const [loadingDetails, setLoadingDetails] = useState(false);
   
   // Search filters
   const [searchName, setSearchName] = useState('');
@@ -53,15 +57,24 @@ const BrowseTradesmen = () => {
           ...doc.data()
         }));
         
+        // Only load basic info initially - NO portfolio or reviews
         tradesmenData.push({
           id: tradesmanDoc.id,
-          ...tradesmanData,
+          name: tradesmanData.name,
+          email: tradesmanData.email,
+          tradeType: tradesmanData.tradeType,
+          areaCovered: tradesmanData.areaCovered,
+          bio: tradesmanData.bio,
+          hourlyRate: tradesmanData.hourlyRate,
+          yearsExperience: tradesmanData.yearsExperience,
+          insuranceStatus: tradesmanData.insuranceStatus,
+          profilePhoto: tradesmanData.profilePhoto,
+          servicesOffered: tradesmanData.servicesOffered,
           availableDates,
-          // Add default values for new fields if they don't exist
+          // Basic stats only
           completed_jobs_count: tradesmanData.completed_jobs_count || 0,
-          portfolio_images: tradesmanData.portfolio_images || [],
-          reviews: tradesmanData.reviews || [],
-          average_rating: tradesmanData.average_rating || 0
+          average_rating: tradesmanData.average_rating || 0,
+          review_count: tradesmanData.reviews?.length || 0
         });
       }
       
@@ -71,6 +84,42 @@ const BrowseTradesmen = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Fetch detailed info (portfolio/reviews) for specific tradesman
+  const fetchTradesmanDetails = async (tradesmanId) => {
+    // Return cached data if already loaded
+    if (detailedData[tradesmanId]) {
+      return detailedData[tradesmanId];
+    }
+
+    setLoadingDetails(true);
+    
+    try {
+      const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', tradesmanId));
+      
+      if (tradesmanDoc.exists()) {
+        const data = tradesmanDoc.data();
+        const details = {
+          portfolio_images: data.portfolio ? data.portfolio.map(item => item.image) : [],
+          reviews: data.reviews || []
+        };
+        
+        // Cache the details
+        setDetailedData(prev => ({
+          ...prev,
+          [tradesmanId]: details
+        }));
+        
+        return details;
+      }
+    } catch (error) {
+      console.error('Error fetching tradesman details:', error);
+    } finally {
+      setLoadingDetails(false);
+    }
+    
+    return { portfolio_images: [], reviews: [] };
   };
 
   const filterTradesmen = () => {
@@ -104,11 +153,8 @@ const BrowseTradesmen = () => {
         
         // Search in various fields where services might be listed
         const searchFields = [
-          tradesman.services || '',
-          tradesman.specializations || '',
           tradesman.servicesOffered || '',
-          tradesman.bio || '',
-          tradesman.description || ''
+          tradesman.bio || ''
         ];
         
         return searchFields.some(field => 
@@ -138,8 +184,15 @@ const BrowseTradesmen = () => {
     });
   };
 
-  const toggleExpanded = (tradesmanId) => {
-    setExpandedCard(expandedCard === tradesmanId ? null : tradesmanId);
+  const toggleExpanded = async (tradesmanId) => {
+    if (expandedCard === tradesmanId) {
+      // Closing
+      setExpandedCard(null);
+    } else {
+      // Opening - fetch details if needed
+      setExpandedCard(tradesmanId);
+      await fetchTradesmanDetails(tradesmanId);
+    }
   };
 
   const renderStars = (rating) => {
@@ -163,7 +216,15 @@ const BrowseTradesmen = () => {
     return stars;
   };
 
-  const renderPortfolioGallery = (images) => {
+  const renderPortfolioGallery = (images, isLoading) => {
+    if (isLoading) {
+      return (
+        <div className="bg-gray-50 p-2 rounded text-center text-gray-500 text-sm">
+          Loading portfolio...
+        </div>
+      );
+    }
+
     if (!images || images.length === 0) {
       return (
         <div className="bg-gray-50 p-2 rounded text-center text-gray-500 text-sm">
@@ -192,7 +253,15 @@ const BrowseTradesmen = () => {
     );
   };
 
-  const renderReviews = (reviews) => {
+  const renderReviews = (reviews, isLoading) => {
+    if (isLoading) {
+      return (
+        <div className="bg-gray-50 p-2 rounded text-center text-gray-500 text-sm">
+          Loading reviews...
+        </div>
+      );
+    }
+
     if (!reviews || reviews.length === 0) {
       return (
         <div className="bg-gray-50 p-2 rounded text-center text-gray-500 text-sm">
@@ -332,6 +401,7 @@ const BrowseTradesmen = () => {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTradesmen.map(tradesman => {
             const isExpanded = expandedCard === tradesman.id;
+            const details = detailedData[tradesman.id] || { portfolio_images: [], reviews: [] };
             
             return (
               <div key={tradesman.id} className="relative">
@@ -401,7 +471,7 @@ const BrowseTradesmen = () => {
                         <div className="flex items-center space-x-1">
                           <div className="flex">{renderStars(tradesman.average_rating)}</div>
                           <span className="text-gray-600">
-                            ({tradesman.reviews.length})
+                            ({tradesman.review_count})
                           </span>
                         </div>
                       )}
@@ -457,13 +527,13 @@ const BrowseTradesmen = () => {
                       {/* Portfolio Gallery */}
                       <div>
                         <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
-                        {renderPortfolioGallery(tradesman.portfolio_images)}
+                        {renderPortfolioGallery(details.portfolio_images, loadingDetails)}
                       </div>
 
                       {/* Recent Reviews */}
                       <div>
                         <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
-                        {renderReviews(tradesman.reviews)}
+                        {renderReviews(details.reviews, loadingDetails)}
                       </div>
                     </div>
                   )}
