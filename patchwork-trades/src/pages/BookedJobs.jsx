@@ -18,6 +18,153 @@ import LazyImage from '../components/LazyImage';
 
 const JOBS_PER_PAGE = 5; // Limit initial load
 
+// Review Modal Component
+const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
+  const [rating, setRating] = useState(0);
+  const [hoveredRating, setHoveredRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (rating === 0) {
+      alert('Please select a star rating');
+      return;
+    }
+    
+    if (comment.trim().length < 10) {
+      alert('Please write at least 10 characters for your review');
+      return;
+    }
+
+    setSubmitting(true);
+    
+    try {
+      await onSubmitReview({
+        rating,
+        comment: comment.trim(),
+        jobId: job.id,
+        tradesmanId: job.tradesman_id
+      });
+      
+      // Reset form
+      setRating(0);
+      setComment('');
+      onClose();
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      alert('Error submitting review. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="p-6 border-b">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">Leave a Review</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-2xl"
+            >
+              ×
+            </button>
+          </div>
+          <p className="text-sm text-gray-600 mt-1">
+            Review {job.tradesmanName} for: {job.job_title}
+          </p>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="p-6">
+          {/* Star Rating */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Overall Rating *
+            </label>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setRating(star)}
+                  onMouseEnter={() => setHoveredRating(star)}
+                  onMouseLeave={() => setHoveredRating(0)}
+                  className="text-3xl transition-colors focus:outline-none"
+                >
+                  <span 
+                    className={`${
+                      star <= (hoveredRating || rating) 
+                        ? 'text-yellow-400' 
+                        : 'text-gray-300'
+                    }`}
+                  >
+                    ★
+                  </span>
+                </button>
+              ))}
+              <span className="ml-3 text-sm text-gray-600">
+                {rating > 0 && (
+                  rating === 1 ? 'Poor' :
+                  rating === 2 ? 'Fair' :
+                  rating === 3 ? 'Good' :
+                  rating === 4 ? 'Very Good' :
+                  'Excellent'
+                )}
+              </span>
+            </div>
+          </div>
+
+          {/* Written Review */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Your Review *
+            </label>
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows="4"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Share details of your experience. What did the tradesman do well? How was their communication, punctuality, and quality of work?"
+              maxLength="500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              {comment.length}/500 characters (minimum 10)
+            </p>
+          </div>
+
+          {/* Buttons */}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || rating === 0 || comment.trim().length < 10}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+            >
+              {submitting ? 'Submitting...' : 'Submit Review'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const JOBS_PER_PAGE = 5; // Limit initial load
+
 // Lightweight JobCard - only load comments when expanded
 const JobCard = React.memo(({ 
   job, 
@@ -31,6 +178,7 @@ const JobCard = React.memo(({
   onSubmitComment, 
   onUpdateJobStatus, 
   onCancelJob,
+  onOpenReviewModal,
   getFinalPrice,
   getStatusColor,
   formatDate 
@@ -191,9 +339,18 @@ const JobCard = React.memo(({
                 <div className="flex gap-2">
                   {userType === 'customer' && (
                     <>
-                      <button className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors">
-                        Leave Review
-                      </button>
+                      {!job.reviewed_by_customer ? (
+                        <button 
+                          onClick={() => onOpenReviewModal(job)}
+                          className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 transition-colors"
+                        >
+                          Leave Review
+                        </button>
+                      ) : (
+                        <span className="bg-green-100 text-green-800 px-4 py-2 rounded text-sm font-medium">
+                          ✅ Review Left
+                        </span>
+                      )}
                       <button className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors">
                         Hire Again
                       </button>
@@ -349,6 +506,10 @@ const BookedJobs = () => {
   const [showCancelled, setShowCancelled] = useState(false);
   const [expandedJobs, setExpandedJobs] = useState({}); // Track which jobs are expanded
   const [commentsListeners, setCommentsListeners] = useState({}); // Track active listeners
+  
+  // Review modal state
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewingJob, setReviewingJob] = useState(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -657,6 +818,45 @@ Are you sure you want to cancel?`;
     }
   }, [bookedJobs, userType, getNumericPrice, currentUser.uid]);
 
+  // Handle opening review modal
+  const handleOpenReviewModal = useCallback((job) => {
+    setReviewingJob(job);
+    setReviewModalOpen(true);
+  }, []);
+
+  // Handle review submission
+  const handleSubmitReview = useCallback(async (reviewData) => {
+    try {
+      // TODO: Add review to tradesman profile and update average rating
+      console.log('Submitting review:', reviewData);
+      
+      // Mark job as reviewed to prevent duplicate reviews
+      await updateDoc(doc(db, 'bookings', reviewData.jobId), {
+        reviewed_by_customer: true,
+        review_submitted_at: new Date().toISOString()
+      });
+
+      // Add system comment
+      await addDoc(collection(db, 'booking_comments'), {
+        booking_id: reviewData.jobId,
+        user_id: currentUser.uid,
+        user_type: 'system',
+        user_name: 'System',
+        comment: `Customer left a ${reviewData.rating}-star review`,
+        timestamp: new Date().toISOString()
+      });
+
+      // Refresh jobs to show review status
+      fetchBookedJobs();
+      
+      alert('Review submitted successfully!');
+      
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      throw error; // Re-throw to let modal handle error display
+    }
+  }, [currentUser.uid]);
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Accepted': return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -736,6 +936,7 @@ Are you sure you want to cancel?`;
                 onSubmitComment={handleSubmitComment}
                 onUpdateJobStatus={handleUpdateJobStatus}
                 onCancelJob={handleCancelJob}
+                onOpenReviewModal={handleOpenReviewModal}
                 getFinalPrice={getFinalPrice}
                 getStatusColor={getStatusColor}
                 formatDate={formatDate}
@@ -797,6 +998,7 @@ Are you sure you want to cancel?`;
                   onSubmitComment={handleSubmitComment}
                   onUpdateJobStatus={handleUpdateJobStatus}
                   onCancelJob={handleCancelJob}
+                  onOpenReviewModal={handleOpenReviewModal}
                   getFinalPrice={getFinalPrice}
                   getStatusColor={getStatusColor}
                   formatDate={formatDate}
@@ -834,6 +1036,7 @@ Are you sure you want to cancel?`;
                   onSubmitComment={handleSubmitComment}
                   onUpdateJobStatus={handleUpdateJobStatus}
                   onCancelJob={handleCancelJob}
+                  onOpenReviewModal={handleOpenReviewModal}
                   getFinalPrice={getFinalPrice}
                   getStatusColor={getStatusColor}
                   formatDate={formatDate}
@@ -843,6 +1046,14 @@ Are you sure you want to cancel?`;
           )}
         </div>
       )}
+
+      {/* Review Modal */}
+      <ReviewModal
+        isOpen={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        job={reviewingJob}
+        onSubmitReview={handleSubmitReview}
+      />
     </div>
   );
 };
