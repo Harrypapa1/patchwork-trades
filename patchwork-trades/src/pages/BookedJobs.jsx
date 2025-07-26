@@ -827,8 +827,39 @@ Are you sure you want to cancel?`;
   // Handle review submission
   const handleSubmitReview = useCallback(async (reviewData) => {
     try {
-      // TODO: Add review to tradesman profile and update average rating
-      console.log('Submitting review:', reviewData);
+      // Get current tradesman profile
+      const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', reviewData.tradesmanId));
+      
+      if (!tradesmanDoc.exists()) {
+        throw new Error('Tradesman profile not found');
+      }
+
+      const tradesmanData = tradesmanDoc.data();
+      const currentReviews = tradesmanData.reviews || [];
+      const currentJobsCount = tradesmanData.completed_jobs_count || 0;
+
+      // Create new review object
+      const newReview = {
+        rating: reviewData.rating,
+        comment: reviewData.comment,
+        customer_name: bookedJobs.find(j => j.id === reviewData.jobId)?.customerName || 'Anonymous',
+        date: new Date().toISOString(),
+        job_id: reviewData.jobId
+      };
+
+      // Add new review to array
+      const updatedReviews = [...currentReviews, newReview];
+
+      // Calculate new average rating
+      const totalRating = updatedReviews.reduce((sum, review) => sum + review.rating, 0);
+      const newAverageRating = Number((totalRating / updatedReviews.length).toFixed(1));
+
+      // Update tradesman profile
+      await updateDoc(doc(db, 'tradesmen_profiles', reviewData.tradesmanId), {
+        reviews: updatedReviews,
+        average_rating: newAverageRating,
+        completed_jobs_count: currentJobsCount + 1
+      });
       
       // Mark job as reviewed to prevent duplicate reviews
       await updateDoc(doc(db, 'bookings', reviewData.jobId), {
@@ -842,7 +873,7 @@ Are you sure you want to cancel?`;
         user_id: currentUser.uid,
         user_type: 'system',
         user_name: 'System',
-        comment: `Customer left a ${reviewData.rating}-star review`,
+        comment: `Customer left a ${reviewData.rating}-star review: "${reviewData.comment}"`,
         timestamp: new Date().toISOString()
       });
 
@@ -855,7 +886,7 @@ Are you sure you want to cancel?`;
       console.error('Error submitting review:', error);
       throw error; // Re-throw to let modal handle error display
     }
-  }, [currentUser.uid]);
+  }, [currentUser.uid, bookedJobs]);
 
   const getStatusColor = (status) => {
     switch (status) {
