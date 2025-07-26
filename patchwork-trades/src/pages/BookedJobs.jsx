@@ -163,8 +163,6 @@ const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
   );
 };
 
-const JOBS_PER_PAGE = 5; // Limit initial load
-
 // Lightweight JobCard - only load comments when expanded
 const JobCard = React.memo(({ 
   job, 
