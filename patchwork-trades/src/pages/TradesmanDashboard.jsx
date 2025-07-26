@@ -195,6 +195,28 @@ const TradesmanDashboard = () => {
     }
   };
 
+  // Render star rating
+  const renderStars = (rating) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 !== 0;
+    
+    for (let i = 0; i < fullStars; i++) {
+      stars.push(<span key={i} className="text-yellow-400">★</span>);
+    }
+    
+    if (hasHalfStar) {
+      stars.push(<span key="half" className="text-yellow-400">☆</span>);
+    }
+    
+    const emptyStars = 5 - Math.ceil(rating);
+    for (let i = 0; i < emptyStars; i++) {
+      stars.push(<span key={`empty-${i}`} className="text-gray-300">★</span>);
+    }
+    
+    return stars;
+  };
+
   if (loading) {
     return <div className="text-center py-8">Loading...</div>;
   }
@@ -441,7 +463,7 @@ const TradesmanDashboard = () => {
               )}
 
               {/* Portfolio Section */}
-              <div>
+              <div className="mb-6">
                 <h3 className="text-lg font-medium mb-3">Work Portfolio</h3>
                 
                 {/* Upload Button */}
@@ -484,6 +506,77 @@ const TradesmanDashboard = () => {
                   </div>
                 ) : (
                   <p className="text-gray-500">No portfolio images uploaded yet.</p>
+                )}
+              </div>
+
+              {/* Reviews Section */}
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-3">Customer Reviews</h3>
+                
+                {profile.reviews && profile.reviews.length > 0 ? (
+                  <div>
+                    {/* Overall Rating Summary */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="flex text-xl">{renderStars(profile.average_rating || 0)}</div>
+                            <span className="text-2xl font-bold text-blue-800">
+                              {profile.average_rating || 0}/5
+                            </span>
+                          </div>
+                          <p className="text-blue-700 text-sm">
+                            Based on {profile.reviews.length} customer review{profile.reviews.length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-green-600">
+                            {profile.completed_jobs_count || 0}
+                          </div>
+                          <p className="text-green-700 text-sm">Jobs Completed</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Individual Reviews */}
+                    <div className="space-y-4">
+                      {profile.reviews
+                        .sort((a, b) => new Date(b.date) - new Date(a.date)) // Most recent first
+                        .map((review, index) => (
+                        <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="flex text-lg">{renderStars(review.rating)}</div>
+                              <span className="font-medium text-gray-900">
+                                ({review.rating}/5)
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm font-medium text-gray-900">{review.customer_name}</p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(review.date).toLocaleDateString('en-GB', {
+                                  day: 'numeric',
+                                  month: 'long',
+                                  year: 'numeric'
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-gray-700 text-sm leading-relaxed">
+                            "{review.comment}"
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                    <div className="text-gray-400 text-4xl mb-2">★</div>
+                    <h4 className="text-lg font-medium text-gray-600 mb-1">No Reviews Yet</h4>
+                    <p className="text-gray-500 text-sm">
+                      Customer reviews will appear here after you complete jobs and customers leave feedback.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
