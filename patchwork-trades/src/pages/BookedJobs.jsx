@@ -35,6 +35,20 @@ const JobCard = React.memo(({
   getStatusColor,
   formatDate 
 }) => {
+  // Helper function to get job date
+  const getJobDate = (job) => {
+    if (job.requested_date) {
+      return job.requested_date;
+    } else if (job.preferred_dates_list?.[0]) {
+      return new Date(job.preferred_dates_list[0]).toLocaleDateString('en-GB', { 
+        day: 'numeric', 
+        month: 'long' 
+      });
+    } else {
+      return 'Date TBD';
+    }
+  };
+
   return (
     <div className={`bg-white rounded-lg shadow-md border-l-4 ${
       job.status === 'Completed' ? 'border-green-500' :
@@ -86,7 +100,7 @@ const JobCard = React.memo(({
                   </>
                 )}
               </div>
-              <span><strong>Date:</strong> {job.requested_date}</span>
+              <span><strong>Date:</strong> {getJobDate(job)}</span>
               <span className="text-green-600 font-semibold"><strong>Final Price:</strong> {getFinalPrice(job)}</span>
             </div>
           </div>
