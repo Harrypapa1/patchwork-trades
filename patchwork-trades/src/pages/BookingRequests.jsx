@@ -402,6 +402,13 @@ const BookingRequests = () => {
     });
   };
 
+  const formatSimpleDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long'
+    });
+  };
+
   const getUrgencyColor = (urgency) => {
     switch (urgency) {
       case 'urgent': return 'bg-red-100 text-red-800';
@@ -495,12 +502,29 @@ const BookingRequests = () => {
                       <p className="text-gray-700 whitespace-pre-line">{request.job_description}</p>
                     </div>
                     
-                    {request.budget_expectation && (
-                      <div>
-                        <h3 className="font-medium text-gray-900 mb-1">Budget Expectation</h3>
-                        <p className="text-gray-700">{request.budget_expectation}</p>
-                      </div>
-                    )}
+                    {/* Enhanced Pricing Section */}
+                    <div className="space-y-3">
+                      {/* Tradesman Hourly Rate */}
+                      {request.tradesman_hourly_rate && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <h3 className="font-medium text-gray-900 mb-1">Tradesman Rate</h3>
+                          <p className="text-blue-800 font-semibold">
+                            £{request.tradesman_hourly_rate}/hour
+                          </p>
+                          <p className="text-blue-600 text-sm">
+                            Minimum 2 hours: £{request.tradesman_hourly_rate * 2}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Customer Budget */}
+                      {request.budget_expectation && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                          <h3 className="font-medium text-gray-900 mb-1">Customer Budget</h3>
+                          <p className="text-green-800 font-semibold">{request.budget_expectation}</p>
+                        </div>
+                      )}
+                    </div>
 
                     {request.additional_notes && (
                       <div>
@@ -512,14 +536,26 @@ const BookingRequests = () => {
 
                   {/* Right Column */}
                   <div className="space-y-4">
-                    {/* Preferred Dates */}
+                    {/* Enhanced Preferred Dates */}
                     <div>
-                      <h3 className="font-medium text-gray-900 mb-2">Preferred Dates</h3>
+                      <h3 className="font-medium text-gray-900 mb-2">Requested Dates</h3>
                       <div className="text-sm text-gray-700">
                         {request.preferred_dates_list && request.preferred_dates_list.length > 0 ? (
-                          <p>Customer selected {request.preferred_dates_list.length} available dates</p>
+                          <div className="space-y-1">
+                            {request.preferred_dates_list.map((date, index) => (
+                              <div key={index} className="flex items-center">
+                                <span className="w-1 h-1 bg-green-600 rounded-full mr-2"></span>
+                                <span>{formatSimpleDate(date)}</span>
+                              </div>
+                            ))}
+                            {request.preferred_dates_list.length > 3 && (
+                              <p className="text-xs text-gray-500 ml-3">
+                                Customer selected {request.preferred_dates_list.length} available dates
+                              </p>
+                            )}
+                          </div>
                         ) : (
-                          <p>No specific dates mentioned</p>
+                          <p className="text-gray-500 italic">No specific dates selected</p>
                         )}
                       </div>
                     </div>
