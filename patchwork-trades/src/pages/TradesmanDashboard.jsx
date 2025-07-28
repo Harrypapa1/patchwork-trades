@@ -39,6 +39,25 @@ const TradesmanDashboard = () => {
     }
   };
 
+  // Share profile function
+  const shareProfile = () => {
+    const profileUrl = `https://patchworktrades.com/tradesman/${currentUser.uid}`;
+    
+    if (navigator.share) {
+      // Use native sharing if available (mobile)
+      navigator.share({
+        title: `${profile.name} - ${profile.tradeType}`,
+        text: `Check out my professional tradesman profile on Patchwork Trades`,
+        url: profileUrl
+      });
+    } else {
+      // Copy to clipboard for desktop
+      navigator.clipboard.writeText(profileUrl).then(() => {
+        alert('Profile link copied to clipboard!');
+      });
+    }
+  };
+
   // Update profile with enhanced fields
   const updateProfile = async (e) => {
     e.preventDefault();
@@ -230,12 +249,20 @@ const TradesmanDashboard = () => {
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Profile Information</h2>
-            <button
-              onClick={() => setEditingProfile(!editingProfile)}
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-            >
-              {editingProfile ? 'Cancel' : 'Edit Profile'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={shareProfile}
+                className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+              >
+                Share Profile
+              </button>
+              <button
+                onClick={() => setEditingProfile(!editingProfile)}
+                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+              >
+                {editingProfile ? 'Cancel' : 'Edit Profile'}
+              </button>
+            </div>
           </div>
           
           {editingProfile ? (
