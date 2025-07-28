@@ -11,7 +11,8 @@ import {
   doc,
   orderBy,
   onSnapshot,
-  getDoc
+  getDoc,
+  setDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -157,57 +158,83 @@ const BookingRequests = () => {
   };
 
   const updateBookingStatus = async (bookingId, newStatus, customQuote = null) => {
-    console.log('🔄 Starting SAFE booking update:', { bookingId, newStatus, customQuote }); // Debug log
+    console.log('🚀 BULLETPROOF booking update starting...', { bookingId, newStatus, customQuote });
     
+    // STOP EVERYTHING if inputs are invalid
+    if (!bookingId || !newStatus) {
+      console.error('❌ INVALID INPUTS:', { bookingId, newStatus });
+      alert('Error: Invalid booking data. Please refresh the page.');
+      return;
+    }
+
     try {
-      // STEP 1: Verify the booking exists BEFORE updating
+      // STEP 1: Get the complete current booking data
+      console.log('🔍 Step 1: Fetching current booking data...');
       const bookingRef = doc(db, 'bookings', bookingId);
       const bookingSnap = await getDoc(bookingRef);
       
       if (!bookingSnap.exists()) {
         console.error('❌ CRITICAL: Booking does not exist!', bookingId);
-        alert('Error: Booking not found. Please refresh the page.');
+        alert('Error: Booking not found in database. Please refresh the page.');
         return;
       }
       
       const currentBookingData = bookingSnap.data();
-      console.log('📋 Current booking data:', currentBookingData);
+      console.log('📋 Current booking data retrieved:', currentBookingData);
       
-      // STEP 2: Prepare update data (ONLY the fields we want to change)
-      const updateData = { 
-        status: newStatus,
+      // STEP 2: Create COMPLETE new booking data (preserve everything)
+      console.log('🔧 Step 2: Creating complete updated booking data...');
+      const completeUpdatedData = {
+        ...currentBookingData, // Keep ALL existing data
+        status: newStatus, // Only change the status
         updated_at: new Date().toISOString()
       };
       
+      // Add custom quote if provided
       if (customQuote) {
-        updateData.custom_quote = customQuote;
-        updateData.has_custom_quote = true;
+        completeUpdatedData.custom_quote = customQuote;
+        completeUpdatedData.has_custom_quote = true;
       }
 
-      console.log('📝 Safe update data (only changed fields):', updateData);
+      console.log('📝 Complete updated data prepared:', completeUpdatedData);
 
-      // STEP 3: Perform the update with error handling
-      await updateDoc(bookingRef, updateData);
+      // STEP 3: Use setDoc instead of updateDoc (more reliable)
+      console.log('💾 Step 3: Saving complete booking data with setDoc...');
+      await setDoc(bookingRef, completeUpdatedData);
       
-      console.log('✅ Booking updated successfully in Firebase'); // Debug log
+      console.log('✅ Booking saved successfully with setDoc');
       
-      // STEP 4: Verify the update worked
-      const updatedBookingSnap = await getDoc(bookingRef);
-      if (updatedBookingSnap.exists()) {
-        console.log('✅ Verification: Booking still exists after update');
-        console.log('📋 Updated booking data:', updatedBookingSnap.data());
-      } else {
-        console.error('❌ CRITICAL: Booking disappeared after update!');
-        alert('CRITICAL ERROR: Booking was lost during update. Please contact support.');
+      // STEP 4: Verify the save worked by reading it back
+      console.log('🔍 Step 4: Verifying the save worked...');
+      const verificationSnap = await getDoc(bookingRef);
+      
+      if (!verificationSnap.exists()) {
+        console.error('❌ CRITICAL: Booking disappeared after save!');
+        alert('CRITICAL ERROR: Booking was lost during save. Screenshot this error and contact support.');
         return;
       }
       
-      // STEP 5: Refresh the list
+      const verifiedData = verificationSnap.data();
+      console.log('✅ Verification successful. Booking data after save:', verifiedData);
+      
+      if (verifiedData.status !== newStatus) {
+        console.error('❌ CRITICAL: Status was not updated correctly!', {
+          expected: newStatus,
+          actual: verifiedData.status
+        });
+        alert(`ERROR: Status update failed. Expected: ${newStatus}, Got: ${verifiedData.status}`);
+        return;
+      }
+      
+      console.log('✅ Status verification successful!');
+      
+      // STEP 5: Refresh the bookings list
+      console.log('🔄 Step 5: Refreshing bookings list...');
       await fetchBookingRequests();
+      console.log('✅ Bookings list refreshed');
       
-      console.log('🔄 Booking requests refreshed'); // Debug log
-      
-      // STEP 6: Add system comment (with error handling)
+      // STEP 6: Add system comment
+      console.log('💬 Step 6: Adding system comment...');
       try {
         const commentData = {
           booking_id: bookingId,
@@ -220,28 +247,28 @@ const BookingRequests = () => {
           timestamp: new Date().toISOString()
         };
 
-        console.log('💬 Adding system comment:', commentData); // Debug log
-        
+        console.log('💬 System comment data:', commentData);
         await addDoc(collection(db, 'booking_comments'), commentData);
-        
-        console.log('✅ System comment added successfully'); // Debug log
+        console.log('✅ System comment added successfully');
         
       } catch (commentError) {
         console.error('⚠️ Error adding system comment (non-critical):', commentError);
         // Don't fail the whole operation for comment errors
       }
 
-      console.log('🎉 Booking acceptance completed successfully!'); // Debug log
+      console.log('🎉 BULLETPROOF booking update completed successfully!');
       
-      // Show success message
-      alert(`Booking ${newStatus.toLowerCase()} successfully! Check your "Booked Jobs" page.`);
+      // Success message
+      alert(`✅ Booking ${newStatus.toLowerCase()} successfully!\n\nThe job should now appear in your "Booked Jobs" section.`);
 
     } catch (error) {
-      console.error('❌ CRITICAL ERROR in booking update:', error);
+      console.error('❌ BULLETPROOF UPDATE FAILED:', error);
       console.error('Error name:', error.name);
       console.error('Error message:', error.message);
       console.error('Error code:', error.code);
-      alert(`CRITICAL ERROR: ${error.message}\n\nPlease screenshot this error and refresh the page.`);
+      console.error('Full error object:', error);
+      
+      alert(`CRITICAL ERROR in booking update:\n\nError: ${error.message}\n\nPlease screenshot this error and refresh the page.`);
     }
   };
 
