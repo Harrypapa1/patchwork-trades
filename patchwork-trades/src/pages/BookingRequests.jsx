@@ -10,7 +10,8 @@ import {
   updateDoc,
   doc,
   orderBy,
-  onSnapshot
+  onSnapshot,
+  getDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -156,28 +157,57 @@ const BookingRequests = () => {
   };
 
   const updateBookingStatus = async (bookingId, newStatus, customQuote = null) => {
-    console.log('🔄 Starting booking update:', { bookingId, newStatus, customQuote }); // Debug log
+    console.log('🔄 Starting SAFE booking update:', { bookingId, newStatus, customQuote }); // Debug log
     
     try {
-      const updateData = { status: newStatus };
+      // STEP 1: Verify the booking exists BEFORE updating
+      const bookingRef = doc(db, 'bookings', bookingId);
+      const bookingSnap = await getDoc(bookingRef);
+      
+      if (!bookingSnap.exists()) {
+        console.error('❌ CRITICAL: Booking does not exist!', bookingId);
+        alert('Error: Booking not found. Please refresh the page.');
+        return;
+      }
+      
+      const currentBookingData = bookingSnap.data();
+      console.log('📋 Current booking data:', currentBookingData);
+      
+      // STEP 2: Prepare update data (ONLY the fields we want to change)
+      const updateData = { 
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      };
+      
       if (customQuote) {
         updateData.custom_quote = customQuote;
         updateData.has_custom_quote = true;
       }
 
-      console.log('📝 Update data:', updateData); // Debug log
+      console.log('📝 Safe update data (only changed fields):', updateData);
 
-      // Update the booking
-      await updateDoc(doc(db, 'bookings', bookingId), updateData);
+      // STEP 3: Perform the update with error handling
+      await updateDoc(bookingRef, updateData);
       
       console.log('✅ Booking updated successfully in Firebase'); // Debug log
       
-      // Refresh the list immediately
+      // STEP 4: Verify the update worked
+      const updatedBookingSnap = await getDoc(bookingRef);
+      if (updatedBookingSnap.exists()) {
+        console.log('✅ Verification: Booking still exists after update');
+        console.log('📋 Updated booking data:', updatedBookingSnap.data());
+      } else {
+        console.error('❌ CRITICAL: Booking disappeared after update!');
+        alert('CRITICAL ERROR: Booking was lost during update. Please contact support.');
+        return;
+      }
+      
+      // STEP 5: Refresh the list
       await fetchBookingRequests();
       
       console.log('🔄 Booking requests refreshed'); // Debug log
       
-      // Add system comment
+      // STEP 6: Add system comment (with error handling)
       try {
         const commentData = {
           booking_id: bookingId,
@@ -197,7 +227,7 @@ const BookingRequests = () => {
         console.log('✅ System comment added successfully'); // Debug log
         
       } catch (commentError) {
-        console.error('❌ Error adding system comment:', commentError);
+        console.error('⚠️ Error adding system comment (non-critical):', commentError);
         // Don't fail the whole operation for comment errors
       }
 
@@ -207,9 +237,11 @@ const BookingRequests = () => {
       alert(`Booking ${newStatus.toLowerCase()} successfully! Check your "Booked Jobs" page.`);
 
     } catch (error) {
-      console.error('❌ Error updating booking status:', error);
-      console.error('Error details:', error.message); // More detailed error
-      alert(`Error updating booking: ${error.message}. Please try again.`);
+      console.error('❌ CRITICAL ERROR in booking update:', error);
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      alert(`CRITICAL ERROR: ${error.message}\n\nPlease screenshot this error and refresh the page.`);
     }
   };
 
