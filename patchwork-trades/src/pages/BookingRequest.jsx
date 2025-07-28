@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   doc, 
@@ -16,7 +16,10 @@ const BookingRequest = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { tradesmanId } = location.state || {};
+  const { tradesmanId: urlTradesmanId } = useParams();
+  
+  // Get tradesman ID from URL params or location state
+  const tradesmanId = urlTradesmanId || location.state?.tradesmanId;
 
   const [tradesman, setTradesman] = useState(null);
   const [customerProfile, setCustomerProfile] = useState(null);
