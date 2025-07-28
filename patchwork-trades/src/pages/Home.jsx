@@ -10,6 +10,7 @@ const Home = () => {
   // Get redirect message from navigation state
   const redirectMessage = location.state?.message;
   const showRegister = location.state?.showRegister;
+  const returnTo = location.state?.returnTo;
 
   // Load auth state asynchronously - don't block page render
   useEffect(() => {
@@ -42,13 +43,34 @@ const Home = () => {
   };
 
   const getCustomerButtonLink = () => {
+    // If there's a returnTo (booking redirect), handle it specially
+    if (returnTo) {
+      if (authLoaded && userState.currentUser && userState.userType === 'customer') {
+        return returnTo; // Go directly to booking form
+      }
+      // Need to register as customer
+      return '/register-customer';
+    }
+    
+    // Normal flow
     if (authLoaded && userState.currentUser && userState.userType === 'customer') {
       return '/browse';
     }
     return '/register-customer';
   };
 
+  const getCustomerButtonState = () => {
+    // Pass returnTo state only when redirecting to register
+    if (returnTo && (!authLoaded || !userState.currentUser || userState.userType !== 'customer')) {
+      return { returnTo, message: redirectMessage };
+    }
+    return undefined;
+  };
+
   const getCustomerButtonText = () => {
+    if (returnTo) {
+      return 'Book This Tradesman';
+    }
     return 'Find a Tradesman';
   };
 
@@ -114,6 +136,7 @@ const Home = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
             <Link 
               to={getCustomerButtonLink()}
+              state={getCustomerButtonState()}
               className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors"
             >
               {getCustomerButtonText()}
@@ -125,6 +148,20 @@ const Home = () => {
               {getTradesmanButtonText()}
             </Link>
           </div>
+
+          {/* Show login option if there's a redirect */}
+          {returnTo && (
+            <div className="mb-16">
+              <p className="text-gray-600 mb-4">Already have an account?</p>
+              <Link 
+                to="/login"
+                state={{ returnTo, message: redirectMessage }}
+                className="bg-gray-600 text-white px-6 py-3 rounded-lg text-base font-medium hover:bg-gray-700 transition-colors"
+              >
+                Log In Instead
+              </Link>
+            </div>
+          )}
 
           {/* How It Works Section */}
           <div className="bg-white rounded-xl shadow-lg p-8 max-w-5xl mx-auto">
