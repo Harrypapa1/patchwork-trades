@@ -50,8 +50,10 @@ const CustomerRegister = () => {
 
       // Redirect based on where they came from
       if (returnTo) {
+        console.log('Registration success - redirecting to:', returnTo);
         navigate(returnTo);
       } else {
+        console.log('Registration success - normal dashboard');
         navigate('/customer-dashboard');
       }
     } catch (error) {
