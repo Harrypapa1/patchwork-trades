@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
@@ -13,6 +13,11 @@ const CustomerRegister = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Get redirect information
+  const redirectMessage = location.state?.message;
+  const returnTo = location.state?.returnTo;
 
   const handleChange = (e) => {
     setFormData({
@@ -43,7 +48,12 @@ const CustomerRegister = () => {
         userId: userCredential.user.uid
       });
 
-      navigate('/customer-dashboard');
+      // Redirect based on where they came from
+      if (returnTo) {
+        navigate(returnTo);
+      } else {
+        navigate('/customer-dashboard');
+      }
     } catch (error) {
       setError(error.message);
     } finally {
@@ -54,6 +64,16 @@ const CustomerRegister = () => {
   return (
     <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold text-center mb-6">Register as Customer</h2>
+      
+      {/* Show redirect message if it exists */}
+      {redirectMessage && (
+        <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
+          <div className="flex items-center">
+            <span className="text-blue-500 mr-2">ℹ️</span>
+            {redirectMessage}
+          </div>
+        </div>
+      )}
       
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
