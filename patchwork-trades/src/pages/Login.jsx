@@ -17,6 +17,9 @@ const Login = () => {
   // Get redirect information
   const redirectMessage = location.state?.message;
   const returnTo = location.state?.returnTo;
+  
+  // DEBUG: Check what state we received
+  console.log('Login page state:', location.state);
 
   const handleChange = (e) => {
     setFormData({
