@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom'; // Add this import
+import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -9,7 +9,6 @@ import {
   addDoc, 
   updateDoc,
   doc,
-  orderBy,
   onSnapshot,
   getDoc
 } from 'firebase/firestore';
@@ -17,16 +16,30 @@ import { db } from '../config/firebase';
 
 const BookingRequests = () => {
   const { currentUser, userType } = useAuth();
-  const navigate = useNavigate(); // Add this hook
+  const navigate = useNavigate();
   const [bookingRequests, setBookingRequests] = useState([]);
   const [comments, setComments] = useState({});
   const [newComments, setNewComments] = useState({});
   const [loading, setLoading] = useState(true);
+  
+  // Refs to track active listeners and prevent memory leaks
+  const activeListeners = useRef({});
+  const isUpdating = useRef(false);
 
   useEffect(() => {
     if (currentUser) {
       fetchBookingRequests();
     }
+    
+    // Cleanup all listeners on unmount
+    return () => {
+      Object.values(activeListeners.current).forEach(unsubscribe => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      });
+      activeListeners.current = {};
+    };
   }, [currentUser, userType]);
 
   const fetchBookingRequests = async () => {
@@ -55,10 +68,18 @@ const BookingRequests = () => {
         ...doc.data()
       }));
 
-      console.log('Found booking requests:', requests); // Debug log
+      console.log('Found booking requests:', requests);
       setBookingRequests(requests);
 
-      // Fetch comments for each request
+      // Clean up existing listeners before setting up new ones
+      Object.values(activeListeners.current).forEach(unsubscribe => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      });
+      activeListeners.current = {};
+
+      // Fetch comments for each request with cleanup
       for (const request of requests) {
         fetchComments(request.id);
       }
@@ -70,17 +91,22 @@ const BookingRequests = () => {
     }
   };
 
-  const fetchComments = async (bookingId) => {
+  const fetchComments = (bookingId) => {
     try {
+      // Clean up existing listener for this booking if it exists
+      if (activeListeners.current[bookingId]) {
+        activeListeners.current[bookingId]();
+        delete activeListeners.current[bookingId];
+      }
+
       const commentsQuery = query(
         collection(db, 'booking_comments'),
         where('booking_id', '==', bookingId)
-        // Removed orderBy temporarily to fix the real-time listener
       );
 
-      console.log('Setting up real-time listener for booking:', bookingId); // Debug
+      console.log('Setting up real-time listener for booking:', bookingId);
 
-      // Use real-time listener for comments - with error handling
+      // Set up new listener with proper cleanup
       const unsubscribe = onSnapshot(commentsQuery, 
         (snapshot) => {
           const bookingComments = snapshot.docs.map(doc => ({
@@ -91,7 +117,7 @@ const BookingRequests = () => {
           // Sort manually by timestamp
           bookingComments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
           
-          console.log('Comments updated for booking', bookingId, ':', bookingComments); // Debug
+          console.log('Comments updated for booking', bookingId, ':', bookingComments);
           
           setComments(prev => ({
             ...prev,
@@ -99,7 +125,6 @@ const BookingRequests = () => {
           }));
         },
         (error) => {
-          // Handle collection not existing yet
           console.log('Comments collection may not exist yet, initializing empty:', error);
           setComments(prev => ({
             ...prev,
@@ -108,11 +133,11 @@ const BookingRequests = () => {
         }
       );
 
-      return unsubscribe;
+      // Store the unsubscribe function for cleanup
+      activeListeners.current[bookingId] = unsubscribe;
 
     } catch (error) {
       console.error('Error fetching comments:', error);
-      // Initialize empty comments for this booking
       setComments(prev => ({
         ...prev,
         [bookingId]: []
@@ -124,7 +149,7 @@ const BookingRequests = () => {
     const commentText = newComments[bookingId]?.trim();
     if (!commentText) return;
 
-    console.log('Adding comment for booking:', bookingId, 'Comment:', commentText); // Debug
+    console.log('Adding comment for booking:', bookingId, 'Comment:', commentText);
 
     try {
       const commentData = {
@@ -138,7 +163,7 @@ const BookingRequests = () => {
         timestamp: new Date().toISOString()
       };
 
-      console.log('Comment data being saved:', commentData); // Debug
+      console.log('Comment data being saved:', commentData);
 
       await addDoc(collection(db, 'booking_comments'), commentData);
 
@@ -148,7 +173,7 @@ const BookingRequests = () => {
         [bookingId]: ''
       }));
 
-      console.log('Comment saved successfully!'); // Debug
+      console.log('Comment saved successfully!');
 
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -157,14 +182,23 @@ const BookingRequests = () => {
   };
 
   const updateBookingStatus = async (bookingId, newStatus, customQuote = null) => {
-    console.log('🚀 FIXED booking update starting...', { bookingId, newStatus, customQuote });
+    console.log('🚀 FINAL FIXED booking update starting...', { bookingId, newStatus, customQuote });
     
+    // Prevent multiple simultaneous updates (race condition protection)
+    if (isUpdating.current) {
+      console.log('⏳ Update already in progress, skipping...');
+      alert('Please wait - another update is in progress.');
+      return;
+    }
+
     // STOP EVERYTHING if inputs are invalid
     if (!bookingId || !newStatus) {
       console.error('❌ INVALID INPUTS:', { bookingId, newStatus });
       alert('Error: Invalid booking data. Please refresh the page.');
       return;
     }
+
+    isUpdating.current = true;
 
     try {
       // STEP 1: Verify booking exists first
@@ -180,7 +214,17 @@ const BookingRequests = () => {
       
       console.log('✅ Booking exists, proceeding with update...');
       
-      // STEP 2: Create minimal update data (ONLY what needs to change)
+      // STEP 2: Temporarily clean up listeners to prevent race conditions
+      console.log('🔄 Step 2: Temporarily cleaning up listeners...');
+      const listenersBackup = { ...activeListeners.current };
+      Object.values(activeListeners.current).forEach(unsubscribe => {
+        if (typeof unsubscribe === 'function') {
+          unsubscribe();
+        }
+      });
+      activeListeners.current = {};
+      
+      // STEP 3: Create minimal update data (ONLY what needs to change)
       const updateData = {
         status: newStatus,
         updated_at: new Date().toISOString()
@@ -205,13 +249,13 @@ const BookingRequests = () => {
         customerMatch: currentUser.uid === currentBookingData.customer_id
       });
 
-      // STEP 3: Use updateDoc (SAFER than setDoc) - only updates specified fields
-      console.log('💾 Step 3: Updating booking with updateDoc...');
+      // STEP 4: Use updateDoc (SAFE - only updates specified fields)
+      console.log('💾 Step 4: Updating booking with updateDoc...');
       await updateDoc(bookingRef, updateData);
       console.log('✅ Booking updated successfully with updateDoc');
       
-      // STEP 4: Verify the update worked by reading it back
-      console.log('🔍 Step 4: Verifying the update worked...');
+      // STEP 5: Verify the update worked by reading it back
+      console.log('🔍 Step 5: Verifying the update worked...');
       const verificationSnap = await getDoc(bookingRef);
       
       if (!verificationSnap.exists()) {
@@ -234,8 +278,8 @@ const BookingRequests = () => {
       
       console.log('✅ Status verification successful!');
       
-      // STEP 5: Add system comment BEFORE refreshing list
-      console.log('💬 Step 5: Adding system comment...');
+      // STEP 6: Add system comment BEFORE refreshing (prevents race conditions)
+      console.log('💬 Step 6: Adding system comment...');
       try {
         const commentData = {
           booking_id: bookingId,
@@ -257,12 +301,16 @@ const BookingRequests = () => {
         // Don't fail the whole operation for comment errors
       }
 
-      // STEP 6: Refresh the bookings list (MOVED TO END to avoid race conditions)
-      console.log('🔄 Step 6: Refreshing bookings list...');
+      // STEP 7: Wait a moment, then refresh (prevents immediate conflicts)
+      console.log('⏳ Step 7: Waiting before refresh to prevent conflicts...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // STEP 8: Refresh the bookings list (moved to end to avoid race conditions)
+      console.log('🔄 Step 8: Refreshing bookings list...');
       await fetchBookingRequests();
       console.log('✅ Bookings list refreshed');
 
-      console.log('🎉 FIXED booking update completed successfully!');
+      console.log('🎉 FINAL FIXED booking update completed successfully!');
       
       // Success message
       alert(`✅ Booking ${newStatus.toLowerCase()} successfully!\n\nThe job should now appear in your "Booked Jobs" section.`);
@@ -275,6 +323,8 @@ const BookingRequests = () => {
       console.error('Full error object:', error);
       
       alert(`CRITICAL ERROR in booking update:\n\nError: ${error.message}\n\nPlease screenshot this error and refresh the page.`);
+    } finally {
+      isUpdating.current = false;
     }
   };
 
@@ -284,7 +334,6 @@ const BookingRequests = () => {
       const updateData = {
         custom_quote: customQuote,
         has_custom_quote: true,
-        // Keep status as 'Quote Requested' so job stays on this page
         status: 'Quote Requested'
       };
 
@@ -352,7 +401,6 @@ const BookingRequests = () => {
         customer_counter_quote: null,
         has_customer_counter: false,
         quote_reasoning: null,
-        // Keep status as 'Quote Requested' so job stays for negotiation
         status: 'Quote Requested'
       });
       
@@ -386,10 +434,8 @@ const BookingRequests = () => {
         customer_counter_quote: counterQuote,
         has_customer_counter: true,
         customer_reasoning: reasoning,
-        // Clear tradesman quote since customer is countering
         has_custom_quote: false,
         custom_quote: null,
-        // Keep status as 'Quote Requested' so job stays for negotiation
         status: 'Quote Requested'
       });
       
@@ -453,7 +499,6 @@ const BookingRequests = () => {
         customer_counter_quote: null,
         has_customer_counter: false,
         customer_reasoning: null,
-        // Keep status as 'Quote Requested' so job stays for negotiation
         status: 'Quote Requested'
       });
       
@@ -686,8 +731,9 @@ const BookingRequests = () => {
                             <button
                               onClick={() => updateBookingStatus(request.id, 'Accepted')}
                               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                              disabled={isUpdating.current}
                             >
-                              Accept (£{request.tradesman_hourly_rate || 'Standard Rate'}/hour)
+                              {isUpdating.current ? 'Updating...' : `Accept (£${request.tradesman_hourly_rate || 'Standard Rate'}/hour)`}
                             </button>
                             
                             <button
@@ -698,6 +744,7 @@ const BookingRequests = () => {
                                 }
                               }}
                               className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                              disabled={isUpdating.current}
                             >
                               Custom Quote
                             </button>
@@ -709,6 +756,7 @@ const BookingRequests = () => {
                                 }
                               }}
                               className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                              disabled={isUpdating.current}
                             >
                               Reject
                             </button>
