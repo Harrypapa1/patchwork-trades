@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import TradesmanRegister from './pages/TradesmanRegister';
 import CustomerRegister from './pages/CustomerRegister';
 import TradesmanDashboard from './pages/TradesmanDashboard';
+import TradesmanPublicProfile from './pages/TradesmanPublicProfile';
 import CustomerDashboard from './pages/CustomerDashboard';
 import BrowseTradesmen from './pages/BrowseTradesmen';
 import BookingConfirmation from './pages/BookingConfirmation';
@@ -38,6 +39,7 @@ function App() {
               <Route path="/register-tradesman" element={<TradesmanRegister />} />
               <Route path="/register-customer" element={<CustomerRegister />} />
               <Route path="/browse" element={<BrowseTradesmen />} />
+              <Route path="/tradesman/:tradesmanId" element={<TradesmanPublicProfile />} />
               
               {/* Legal & Information Pages - Public Access */}
               <Route path="/terms" element={<TermsOfService />} />
