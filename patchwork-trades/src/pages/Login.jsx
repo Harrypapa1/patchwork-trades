@@ -42,24 +42,38 @@ const Login = () => {
 
       // Check if there's a specific place to redirect to
       if (returnTo) {
-        console.log('Redirecting to:', returnTo);
-        navigate(returnTo);
-        return;
+        console.log('Storing redirect in localStorage:', returnTo);
+        localStorage.setItem('pendingRedirect', returnTo);
       }
 
-      console.log('No returnTo, checking user type for normal redirect');
+      console.log('Proceeding with normal login flow');
+
+      console.log('Proceeding with normal login flow');
 
       // Otherwise, check user type and redirect to appropriate dashboard
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         if (userData.user_type === 'customer') {
+          
+          // Check for stored redirect for customers
+          const storedRedirect = localStorage.getItem('pendingRedirect');
+          if (storedRedirect) {
+            console.log('Customer login - using stored redirect:', storedRedirect);
+            localStorage.removeItem('pendingRedirect');
+            navigate(storedRedirect);
+            return;
+          }
+          
+          console.log('Customer login - normal dashboard');
           navigate('/customer-dashboard');
         }
       } else {
         // Check if user is a tradesman
         const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', userCredential.user.uid));
         if (tradesmanDoc.exists()) {
+          // Clear any stored redirect for tradesmen
+          localStorage.removeItem('pendingRedirect');
           navigate('/tradesman-dashboard');
         } else {
           setError('User profile not found');
