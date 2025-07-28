@@ -42,9 +42,12 @@ const Login = () => {
 
       // Check if there's a specific place to redirect to
       if (returnTo) {
+        console.log('Redirecting to:', returnTo);
         navigate(returnTo);
         return;
       }
+
+      console.log('No returnTo, checking user type for normal redirect');
 
       // Otherwise, check user type and redirect to appropriate dashboard
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
