@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Home = () => {
   const [authLoaded, setAuthLoaded] = useState(false);
   const [userState, setUserState] = useState({ currentUser: null, userType: null });
+  const location = useLocation();
+  
+  // Get redirect message from navigation state
+  const redirectMessage = location.state?.message;
+  const showRegister = location.state?.showRegister;
 
   // Load auth state asynchronously - don't block page render
   useEffect(() => {
@@ -52,6 +57,16 @@ const Home = () => {
       {/* Hero Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center">
+          {/* Show redirect message if it exists */}
+          {redirectMessage && (
+            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-6 max-w-2xl mx-auto">
+              <div className="flex items-center">
+                <span className="text-blue-500 mr-2">ℹ️</span>
+                {redirectMessage}
+              </div>
+            </div>
+          )}
+
           {/* Optimized Logo - Smaller and faster */}
           <div className="mb-8">
             <img 
