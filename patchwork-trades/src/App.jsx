@@ -74,7 +74,7 @@ function App() {
               />
               
               <Route
-                path="/booking-request"
+                path="/booking-request/:tradesmanId?"
                 element={
                   <ProtectedRoute userType="customer">
                     <BookingRequest />
