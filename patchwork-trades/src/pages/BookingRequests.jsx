@@ -198,6 +198,16 @@ const BookingRequests = () => {
 
       console.log('📝 Complete updated data prepared:', completeUpdatedData);
 
+      // DEBUG: Check permission matching before saving
+      console.log('🔍 PERMISSION DEBUG:', {
+        currentUserId: currentUser.uid,
+        bookingTradesmanId: currentBookingData.tradesman_id,
+        bookingCustomerId: currentBookingData.customer_id,
+        userType: userType,
+        tradesmanMatch: currentUser.uid === currentBookingData.tradesman_id,
+        customerMatch: currentUser.uid === currentBookingData.customer_id
+      });
+
       // STEP 3: Use setDoc instead of updateDoc (more reliable)
       console.log('💾 Step 3: Saving complete booking data with setDoc...');
       await setDoc(bookingRef, completeUpdatedData);
