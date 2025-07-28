@@ -156,6 +156,8 @@ const BookingRequests = () => {
   };
 
   const updateBookingStatus = async (bookingId, newStatus, customQuote = null) => {
+    console.log('🔄 Starting booking update:', { bookingId, newStatus, customQuote }); // Debug log
+    
     try {
       const updateData = { status: newStatus };
       if (customQuote) {
@@ -163,14 +165,21 @@ const BookingRequests = () => {
         updateData.has_custom_quote = true;
       }
 
+      console.log('📝 Update data:', updateData); // Debug log
+
+      // Update the booking
       await updateDoc(doc(db, 'bookings', bookingId), updateData);
       
-      // Refresh the list
-      fetchBookingRequests();
+      console.log('✅ Booking updated successfully in Firebase'); // Debug log
+      
+      // Refresh the list immediately
+      await fetchBookingRequests();
+      
+      console.log('🔄 Booking requests refreshed'); // Debug log
       
       // Add system comment
       try {
-        await addDoc(collection(db, 'booking_comments'), {
+        const commentData = {
           booking_id: bookingId,
           user_id: currentUser.uid,
           user_type: 'system',
@@ -179,14 +188,28 @@ const BookingRequests = () => {
             `Custom quote proposed: ${customQuote}` : 
             `Booking ${newStatus.toLowerCase()}`,
           timestamp: new Date().toISOString()
-        });
+        };
+
+        console.log('💬 Adding system comment:', commentData); // Debug log
+        
+        await addDoc(collection(db, 'booking_comments'), commentData);
+        
+        console.log('✅ System comment added successfully'); // Debug log
+        
       } catch (commentError) {
-        console.log('Could not add system comment (collection may not exist yet):', commentError);
+        console.error('❌ Error adding system comment:', commentError);
+        // Don't fail the whole operation for comment errors
       }
 
+      console.log('🎉 Booking acceptance completed successfully!'); // Debug log
+      
+      // Show success message
+      alert(`Booking ${newStatus.toLowerCase()} successfully! Check your "Booked Jobs" page.`);
+
     } catch (error) {
-      console.error('Error updating booking status:', error);
-      alert('Error updating booking. Please try again.');
+      console.error('❌ Error updating booking status:', error);
+      console.error('Error details:', error.message); // More detailed error
+      alert(`Error updating booking: ${error.message}. Please try again.`);
     }
   };
 
