@@ -43,7 +43,27 @@ const Navbar = () => {
     }
   }, [isMenuOpen]);
 
+  // 🚨 TEMPORARILY DISABLED TO FIX BOOKING DELETION BUG
+  // This listener was causing race conditions with BookingRequests updates
   // Listen for booking requests with error handling
+  useEffect(() => {
+    console.log('🚨 NAVBAR LISTENER TEMPORARILY DISABLED - Fixing booking deletion bug');
+    
+    // Set static count to 0 for now
+    setBookingRequestsCount(0);
+    
+    // TODO: Re-enable after fixing race condition
+    // The original listener code is causing triple listener conflicts
+    // when tradesmen click "Accept" - bookings get deleted instead of updated
+    
+    return () => {
+      console.log('Navbar cleanup - listener was disabled anyway');
+    };
+  }, [currentUser, userType]);
+
+  /* 
+  // ORIGINAL LISTENER CODE - DISABLED TEMPORARILY
+  // RE-ENABLE AFTER RACE CONDITION FIX
   useEffect(() => {
     if (!currentUser) {
       setBookingRequestsCount(0);
@@ -53,14 +73,12 @@ const Navbar = () => {
     try {
       let bookingQuery;
       if (userType === 'customer') {
-        // Customers see their own requests (Quote Requested only)
         bookingQuery = query(
           collection(db, 'bookings'),
           where('customer_id', '==', currentUser.uid),
           where('status', '==', 'Quote Requested')
         );
       } else if (userType === 'tradesman') {
-        // Tradesmen see requests for them (Quote Requested only)
         bookingQuery = query(
           collection(db, 'bookings'),
           where('tradesman_id', '==', currentUser.uid),
@@ -87,6 +105,7 @@ const Navbar = () => {
       setBookingRequestsCount(0);
     }
   }, [currentUser, userType]);
+  */
 
   // Handle logout function
   const handleLogout = async () => {
@@ -144,16 +163,13 @@ const Navbar = () => {
                     </Link>
                   )}
                   
-                  {/* Booking Requests - Both user types */}
+                  {/* Booking Requests - Both user types - COUNTER DISABLED */}
                   <Link 
                     to="/booking-requests" 
-                    className={`relative transition-colors ${
-                      bookingRequestsCount > 0 
-                        ? 'text-yellow-300 hover:text-yellow-200 font-semibold' 
-                        : 'hover:text-blue-200'
-                    }`}
+                    className="hover:text-blue-200 transition-colors"
                   >
                     Booking Requests
+                    {/* Counter temporarily disabled due to listener conflict */}
                     {bookingRequestsCount > 0 && (
                       <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                         {bookingRequestsCount}
@@ -243,15 +259,14 @@ const Navbar = () => {
                   </Link>
                 )}
                 
-                {/* Booking Requests - Clean professional style */}
+                {/* Booking Requests - Clean professional style - COUNTER DISABLED */}
                 <Link 
                   to="/booking-requests" 
-                  className={`block px-4 py-3 text-white hover:bg-blue-600 transition-colors relative ${
-                    bookingRequestsCount > 0 ? 'font-bold bg-blue-600' : 'font-medium'
-                  }`}
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
                   Booking Requests
+                  {/* Counter temporarily disabled due to listener conflict */}
                   {bookingRequestsCount > 0 && (
                     <span className="absolute top-2 right-3 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
                       {bookingRequestsCount}
