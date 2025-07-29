@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   collection, 
@@ -382,10 +383,10 @@ const JobCard = React.memo(({
                         </span>
                       )}
                       <button 
-                        onClick={() => onHireAgain(job.tradesman_id)}
+                        onClick={() => onHireAgain(job)}
                         className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
                       >
-                        Hire Again
+                        🔄 Hire Again
                       </button>
                     </>
                   )}
@@ -531,6 +532,7 @@ const JobCard = React.memo(({
 // 🚀 NEW ACTIVE JOBS COMPONENT - Connected to active_jobs collection
 const ActiveJobs = () => {
   const { currentUser, userType } = useAuth();
+  const navigate = useNavigate();
   const [activeJobs, setActiveJobs] = useState([]); // Renamed from bookedJobs
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState({}); 
@@ -587,12 +589,6 @@ const ActiveJobs = () => {
     });
   }, [comments]);
 
-  // 🆕 NEW: Handle Hire Again functionality
-  const handleHireAgain = useCallback((tradesmanId) => {
-    // Redirect to booking page for this specific tradesman
-    window.location.href = `/booking-request?tradesman=${tradesmanId}`;
-  }, []);
-
   // Helper functions
   const getActiveJobs = () => activeJobs.filter(job => job.status === 'accepted' || job.status === 'in_progress' || job.status === 'pending_approval');
   const getCompletedJobs = () => activeJobs.filter(job => job.status === 'completed');
@@ -618,6 +614,24 @@ const ActiveJobs = () => {
     const priceMatch = priceString.match(/£?(\d+)/);
     return priceMatch ? parseInt(priceMatch[1]) : 200;
   };
+
+  // 🔄 NEW: HIRE AGAIN FUNCTIONALITY
+  const handleHireAgain = useCallback((job) => {
+    // Navigate to booking page with tradesman details and pre-filled job info
+    const searchParams = new URLSearchParams({
+      // Pass tradesman and job details to pre-fill the form
+      tradesmanId: job.tradesman_id,
+      tradesmanName: job.tradesman_name,
+      prefillTitle: job.job_title || '',
+      prefillDescription: job.job_description || '',
+      prefillNotes: job.additional_notes || '',
+      prefillBudget: getFinalPrice(job),
+      source: 'hire_again'
+    });
+    
+    // Navigate to the booking request page with pre-filled data
+    navigate(`/booking-request?${searchParams.toString()}`);
+  }, [navigate]);
 
   // 🎯 CONNECT TO NEW active_jobs COLLECTION
   const fetchActiveJobs = async () => {
