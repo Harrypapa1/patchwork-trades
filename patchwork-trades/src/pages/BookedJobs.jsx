@@ -509,6 +509,27 @@ const BookedJobs = () => {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewingJob, setReviewingJob] = useState(null);
 
+  // EMAIL NOTIFICATION HELPER FUNCTION
+  const sendEmailNotification = async (emailData) => {
+    try {
+      const response = await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData)
+      });
+      
+      if (!response.ok) {
+        console.error('Email notification failed:', response.statusText);
+      } else {
+        console.log('Email notification sent successfully');
+      }
+    } catch (error) {
+      console.error('Error sending email notification:', error);
+    }
+  };
+
   useEffect(() => {
     if (currentUser) {
       fetchBookedJobs();
@@ -689,6 +710,22 @@ const BookedJobs = () => {
 
       await addDoc(collection(db, 'booking_comments'), commentData);
       setNewComments(prev => ({ ...prev, [jobId]: '' }));
+
+      // EMAIL NOTIFICATION FOR NEW COMMENT
+      if (job) {
+        const recipientIsCustomer = userType === 'tradesman';
+        const recipientEmail = recipientIsCustomer ? job.customer_email : job.tradesman_email;
+        const recipientName = recipientIsCustomer ? job.customerName : job.tradesmanName;
+        const senderName = recipientIsCustomer ? job.tradesmanName : job.customerName;
+
+        await sendEmailNotification({
+          recipientEmail: recipientEmail,
+          recipientName: recipientName,
+          senderName: senderName,
+          messageText: `New comment on your job "${job.job_title}": ${commentText}`,
+          replyLink: `https://patchworktrades.com/booked-jobs`
+        });
+      }
       
     } catch (error) {
       console.error('Error submitting comment:', error);
@@ -725,13 +762,43 @@ const BookedJobs = () => {
         comment: statusMessage,
         timestamp: new Date().toISOString()
       });
+
+      // EMAIL NOTIFICATIONS FOR STATUS CHANGES
+      const job = bookedJobs.find(j => j.id === jobId);
+      if (job) {
+        if (newStatus === 'In Progress') {
+          await sendEmailNotification({
+            recipientEmail: job.customer_email,
+            recipientName: job.customerName,
+            senderName: job.tradesmanName,
+            messageText: `${job.tradesmanName} has started work on your job "${job.job_title}".`,
+            replyLink: `https://patchworktrades.com/booked-jobs`
+          });
+        } else if (newStatus === 'Pending Customer Approval') {
+          await sendEmailNotification({
+            recipientEmail: job.customer_email,
+            recipientName: job.customerName,
+            senderName: job.tradesmanName,
+            messageText: `${job.tradesmanName} has completed your job "${job.job_title}" and is requesting your approval. Please review the work.`,
+            replyLink: `https://patchworktrades.com/booked-jobs`
+          });
+        } else if (newStatus === 'Completed') {
+          await sendEmailNotification({
+            recipientEmail: job.tradesman_email,
+            recipientName: job.tradesmanName,
+            senderName: job.customerName,
+            messageText: `Congratulations! ${job.customerName} has approved and marked your job "${job.job_title}" as completed.`,
+            replyLink: `https://patchworktrades.com/booked-jobs`
+          });
+        }
+      }
       
       fetchBookedJobs();
     } catch (error) {
       console.error('Error updating job status:', error);
       alert('Error updating job status. Please try again.');
     }
-  }, [currentUser.uid]);
+  }, [currentUser.uid, bookedJobs]);
 
   const handleCancelJob = useCallback(async (jobId) => {
     try {
@@ -808,6 +875,27 @@ Are you sure you want to cancel?`;
         timestamp: new Date().toISOString()
       });
 
+      // EMAIL NOTIFICATIONS FOR JOB CANCELLATION
+      const recipientIsCustomer = userType === 'tradesman';
+      const recipientEmail = recipientIsCustomer ? job.customer_email : job.tradesman_email;
+      const recipientName = recipientIsCustomer ? job.customerName : job.tradesmanName;
+      const senderName = recipientIsCustomer ? job.tradesmanName : job.customerName;
+
+      let emailMessage;
+      if (userType === 'customer') {
+        emailMessage = `Your job "${job.job_title}" has been cancelled by ${job.customerName}. Cancellation fee: ${cancellationPercentage}% (£${cancellationFee}).`;
+      } else {
+        emailMessage = `Unfortunately, ${job.tradesmanName} has cancelled your job "${job.job_title}". You will receive a full refund.`;
+      }
+
+      await sendEmailNotification({
+        recipientEmail: recipientEmail,
+        recipientName: recipientName,
+        senderName: senderName,
+        messageText: emailMessage,
+        replyLink: `https://patchworktrades.com/booked-jobs`
+      });
+
       fetchBookedJobs();
       
     } catch (error) {
@@ -874,6 +962,18 @@ Are you sure you want to cancel?`;
         comment: `Customer left a ${reviewData.rating}-star review: "${reviewData.comment}"`,
         timestamp: new Date().toISOString()
       });
+
+      // EMAIL NOTIFICATION FOR REVIEW SUBMISSION
+      const job = bookedJobs.find(j => j.id === reviewData.jobId);
+      if (job) {
+        await sendEmailNotification({
+          recipientEmail: job.tradesman_email,
+          recipientName: job.tradesmanName,
+          senderName: job.customerName,
+          messageText: `Great news! ${job.customerName} has left you a ${reviewData.rating}-star review for "${job.job_title}": "${reviewData.comment}"`,
+          replyLink: `https://patchworktrades.com/tradesman-dashboard`
+        });
+      }
 
       // Refresh jobs to show review status
       fetchBookedJobs();
