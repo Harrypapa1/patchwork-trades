@@ -27,6 +27,7 @@ const BookingRequest = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   // Time slot definitions
   const TIME_SLOTS = {
@@ -133,6 +134,130 @@ const BookingRequest = () => {
     } catch (error) {
       console.error('Error fetching customer profile:', error);
     }
+  };
+
+  // Calendar helper functions
+  const getDaysInMonth = (date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (date) => {
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+    return firstDay === 0 ? 6 : firstDay - 1; // Make Monday = 0
+  };
+
+  const formatDateString = (year, month, day) => {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+  const isDateInPast = (year, month, day) => {
+    const today = new Date();
+    const checkDate = new Date(year, month, day);
+    return checkDate < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  };
+
+  const navigateMonth = (direction) => {
+    setCurrentDate(prev => {
+      const newDate = new Date(prev);
+      newDate.setMonth(prev.getMonth() + direction);
+      return newDate;
+    });
+  };
+
+  const renderTimeSlots = (dateStr, isPast) => {
+    // Find available slots for this date
+    const slotsForDate = availableTimeSlots.filter(slot => slot.date === dateStr);
+    
+    return (
+      <div className="space-y-1 mt-1">
+        {Object.keys(TIME_SLOTS).map(slotId => {
+          const availableSlot = slotsForDate.find(slot => slot.slot_id === slotId);
+          const slotInfo = TIME_SLOTS[slotId];
+          const isSelected = formData.selectedTimeSlot === availableSlot?.id;
+          
+          let className = "w-full text-xs py-1 px-1 rounded transition-colors cursor-pointer ";
+          
+          if (isPast) {
+            className += "bg-gray-100 text-gray-400 cursor-not-allowed";
+          } else if (availableSlot) {
+            if (isSelected) {
+              className += "bg-blue-100 text-blue-800 border border-blue-300";
+            } else {
+              className += "bg-green-100 text-green-800 hover:bg-green-200 border border-green-300";
+            }
+          } else {
+            className += "bg-white text-gray-400 border border-gray-200 cursor-not-allowed";
+          }
+
+          return (
+            <button
+              key={slotId}
+              type="button"
+              className={className}
+              onClick={() => {
+                if (isPast || !availableSlot) return;
+                handleTimeSlotSelection(availableSlot.id);
+              }}
+              disabled={isPast || !availableSlot}
+            >
+              <div className="font-medium">{slotInfo.time}</div>
+              {availableSlot && !isPast && (
+                <div className="text-xs">
+                  {isSelected ? 'Selected' : 'Available'}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderBookingCalendar = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(currentDate);
+    const firstDay = getFirstDayOfMonth(currentDate);
+    
+    const days = [];
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    // Day headers
+    dayNames.forEach(day => {
+      days.push(
+        <div key={day} className="p-2 text-center font-semibold text-gray-600 text-sm">
+          {day}
+        </div>
+      );
+    });
+
+    // Empty cells for days before the first day of the month
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="p-2"></div>);
+    }
+
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateString(year, month, day);
+      const isPast = isDateInPast(year, month, day);
+      
+      let className = "p-2 border-2 rounded-lg transition-colors min-h-[120px] ";
+      
+      if (isPast) {
+        className += "bg-gray-50 border-gray-200";
+      } else {
+        className += "bg-white border-gray-200";
+      }
+
+      days.push(
+        <div key={day} className={className}>
+          <div className="font-medium text-center mb-2">{day}</div>
+          {renderTimeSlots(dateStr, isPast)}
+        </div>
+      );
+    }
+
+    return days;
   };
 
   const handleInputChange = (e) => {
