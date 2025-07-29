@@ -17,6 +17,7 @@ import BookingRequest from './pages/BookingRequest';
 // 🆕 NEW IMPORTS - Bulletproof Architecture
 import QuoteRequests from './pages/QuoteRequests';
 import ActiveJobs from './pages/ActiveJobs';
+import MakeMoreMoney from './pages/MakeMoreMoney'; // 🆕 NEW IMPORT
 import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
@@ -61,6 +62,16 @@ function App() {
                 element={
                   <ProtectedRoute userType="tradesman">
                     <ManageAvailability />
+                  </ProtectedRoute>
+                }
+              />
+              
+              {/* 🆕 NEW ROUTE: Make More Money - Tradesman Only */}
+              <Route
+                path="/make-more-money"
+                element={
+                  <ProtectedRoute userType="tradesman">
+                    <MakeMoreMoney />
                   </ProtectedRoute>
                 }
               />
