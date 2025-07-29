@@ -14,6 +14,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
+// 🔒 GLOBAL MUTEX TO PREVENT RACE CONDITIONS ACROSS ALL COMPONENTS
+window.patchworkBookingMutex = window.patchworkBookingMutex || {
+  isLocked: false,
+  lockId: null,
+  queue: []
+};
+
 const BookingRequests = () => {
   const { currentUser, userType } = useAuth();
   const navigate = useNavigate();
@@ -22,9 +29,47 @@ const BookingRequests = () => {
   const [newComments, setNewComments] = useState({});
   const [loading, setLoading] = useState(true);
   
-  // Refs to track active listeners and prevent memory leaks
+  // Enhanced refs for race condition protection
   const activeListeners = useRef({});
   const isUpdating = useRef(false);
+  const componentId = useRef(`booking-requests-${Date.now()}-${Math.random()}`);
+
+  // 🔒 GLOBAL MUTEX FUNCTIONS
+  const acquireGlobalLock = async (operationName) => {
+    const lockId = `${componentId.current}-${operationName}-${Date.now()}`;
+    
+    console.log(`🔒 [${lockId}] Attempting to acquire global lock for: ${operationName}`);
+    
+    // Wait for existing lock to release (max 10 seconds)
+    let attempts = 0;
+    while (window.patchworkBookingMutex.isLocked && attempts < 100) {
+      console.log(`🔒 [${lockId}] Waiting for lock... (attempt ${attempts + 1})`);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+    
+    if (window.patchworkBookingMutex.isLocked) {
+      console.error(`🔒 [${lockId}] TIMEOUT: Could not acquire lock after 10 seconds`);
+      throw new Error('System busy - please try again in a moment');
+    }
+    
+    // Acquire lock
+    window.patchworkBookingMutex.isLocked = true;
+    window.patchworkBookingMutex.lockId = lockId;
+    
+    console.log(`🔒 [${lockId}] Global lock ACQUIRED for: ${operationName}`);
+    return lockId;
+  };
+
+  const releaseGlobalLock = (lockId, operationName) => {
+    if (window.patchworkBookingMutex.lockId === lockId) {
+      window.patchworkBookingMutex.isLocked = false;
+      window.patchworkBookingMutex.lockId = null;
+      console.log(`🔒 [${lockId}] Global lock RELEASED for: ${operationName}`);
+    } else {
+      console.warn(`🔒 [${lockId}] Lock mismatch - could not release for: ${operationName}`);
+    }
+  };
 
   // EMAIL NOTIFICATION HELPER FUNCTION
   const sendEmailNotification = async (emailData) => {
@@ -52,14 +97,24 @@ const BookingRequests = () => {
       fetchBookingRequests();
     }
     
-    // Cleanup all listeners on unmount
+    // Enhanced cleanup with global mutex awareness
     return () => {
+      console.log(`🧹 [${componentId.current}] Cleaning up component...`);
+      
+      // Clean up all listeners
       Object.values(activeListeners.current).forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
           unsubscribe();
         }
       });
       activeListeners.current = {};
+      
+      // Release any held locks
+      if (window.patchworkBookingMutex.lockId?.startsWith(componentId.current)) {
+        console.log(`🔒 [${componentId.current}] Emergency lock release during cleanup`);
+        window.patchworkBookingMutex.isLocked = false;
+        window.patchworkBookingMutex.lockId = null;
+      }
     };
   }, [currentUser, userType]);
 
@@ -68,14 +123,12 @@ const BookingRequests = () => {
       let bookingsQuery;
       
       if (userType === 'customer') {
-        // Customers see their own requests
         bookingsQuery = query(
           collection(db, 'bookings'),
           where('customer_id', '==', currentUser.uid),
           where('status', '==', 'Quote Requested')
         );
       } else {
-        // Tradesmen see requests for them
         bookingsQuery = query(
           collection(db, 'bookings'),
           where('tradesman_id', '==', currentUser.uid),
@@ -219,41 +272,49 @@ const BookingRequests = () => {
     }
   };
 
+  // 🔒 ENHANCED BOOKING UPDATE WITH GLOBAL MUTEX PROTECTION
   const updateBookingStatus = async (bookingId, newStatus, customQuote = null) => {
-    console.log('🚀 FINAL FIXED booking update starting...', { bookingId, newStatus, customQuote });
+    const operationName = `updateBookingStatus-${newStatus}`;
+    let lockId = null;
     
-    // Prevent multiple simultaneous updates (race condition protection)
-    if (isUpdating.current) {
-      console.log('⏳ Update already in progress, skipping...');
-      alert('Please wait - another update is in progress.');
-      return;
-    }
-
-    // STOP EVERYTHING if inputs are invalid
+    console.log(`🚀 [ENHANCED] Starting booking update: ${operationName}`, { bookingId, newStatus, customQuote });
+    
+    // Early validation
     if (!bookingId || !newStatus) {
       console.error('❌ INVALID INPUTS:', { bookingId, newStatus });
       alert('Error: Invalid booking data. Please refresh the page.');
       return;
     }
 
+    // Local mutex check
+    if (isUpdating.current) {
+      console.log('⏳ Local update already in progress, skipping...');
+      alert('Please wait - another update is in progress.');
+      return;
+    }
+
     isUpdating.current = true;
 
     try {
-      // STEP 1: Verify booking exists first
-      console.log('🔍 Step 1: Verifying booking exists...');
+      // 🔒 ACQUIRE GLOBAL LOCK
+      lockId = await acquireGlobalLock(operationName);
+      
+      // STEP 1: Verify booking exists
+      console.log(`🔍 [${lockId}] Step 1: Verifying booking exists...`);
       const bookingRef = doc(db, 'bookings', bookingId);
       const bookingSnap = await getDoc(bookingRef);
       
       if (!bookingSnap.exists()) {
-        console.error('❌ CRITICAL: Booking does not exist!', bookingId);
+        console.error(`❌ [${lockId}] CRITICAL: Booking does not exist!`, bookingId);
         alert('Error: Booking not found in database. Please refresh the page.');
         return;
       }
       
-      console.log('✅ Booking exists, proceeding with update...');
+      const currentBookingData = bookingSnap.data();
+      console.log(`✅ [${lockId}] Booking exists, current status: ${currentBookingData.status}`);
       
-      // STEP 2: Temporarily clean up listeners to prevent race conditions
-      console.log('🔄 Step 2: Temporarily cleaning up listeners...');
+      // STEP 2: Disable ALL listeners globally during update
+      console.log(`🔄 [${lockId}] Step 2: Disabling all listeners...`);
       const listenersBackup = { ...activeListeners.current };
       Object.values(activeListeners.current).forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
@@ -262,51 +323,39 @@ const BookingRequests = () => {
       });
       activeListeners.current = {};
       
-      // STEP 3: Create minimal update data (ONLY what needs to change)
+      // STEP 3: Create atomic update data
       const updateData = {
         status: newStatus,
         updated_at: new Date().toISOString()
       };
       
-      // Add custom quote if provided
       if (customQuote) {
         updateData.custom_quote = customQuote;
         updateData.has_custom_quote = true;
       }
 
-      console.log('📝 Update data prepared:', updateData);
+      console.log(`📝 [${lockId}] Update data prepared:`, updateData);
 
-      // DEBUG: Check permission matching before saving
-      const currentBookingData = bookingSnap.data();
-      console.log('🔍 PERMISSION DEBUG:', {
-        currentUserId: currentUser.uid,
-        bookingTradesmanId: currentBookingData.tradesman_id,
-        bookingCustomerId: currentBookingData.customer_id,
-        userType: userType,
-        tradesmanMatch: currentUser.uid === currentBookingData.tradesman_id,
-        customerMatch: currentUser.uid === currentBookingData.customer_id
-      });
-
-      // STEP 4: Use updateDoc (SAFE - only updates specified fields)
-      console.log('💾 Step 4: Updating booking with updateDoc...');
+      // STEP 4: Atomic update operation
+      console.log(`💾 [${lockId}] Step 4: Performing atomic update...`);
       await updateDoc(bookingRef, updateData);
-      console.log('✅ Booking updated successfully with updateDoc');
+      console.log(`✅ [${lockId}] Atomic update completed successfully`);
       
-      // STEP 5: Verify the update worked by reading it back
-      console.log('🔍 Step 5: Verifying the update worked...');
+      // STEP 5: Verify update worked
+      console.log(`🔍 [${lockId}] Step 5: Verifying update...`);
       const verificationSnap = await getDoc(bookingRef);
       
       if (!verificationSnap.exists()) {
-        console.error('❌ CRITICAL: Booking disappeared after update!');
+        console.error(`❌ [${lockId}] CRITICAL: Booking disappeared after update!`);
         alert('CRITICAL ERROR: Booking was lost during update. Screenshot this error and contact support.');
         return;
       }
       
       const verifiedData = verificationSnap.data();
-      console.log('✅ Verification successful. Updated booking data:', verifiedData);
+      console.log(`✅ [${lockId}] Verification successful. New status: ${verifiedData.status}`);
       
       if (verifiedData.status !== newStatus) {
-        console.error('❌ CRITICAL: Status was not updated correctly!', {
+        console.error(`❌ [${lockId}] CRITICAL: Status not updated correctly!`, {
           expected: newStatus,
           actual: verifiedData.status
         });
@@ -314,10 +363,8 @@ const BookingRequests = () => {
         return;
       }
       
-      console.log('✅ Status verification successful!');
-      
-      // STEP 6: Add system comment BEFORE refreshing (prevents race conditions)
-      console.log('💬 Step 6: Adding system comment...');
+      // STEP 6: Add system comment
+      console.log(`💬 [${lockId}] Step 6: Adding system comment...`);
       try {
         const commentData = {
           booking_id: bookingId,
@@ -330,66 +377,80 @@ const BookingRequests = () => {
           timestamp: new Date().toISOString()
         };
 
-        console.log('💬 System comment data:', commentData);
         await addDoc(collection(db, 'booking_comments'), commentData);
-        console.log('✅ System comment added successfully');
+        console.log(`✅ [${lockId}] System comment added successfully`);
         
       } catch (commentError) {
-        console.error('⚠️ Error adding system comment (non-critical):', commentError);
-        // Don't fail the whole operation for comment errors
+        console.error(`⚠️ [${lockId}] Error adding system comment (non-critical):`, commentError);
       }
 
-      // EMAIL NOTIFICATION FOR JOB ACCEPTANCE
+      // STEP 7: Send email notifications
       if (newStatus === 'Accepted') {
-        const booking = currentBookingData;
+        console.log(`📧 [${lockId}] Sending acceptance emails...`);
         
-        // Email both customer and tradesman
-        await sendEmailNotification({
-          recipientEmail: booking.customer_email,
-          recipientName: booking.customer_name,
-          senderName: booking.tradesman_name,
-          messageText: `Great news! ${booking.tradesman_name} has accepted your job "${booking.job_title}". The job will now move to your Booked Jobs section.`,
-          replyLink: `https://patchworktrades.com/booked-jobs`
-        });
+        try {
+          // Email both customer and tradesman
+          await sendEmailNotification({
+            recipientEmail: currentBookingData.customer_email,
+            recipientName: currentBookingData.customer_name,
+            senderName: currentBookingData.tradesman_name,
+            messageText: `Great news! ${currentBookingData.tradesman_name} has accepted your job "${currentBookingData.job_title}". The job will now move to your Booked Jobs section.`,
+            replyLink: `https://patchworktrades.com/booked-jobs`
+          });
 
-        await sendEmailNotification({
-          recipientEmail: booking.tradesman_email,
-          recipientName: booking.tradesman_name,
-          senderName: booking.customer_name,
-          messageText: `You have successfully accepted the job "${booking.job_title}" from ${booking.customer_name}. The job has moved to your Booked Jobs section.`,
-          replyLink: `https://patchworktrades.com/booked-jobs`
-        });
+          await sendEmailNotification({
+            recipientEmail: currentBookingData.tradesman_email,
+            recipientName: currentBookingData.tradesman_name,
+            senderName: currentBookingData.customer_name,
+            messageText: `You have successfully accepted the job "${currentBookingData.job_title}" from ${currentBookingData.customer_name}. The job has moved to your Booked Jobs section.`,
+            replyLink: `https://patchworktrades.com/booked-jobs`
+          });
+          
+          console.log(`✅ [${lockId}] Acceptance emails sent successfully`);
+        } catch (emailError) {
+          console.error(`⚠️ [${lockId}] Error sending emails (non-critical):`, emailError);
+        }
       }
 
-      // STEP 7: Wait a moment, then refresh (prevents immediate conflicts)
-      console.log('⏳ Step 7: Waiting before refresh to prevent conflicts...');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // STEP 8: Safe delay before refresh
+      console.log(`⏳ [${lockId}] Step 8: Safe delay before refresh...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // STEP 8: Refresh the bookings list (moved to end to avoid race conditions)
-      console.log('🔄 Step 8: Refreshing bookings list...');
+      // STEP 9: Refresh data
+      console.log(`🔄 [${lockId}] Step 9: Refreshing data...`);
       await fetchBookingRequests();
-      console.log('✅ Bookings list refreshed');
+      console.log(`✅ [${lockId}] Data refreshed successfully`);
 
-      console.log('🎉 FINAL FIXED booking update completed successfully!');
+      console.log(`🎉 [${lockId}] ENHANCED booking update completed successfully!`);
       
       // Success message
       alert(`✅ Booking ${newStatus.toLowerCase()} successfully!\n\nThe job should now appear in your "Booked Jobs" section.`);
 
     } catch (error) {
-      console.error('❌ BOOKING UPDATE FAILED:', error);
-      console.error('Error name:', error.name);
-      console.error('Error message:', error.message);
-      console.error('Error code:', error.code);
-      console.error('Full error object:', error);
+      console.error(`❌ [${lockId}] BOOKING UPDATE FAILED:`, error);
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
       
       alert(`CRITICAL ERROR in booking update:\n\nError: ${error.message}\n\nPlease screenshot this error and refresh the page.`);
     } finally {
+      // 🔒 ALWAYS RELEASE GLOBAL LOCK
+      if (lockId) {
+        releaseGlobalLock(lockId, operationName);
+      }
+      
       isUpdating.current = false;
+      console.log(`🔓 [${lockId}] Cleanup completed for: ${operationName}`);
     }
   };
 
-  // NEW: Handle custom quote proposal (keeps status as Quote Requested)
+  // Enhanced helper functions with mutex protection
   const proposeCustomQuote = async (bookingId, customQuote) => {
+    const lockId = await acquireGlobalLock('proposeCustomQuote');
+    
     try {
       const updateData = {
         custom_quote: customQuote,
@@ -398,6 +459,9 @@ const BookingRequests = () => {
       };
 
       await updateDoc(doc(db, 'bookings', bookingId), updateData);
+      
+      // Safe delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Refresh the list
       fetchBookingRequests();
@@ -431,15 +495,21 @@ const BookingRequests = () => {
     } catch (error) {
       console.error('Error proposing custom quote:', error);
       alert('Error proposing custom quote. Please try again.');
+    } finally {
+      releaseGlobalLock(lockId, 'proposeCustomQuote');
     }
   };
 
-  // NEW: Handle customer accepting custom quote
   const acceptCustomQuote = async (bookingId) => {
+    const lockId = await acquireGlobalLock('acceptCustomQuote');
+    
     try {
       await updateDoc(doc(db, 'bookings', bookingId), {
         status: 'Accepted'
       });
+      
+      // Safe delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Refresh the list (job will now move to BookedJobs)
       fetchBookingRequests();
@@ -473,11 +543,14 @@ const BookingRequests = () => {
     } catch (error) {
       console.error('Error accepting custom quote:', error);
       alert('Error accepting custom quote. Please try again.');
+    } finally {
+      releaseGlobalLock(lockId, 'acceptCustomQuote');
     }
   };
 
-  // NEW: Handle customer rejecting custom quote (bounce back to tradesman)
   const rejectCustomQuote = async (bookingId) => {
+    const lockId = await acquireGlobalLock('rejectCustomQuote');
+    
     try {
       await updateDoc(doc(db, 'bookings', bookingId), {
         custom_quote: null,
@@ -487,6 +560,9 @@ const BookingRequests = () => {
         quote_reasoning: null,
         status: 'Quote Requested'
       });
+      
+      // Safe delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Refresh the list
       fetchBookingRequests();
@@ -520,11 +596,14 @@ const BookingRequests = () => {
     } catch (error) {
       console.error('Error rejecting custom quote:', error);
       alert('Error rejecting custom quote. Please try again.');
+    } finally {
+      releaseGlobalLock(lockId, 'rejectCustomQuote');
     }
   };
 
-  // NEW: Handle customer counter-offer
   const proposeCustomerCounter = async (bookingId, counterQuote, reasoning) => {
+    const lockId = await acquireGlobalLock('proposeCustomerCounter');
+    
     try {
       await updateDoc(doc(db, 'bookings', bookingId), {
         customer_counter_quote: counterQuote,
@@ -534,6 +613,9 @@ const BookingRequests = () => {
         custom_quote: null,
         status: 'Quote Requested'
       });
+      
+      // Safe delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Refresh the list
       fetchBookingRequests();
@@ -567,15 +649,21 @@ const BookingRequests = () => {
     } catch (error) {
       console.error('Error proposing counter-offer:', error);
       alert('Error proposing counter-offer. Please try again.');
+    } finally {
+      releaseGlobalLock(lockId, 'proposeCustomerCounter');
     }
   };
 
-  // NEW: Handle tradesman accepting customer counter
   const acceptCustomerCounter = async (bookingId) => {
+    const lockId = await acquireGlobalLock('acceptCustomerCounter');
+    
     try {
       await updateDoc(doc(db, 'bookings', bookingId), {
         status: 'Accepted'
       });
+      
+      // Safe delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Refresh the list (job will now move to BookedJobs)
       fetchBookingRequests();
@@ -609,11 +697,14 @@ const BookingRequests = () => {
     } catch (error) {
       console.error('Error accepting customer counter:', error);
       alert('Error accepting customer counter. Please try again.');
+    } finally {
+      releaseGlobalLock(lockId, 'acceptCustomerCounter');
     }
   };
 
-  // NEW: Handle tradesman rejecting customer counter
   const rejectCustomerCounter = async (bookingId) => {
+    const lockId = await acquireGlobalLock('rejectCustomerCounter');
+    
     try {
       await updateDoc(doc(db, 'bookings', bookingId), {
         customer_counter_quote: null,
@@ -621,6 +712,9 @@ const BookingRequests = () => {
         customer_reasoning: null,
         status: 'Quote Requested'
       });
+      
+      // Safe delay
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Refresh the list
       fetchBookingRequests();
@@ -654,6 +748,8 @@ const BookingRequests = () => {
     } catch (error) {
       console.error('Error rejecting customer counter:', error);
       alert('Error rejecting customer counter. Please try again.');
+    } finally {
+      releaseGlobalLock(lockId, 'rejectCustomerCounter');
     }
   };
 
@@ -699,6 +795,13 @@ const BookingRequests = () => {
             'Track your submitted requests and communicate with tradesmen' : 
             'Review customer requests and provide quotes'}
         </p>
+        
+        {/* Global mutex status indicator for debugging */}
+        {window.patchworkBookingMutex.isLocked && (
+          <div className="mt-2 p-2 bg-yellow-100 border border-yellow-400 rounded text-sm">
+            🔒 System busy - processing booking operation...
+          </div>
+        )}
       </div>
 
       {bookingRequests.length === 0 ? (
@@ -862,10 +965,10 @@ const BookingRequests = () => {
                           <div className="flex gap-3">
                             <button
                               onClick={() => updateBookingStatus(request.id, 'Accepted')}
-                              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                              disabled={isUpdating.current}
+                              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
+                              disabled={isUpdating.current || window.patchworkBookingMutex.isLocked}
                             >
-                              {isUpdating.current ? 'Updating...' : `Accept (£${request.tradesman_hourly_rate || 'Standard Rate'}/hour)`}
+                              {isUpdating.current || window.patchworkBookingMutex.isLocked ? 'Processing...' : `Accept (£${request.tradesman_hourly_rate || 'Standard Rate'}/hour)`}
                             </button>
                             
                             <button
@@ -875,8 +978,8 @@ const BookingRequests = () => {
                                   proposeCustomQuote(request.id, customQuote);
                                 }
                               }}
-                              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                              disabled={isUpdating.current}
+                              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                              disabled={isUpdating.current || window.patchworkBookingMutex.isLocked}
                             >
                               Custom Quote
                             </button>
@@ -887,8 +990,8 @@ const BookingRequests = () => {
                                   updateBookingStatus(request.id, 'Rejected');
                                 }
                               }}
-                              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-                              disabled={isUpdating.current}
+                              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-400"
+                              disabled={isUpdating.current || window.patchworkBookingMutex.isLocked}
                             >
                               Reject
                             </button>
@@ -928,7 +1031,8 @@ const BookingRequests = () => {
                             <div className="flex gap-3">
                               <button
                                 onClick={() => acceptCustomerCounter(request.id)}
-                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
+                                disabled={window.patchworkBookingMutex.isLocked}
                               >
                                 Accept Counter-Offer
                               </button>
@@ -939,7 +1043,8 @@ const BookingRequests = () => {
                                     proposeCustomQuote(request.id, newQuote);
                                   }
                                 }}
-                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                                disabled={window.patchworkBookingMutex.isLocked}
                               >
                                 New Counter-Quote
                               </button>
@@ -949,7 +1054,8 @@ const BookingRequests = () => {
                                     rejectCustomerCounter(request.id);
                                   }
                                 }}
-                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-400"
+                                disabled={window.patchworkBookingMutex.isLocked}
                               >
                                 Reject Counter
                               </button>
@@ -995,7 +1101,8 @@ const BookingRequests = () => {
                             <div className="flex gap-3 flex-wrap">
                               <button
                                 onClick={() => acceptCustomQuote(request.id)}
-                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                                className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
+                                disabled={window.patchworkBookingMutex.isLocked}
                               >
                                 Accept Quote
                               </button>
@@ -1007,7 +1114,8 @@ const BookingRequests = () => {
                                     proposeCustomerCounter(request.id, counterQuote, reasoning);
                                   }
                                 }}
-                                className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                                className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 disabled:bg-gray-400"
+                                disabled={window.patchworkBookingMutex.isLocked}
                               >
                                 Counter-Offer
                               </button>
@@ -1017,7 +1125,8 @@ const BookingRequests = () => {
                                     rejectCustomQuote(request.id);
                                   }
                                 }}
-                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 disabled:bg-gray-400"
+                                disabled={window.patchworkBookingMutex.isLocked}
                               >
                                 Reject Quote
                               </button>
