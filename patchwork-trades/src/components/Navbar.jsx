@@ -16,6 +16,7 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [quoteRequestsCount, setQuoteRequestsCount] = useState(0); // Updated variable name
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
 
   // Check if mobile screen
   useEffect(() => {
@@ -96,7 +97,10 @@ const Navbar = () => {
     }
   };
 
-  const closeMenu = () => setIsMenuOpen(false);
+  const closeMenu = () => {
+    setIsMenuOpen(false);
+    setIsDashboardOpen(false);
+  };
 
   // Prevent menu clicks from bubbling up
   const handleMenuClick = (e) => {
@@ -164,12 +168,7 @@ const Navbar = () => {
                     </Link>
                   )}
 
-                  {/* 🆕 NEW: Make More Money - Tradesman Only */}
-                  {userType === 'tradesman' && (
-                    <Link to="/make-more-money" className="hover:text-blue-200 transition-colors font-medium">
-                      💰 Make More Money
-                    </Link>
-                  )}
+
                   
                   {userType === 'customer' && (
                     <Link to="/customer-dashboard" className="hover:text-blue-200 transition-colors">
@@ -178,9 +177,20 @@ const Navbar = () => {
                   )}
                   
                   {userType === 'tradesman' && (
-                    <Link to="/tradesman-dashboard" className="hover:text-blue-200 transition-colors">
-                      Dashboard
-                    </Link>
+                    <div className="relative group">
+                      <Link to="/tradesman-dashboard" className="hover:text-blue-200 transition-colors flex items-center">
+                        Dashboard
+                        <span className="ml-1 text-xs">▼</span>
+                      </Link>
+                      <div className="absolute top-full left-0 bg-blue-700 rounded-md shadow-lg py-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                        <Link to="/tradesman-dashboard" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
+                          Dashboard Home
+                        </Link>
+                        <Link to="/make-more-money" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
+                          Make More Money
+                        </Link>
+                      </div>
+                    </div>
                   )}
                 </>
               )}
@@ -275,16 +285,7 @@ const Navbar = () => {
                   </Link>
                 )}
 
-                {/* 🆕 NEW: Make More Money - Tradesman Only */}
-                {userType === 'tradesman' && (
-                  <Link 
-                    to="/make-more-money" 
-                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
-                    onClick={closeMenu}
-                  >
-                    💰 Make More Money
-                  </Link>
-                )}
+
                 
                 {userType === 'customer' && (
                   <Link 
@@ -297,13 +298,36 @@ const Navbar = () => {
                 )}
                 
                 {userType === 'tradesman' && (
-                  <Link 
-                    to="/tradesman-dashboard" 
-                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
-                    onClick={closeMenu}
-                  >
-                    Dashboard
-                  </Link>
+                  <div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsDashboardOpen(!isDashboardOpen);
+                      }}
+                      className="block w-full text-left px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium flex items-center justify-between"
+                    >
+                      Dashboard
+                      <span className={`text-xs transition-transform ${isDashboardOpen ? 'rotate-180' : ''}`}>▼</span>
+                    </button>
+                    {isDashboardOpen && (
+                      <div className="bg-blue-800 ml-4">
+                        <Link 
+                          to="/tradesman-dashboard" 
+                          className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
+                          onClick={closeMenu}
+                        >
+                          Dashboard Home
+                        </Link>
+                        <Link 
+                          to="/make-more-money" 
+                          className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
+                          onClick={closeMenu}
+                        >
+                          Make More Money
+                        </Link>
+                      </div>
+                    )}
+                  </div>
                 )}
                 
                 <div className="border-t border-blue-500 mt-1">
