@@ -617,11 +617,9 @@ const ActiveJobs = () => {
 
   // 🔄 NEW: HIRE AGAIN FUNCTIONALITY
   const handleHireAgain = useCallback((job) => {
-    // Navigate to booking page with tradesman details and pre-filled job info
+    // Navigate to booking request page with tradesman ID as path parameter
     const searchParams = new URLSearchParams({
-      // Pass tradesman and job details to pre-fill the form
-      tradesmanId: job.tradesman_id,
-      tradesmanName: job.tradesman_name,
+      // Pass job details to pre-fill the form
       prefillTitle: job.job_title || '',
       prefillDescription: job.job_description || '',
       prefillNotes: job.additional_notes || '',
@@ -629,8 +627,8 @@ const ActiveJobs = () => {
       source: 'hire_again'
     });
     
-    // Navigate to the booking request page with pre-filled data
-    navigate(`/booking-request?${searchParams.toString()}`);
+    // Navigate to the booking request page with tradesman ID in path
+    navigate(`/booking-request/${job.tradesman_id}?${searchParams.toString()}`);
   }, [navigate]);
 
   // 🎯 CONNECT TO NEW active_jobs COLLECTION
