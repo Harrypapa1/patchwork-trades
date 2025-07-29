@@ -14,8 +14,9 @@ import CustomerDashboard from './pages/CustomerDashboard';
 import BrowseTradesmen from './pages/BrowseTradesmen';
 import BookingConfirmation from './pages/BookingConfirmation';
 import BookingRequest from './pages/BookingRequest';
-import BookingRequests from './pages/BookingRequests';
-import BookedJobs from './pages/BookedJobs';
+// 🆕 NEW IMPORTS - Bulletproof Architecture
+import QuoteRequests from './pages/QuoteRequests';
+import ActiveJobs from './pages/ActiveJobs';
 import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
@@ -82,20 +83,21 @@ function App() {
                 }
               />
               
+              {/* 🆕 NEW ROUTES - Bulletproof Architecture */}
               <Route
-                path="/booking-requests"
+                path="/quote-requests"
                 element={
                   <ProtectedRoute>
-                    <BookingRequests />
+                    <QuoteRequests />
                   </ProtectedRoute>
                 }
               />
               
               <Route
-                path="/booked-jobs"
+                path="/active-jobs"
                 element={
                   <ProtectedRoute>
-                    <BookedJobs />
+                    <ActiveJobs />
                   </ProtectedRoute>
                 }
               />
