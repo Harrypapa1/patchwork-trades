@@ -48,9 +48,7 @@ const Login = () => {
 
       console.log('Proceeding with normal login flow');
 
-      console.log('Proceeding with normal login flow');
-
-      // Otherwise, check user type and redirect to appropriate dashboard
+      // Check user type and redirect to appropriate page
       const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
       if (userDoc.exists()) {
         const userData = userDoc.data();
@@ -65,8 +63,9 @@ const Login = () => {
             return;
           }
           
-          console.log('Customer login - normal dashboard');
-          navigate('/customer-dashboard');
+          // UPDATED: Navigate customers to browse page instead of dashboard
+          console.log('Customer login - redirecting to browse page');
+          navigate('/browse');
         }
       } else {
         // Check if user is a tradesman
@@ -74,7 +73,10 @@ const Login = () => {
         if (tradesmanDoc.exists()) {
           // Clear any stored redirect for tradesmen
           localStorage.removeItem('pendingRedirect');
-          navigate('/tradesman-dashboard');
+          
+          // UPDATED: Navigate tradesmen to manage availability page instead of dashboard
+          console.log('Tradesman login - redirecting to manage availability');
+          navigate('/manage-availability');
         } else {
           setError('User profile not found');
         }
