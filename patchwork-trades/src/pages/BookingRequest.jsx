@@ -23,17 +23,24 @@ const BookingRequest = () => {
 
   const [tradesman, setTradesman] = useState(null);
   const [customerProfile, setCustomerProfile] = useState(null);
-  const [availableDates, setAvailableDates] = useState([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
 
-  // Form state
+  // Time slot definitions
+  const TIME_SLOTS = {
+    'morning': { label: 'Morning', time: '9am-1pm', start: '09:00', end: '13:00' },
+    'afternoon': { label: 'Afternoon', time: '1pm-5pm', start: '13:00', end: '17:00' },
+    'evening': { label: 'Evening', time: '5pm-8pm', start: '17:00', end: '20:00' }
+  };
+
+  // Form state - UPDATED for single time slot selection
   const [formData, setFormData] = useState({
     jobTitle: '',
     jobDescription: '',
     urgency: 'normal',
-    preferredDates: [],
+    selectedTimeSlot: '', // CHANGED: single selection instead of array
     budgetExpectation: '',
     additionalNotes: '',
     jobImages: []
@@ -57,31 +64,56 @@ const BookingRequest = () => {
         setTradesman({ id: tradesmanDoc.id, ...tradesmanDoc.data() });
       }
 
-      // Get availability
+      // Get availability - UPDATED for time slots
       const availabilityQuery = query(
         collection(db, 'availability'),
-        where('tradesman_id', '==', tradesmanId),
-        where('is_booked', '==', false)
+        where('tradesman_id', '==', tradesmanId)
       );
       const availabilitySnapshot = await getDocs(availabilityQuery);
-      const allDates = availabilitySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-
-      // Filter out past dates and sort chronologically
+      
+      // Process availability data to extract individual time slots
+      const timeSlots = [];
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Set to start of today
+      today.setHours(0, 0, 0, 0);
       
-      const futureDates = allDates
-        .filter(dateItem => {
-          const availableDate = new Date(dateItem.date_available);
-          availableDate.setHours(0, 0, 0, 0); // Set to start of day for comparison
-          return availableDate >= today; // Only include today and future dates
-        })
-        .sort((a, b) => new Date(a.date_available) - new Date(b.date_available)); // Sort chronologically
+      availabilitySnapshot.docs.forEach(doc => {
+        const availabilityData = doc.data();
+        const date = availabilityData.date;
+        const slots = availabilityData.available_slots || [];
+        
+        // Only include future dates
+        const slotDate = new Date(date);
+        if (slotDate >= today) {
+          slots.forEach(slot => {
+            if (!slot.is_booked) {
+              timeSlots.push({
+                id: `${date}-${slot.slot_id}`,
+                date: date,
+                slot_id: slot.slot_id,
+                start_time: slot.start_time,
+                end_time: slot.end_time,
+                display_date: new Date(date).toLocaleDateString('en-GB', { 
+                  weekday: 'short',
+                  day: 'numeric', 
+                  month: 'short',
+                  year: 'numeric'
+                }),
+                display_time: TIME_SLOTS[slot.slot_id]?.time || `${slot.start_time}-${slot.end_time}`,
+                label: TIME_SLOTS[slot.slot_id]?.label || slot.slot_id
+              });
+            }
+          });
+        }
+      });
+
+      // Sort by date then by time
+      timeSlots.sort((a, b) => {
+        const dateCompare = new Date(a.date) - new Date(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.start_time.localeCompare(b.start_time);
+      });
       
-      setAvailableDates(futureDates);
+      setAvailableTimeSlots(timeSlots);
       
     } catch (error) {
       console.error('Error fetching tradesman details:', error);
@@ -111,12 +143,11 @@ const BookingRequest = () => {
     }));
   };
 
-  const handleDateSelection = (dateId) => {
+  // UPDATED: Handle single time slot selection
+  const handleTimeSlotSelection = (slotId) => {
     setFormData(prev => ({
       ...prev,
-      preferredDates: prev.preferredDates.includes(dateId)
-        ? prev.preferredDates.filter(id => id !== dateId)
-        : [...prev.preferredDates, dateId]
+      selectedTimeSlot: slotId
     }));
   };
 
@@ -224,14 +255,18 @@ const BookingRequest = () => {
       return;
     }
 
-    if (formData.preferredDates.length === 0) {
-      alert('Please select at least one preferred date.');
+    // UPDATED: Check for selected time slot
+    if (!formData.selectedTimeSlot) {
+      alert('Please select a time slot.');
       return;
     }
 
     setSubmitting(true);
 
     try {
+      // Find the selected time slot details
+      const selectedSlot = availableTimeSlots.find(slot => slot.id === formData.selectedTimeSlot);
+      
       // 🆕 NEW: Create quote request instead of booking
       const quoteRequestData = {
         // Customer information
@@ -254,10 +289,18 @@ const BookingRequest = () => {
         additional_notes: formData.additionalNotes,
         urgency: formData.urgency,
         budget_expectation: formData.budgetExpectation,
-        preferred_dates_list: formData.preferredDates.map(dateId => {
-          const date = availableDates.find(d => d.id === dateId);
-          return date ? date.date_available : dateId;
-        }),
+        
+        // UPDATED: Save selected time slot details instead of preferred dates
+        selected_time_slot: {
+          id: selectedSlot.id,
+          date: selectedSlot.date,
+          slot_id: selectedSlot.slot_id,
+          start_time: selectedSlot.start_time,
+          end_time: selectedSlot.end_time,
+          display_date: selectedSlot.display_date,
+          display_time: selectedSlot.display_time,
+          label: selectedSlot.label
+        },
         
         // Quote status
         status: 'pending',
@@ -298,14 +341,7 @@ ${formData.additionalNotes ? `Additional Notes: ${formData.additionalNotes}` : '
 
 Urgency: ${formData.urgency}
 
-I'm available on these dates: ${formData.preferredDates.map(dateId => {
-          const date = availableDates.find(d => d.id === dateId);
-          return date ? new Date(date.date_available).toLocaleDateString('en-GB', { 
-            day: 'numeric', 
-            month: 'long',
-            year: 'numeric'
-          }) : '';
-        }).join(', ')}
+I'd like to book this time slot: ${selectedSlot.display_date} - ${selectedSlot.label} (${selectedSlot.display_time})
 
 ${formData.jobImages.length > 0 ? `I've attached ${formData.jobImages.length} photo${formData.jobImages.length > 1 ? 's' : ''} to help show what needs to be done.` : ''}
 
@@ -501,39 +537,43 @@ Thanks!`,
             </select>
           </div>
 
-          {/* Preferred Dates */}
+          {/* UPDATED: Available Time Slots Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Preferred Dates * (Choose at least one)
+              Select Time Slot *
             </label>
-            {availableDates.length === 0 ? (
+            {availableTimeSlots.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg border">
-                <p className="text-gray-500 mb-2">No future dates currently available</p>
-                <p className="text-gray-400 text-sm">The tradesman hasn't set any available dates, or all their dates have passed</p>
+                <p className="text-gray-500 mb-2">No time slots currently available</p>
+                <p className="text-gray-400 text-sm">The tradesman hasn't set any available time slots, or all their slots are booked</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {availableDates.map(date => (
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {availableTimeSlots.map(slot => (
                   <label
-                    key={date.id}
-                    className={`cursor-pointer p-3 border rounded-md text-center transition-colors ${
-                      formData.preferredDates.includes(date.id)
-                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    key={slot.id}
+                    className={`cursor-pointer flex items-center p-3 border rounded-md transition-colors ${
+                      formData.selectedTimeSlot === slot.id
+                        ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-300 hover:border-gray-400'
                     }`}
                   >
                     <input
-                      type="checkbox"
-                      checked={formData.preferredDates.includes(date.id)}
-                      onChange={() => handleDateSelection(date.id)}
-                      className="sr-only"
+                      type="radio"
+                      name="selectedTimeSlot"
+                      value={slot.id}
+                      checked={formData.selectedTimeSlot === slot.id}
+                      onChange={() => handleTimeSlotSelection(slot.id)}
+                      className="mr-3"
                     />
-                    {new Date(date.date_available).toLocaleDateString('en-GB', {
-                      weekday: 'short',
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric'
-                    })}
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {slot.display_date}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {slot.label} ({slot.display_time})
+                      </div>
+                    </div>
                   </label>
                 ))}
               </div>
@@ -574,9 +614,9 @@ Thanks!`,
           <div className="flex gap-4">
             <button
               type="submit"
-              disabled={submitting || availableDates.length === 0}
+              disabled={submitting || availableTimeSlots.length === 0}
               className={`flex-1 py-3 px-6 rounded-md font-medium ${
-                submitting || availableDates.length === 0
+                submitting || availableTimeSlots.length === 0
                   ? 'bg-gray-400 text-white cursor-not-allowed'
                   : 'bg-green-600 text-white hover:bg-green-700'
               }`}
