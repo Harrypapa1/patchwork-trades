@@ -232,35 +232,56 @@ const BookingRequest = () => {
     setSubmitting(true);
 
     try {
-      // FIXED: Save tradesman hourly rate and convert date IDs to actual dates
-      const bookingData = {
+      // 🆕 NEW: Create quote request instead of booking
+      const quoteRequestData = {
+        // Customer information
         customer_id: currentUser.uid,
         customer_name: customerProfile?.name || currentUser.email,
+        customer_email: currentUser.email,
+        customer_photo: customerProfile?.profilePhoto || null,
+        
+        // Tradesman information
         tradesman_id: tradesmanId,
         tradesman_name: tradesman.name,
-        tradesman_hourly_rate: tradesman.hourlyRate, // SAVE HOURLY RATE
-        date_booked: 'Quote Request', // Placeholder until date selected
-        status: 'Quote Requested',
+        tradesman_email: tradesman.email || tradesman.contactEmail,
+        tradesman_photo: tradesman.profilePhoto || null,
+        tradesman_hourly_rate: tradesman.hourlyRate,
+        
+        // Job details
         job_title: formData.jobTitle,
         job_description: formData.jobDescription,
+        job_images: formData.jobImages,
+        additional_notes: formData.additionalNotes,
         urgency: formData.urgency,
+        budget_expectation: formData.budgetExpectation,
         preferred_dates_list: formData.preferredDates.map(dateId => {
           const date = availableDates.find(d => d.id === dateId);
           return date ? date.date_available : dateId;
-        }), // CONVERT DATE IDs TO ACTUAL DATES
-        budget_expectation: formData.budgetExpectation,
-        additional_notes: formData.additionalNotes,
-        job_images: formData.jobImages,
-        created_at: new Date().toISOString()
+        }),
+        
+        // Quote status
+        status: 'pending',
+        has_custom_quote: false,
+        custom_quote: '',
+        quote_reasoning: '',
+        has_customer_counter: false,
+        customer_counter_quote: '',
+        customer_reasoning: '',
+        
+        // Timestamps
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days from now
       };
 
-      console.log('Creating booking:', bookingData);
-      const bookingRef = await addDoc(collection(db, 'bookings'), bookingData);
+      console.log('Creating quote request:', quoteRequestData);
+      const quoteRef = await addDoc(collection(db, 'quote_requests'), quoteRequestData); // 🆕 NEW COLLECTION
 
-      // Send message using existing message structure
-      console.log('Sending message to booking:', bookingRef.id);
+      // Send message using existing message structure (updated for quote reference)
+      console.log('Sending message for quote request:', quoteRef.id);
       await addDoc(collection(db, 'messages'), {
-        booking_id: bookingRef.id,
+        booking_id: quoteRef.id, // Legacy field for backward compatibility
+        quote_request_id: quoteRef.id, // New field
         sender_id: currentUser.uid,
         sender_name: customerProfile?.name || currentUser.email,
         receiver_id: tradesmanId,
@@ -296,8 +317,8 @@ Thanks!`,
         attached_images: formData.jobImages
       });
 
-      // Navigate to booking requests instead of messages
-      navigate('/booking-requests', {
+      // Navigate to quote requests instead of booking requests
+      navigate('/quote-requests', { // 🆕 NEW ROUTE
         state: { 
           success: 'Quote request sent successfully! The tradesman will respond shortly.'
         }
@@ -579,7 +600,7 @@ Thanks!`,
         <h3 className="font-medium text-blue-900 mb-2">What happens next?</h3>
         <ul className="text-sm text-blue-800 space-y-1">
           <li>• Your request (with photos if added) will be sent to {tradesman.name}</li>
-          <li>• You'll be taken to the Booking Requests page to track progress</li>
+          <li>• You'll be taken to the Quote Requests page to track progress</li>
           <li>• The tradesman can ask questions and discuss the job with you</li>
           <li>• They can accept at their standard rate (£{tradesman.hourlyRate}/hour) or propose a custom quote</li>
           <li>• Once you both agree, you'll proceed to payment and booking confirmation</li>
