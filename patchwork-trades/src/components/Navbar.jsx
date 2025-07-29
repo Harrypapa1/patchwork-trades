@@ -15,7 +15,7 @@ const Navbar = () => {
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [bookingRequestsCount, setBookingRequestsCount] = useState(0);
+  const [quoteRequestsCount, setQuoteRequestsCount] = useState(0); // Updated variable name
 
   // Check if mobile screen
   useEffect(() => {
@@ -43,69 +43,46 @@ const Navbar = () => {
     }
   }, [isMenuOpen]);
 
-  // 🚨 TEMPORARILY DISABLED TO FIX BOOKING DELETION BUG
-  // This listener was causing race conditions with BookingRequests updates
-  // Listen for booking requests with error handling
-  useEffect(() => {
-    console.log('🚨 NAVBAR LISTENER TEMPORARILY DISABLED - Fixing booking deletion bug');
-    
-    // Set static count to 0 for now
-    setBookingRequestsCount(0);
-    
-    // TODO: Re-enable after fixing race condition
-    // The original listener code is causing triple listener conflicts
-    // when tradesmen click "Accept" - bookings get deleted instead of updated
-    
-    return () => {
-      console.log('Navbar cleanup - listener was disabled anyway');
-    };
-  }, [currentUser, userType]);
-
-  /* 
-  // ORIGINAL LISTENER CODE - DISABLED TEMPORARILY
-  // RE-ENABLE AFTER RACE CONDITION FIX
+  // 🆕 NEW BULLETPROOF LISTENER - No more race conditions!
   useEffect(() => {
     if (!currentUser) {
-      setBookingRequestsCount(0);
+      setQuoteRequestsCount(0);
       return;
     }
 
     try {
-      let bookingQuery;
+      let quotesQuery;
       if (userType === 'customer') {
-        bookingQuery = query(
-          collection(db, 'bookings'),
-          where('customer_id', '==', currentUser.uid),
-          where('status', '==', 'Quote Requested')
+        quotesQuery = query(
+          collection(db, 'quote_requests'), // 🆕 NEW COLLECTION
+          where('customer_id', '==', currentUser.uid)
         );
       } else if (userType === 'tradesman') {
-        bookingQuery = query(
-          collection(db, 'bookings'),
-          where('tradesman_id', '==', currentUser.uid),
-          where('status', '==', 'Quote Requested')
+        quotesQuery = query(
+          collection(db, 'quote_requests'), // 🆕 NEW COLLECTION
+          where('tradesman_id', '==', currentUser.uid)
         );
       }
 
-      if (bookingQuery) {
+      if (quotesQuery) {
         const unsubscribe = onSnapshot(
-          bookingQuery, 
+          quotesQuery, 
           (snapshot) => {
-            setBookingRequestsCount(snapshot.docs.length);
+            setQuoteRequestsCount(snapshot.docs.length);
           },
           (error) => {
-            console.error('Error listening to booking requests:', error);
-            setBookingRequestsCount(0);
+            console.error('Error listening to quote requests:', error);
+            setQuoteRequestsCount(0);
           }
         );
 
         return () => unsubscribe();
       }
     } catch (error) {
-      console.error('Error setting up booking requests listener:', error);
-      setBookingRequestsCount(0);
+      console.error('Error setting up quote requests listener:', error);
+      setQuoteRequestsCount(0);
     }
   }, [currentUser, userType]);
-  */
 
   // Handle logout function
   const handleLogout = async () => {
@@ -163,23 +140,22 @@ const Navbar = () => {
                     </Link>
                   )}
                   
-                  {/* Booking Requests - Both user types - COUNTER DISABLED */}
+                  {/* 🆕 NEW ROUTE: Quote Requests */}
                   <Link 
-                    to="/booking-requests" 
+                    to="/quote-requests" 
                     className="hover:text-blue-200 transition-colors"
                   >
-                    Booking Requests
-                    {/* Counter temporarily disabled due to listener conflict */}
-                    {bookingRequestsCount > 0 && (
+                    Quote Requests
+                    {quoteRequestsCount > 0 && (
                       <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                        {bookingRequestsCount}
+                        {quoteRequestsCount}
                       </span>
                     )}
                   </Link>
 
-                  {/* Booked Jobs - Both user types */}
-                  <Link to="/booked-jobs" className="hover:text-blue-200 transition-colors">
-                    Booked Jobs
+                  {/* 🆕 NEW ROUTE: Active Jobs */}
+                  <Link to="/active-jobs" className="hover:text-blue-200 transition-colors">
+                    Active Jobs
                   </Link>
 
                   {userType === 'tradesman' && (
@@ -259,28 +235,27 @@ const Navbar = () => {
                   </Link>
                 )}
                 
-                {/* Booking Requests - Clean professional style - COUNTER DISABLED */}
+                {/* 🆕 NEW ROUTE: Quote Requests */}
                 <Link 
-                  to="/booking-requests" 
+                  to="/quote-requests" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
-                  Booking Requests
-                  {/* Counter temporarily disabled due to listener conflict */}
-                  {bookingRequestsCount > 0 && (
+                  Quote Requests
+                  {quoteRequestsCount > 0 && (
                     <span className="absolute top-2 right-3 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
-                      {bookingRequestsCount}
+                      {quoteRequestsCount}
                     </span>
                   )}
                 </Link>
 
-                {/* Booked Jobs - Clean professional style */}
+                {/* 🆕 NEW ROUTE: Active Jobs */}
                 <Link 
-                  to="/booked-jobs" 
+                  to="/active-jobs" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
-                  Booked Jobs
+                  Active Jobs
                 </Link>
 
                 {userType === 'tradesman' && (
