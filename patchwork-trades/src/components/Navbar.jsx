@@ -163,6 +163,13 @@ const Navbar = () => {
                       Manage Availability
                     </Link>
                   )}
+
+                  {/* 🆕 NEW: Make More Money - Tradesman Only */}
+                  {userType === 'tradesman' && (
+                    <Link to="/make-more-money" className="hover:text-blue-200 transition-colors font-medium">
+                      💰 Make More Money
+                    </Link>
+                  )}
                   
                   {userType === 'customer' && (
                     <Link to="/customer-dashboard" className="hover:text-blue-200 transition-colors">
@@ -265,6 +272,17 @@ const Navbar = () => {
                     onClick={closeMenu}
                   >
                     Manage Availability
+                  </Link>
+                )}
+
+                {/* 🆕 NEW: Make More Money - Tradesman Only */}
+                {userType === 'tradesman' && (
+                  <Link 
+                    to="/make-more-money" 
+                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
+                    onClick={closeMenu}
+                  >
+                    💰 Make More Money
                   </Link>
                 )}
                 
