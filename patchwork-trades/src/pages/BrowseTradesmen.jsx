@@ -22,11 +22,17 @@ const BrowseTradesmen = () => {
   const [detailedData, setDetailedData] = useState({});
   const [loadingDetails, setLoadingDetails] = useState(false);
   
-  // Search filters
-  const [searchName, setSearchName] = useState('');
-  const [searchTrade, setSearchTrade] = useState('');
-  const [searchArea, setSearchArea] = useState('');
-  const [searchServices, setSearchServices] = useState('');
+  // Filters
+  const [selectedTradeTypes, setSelectedTradeTypes] = useState([]);
+  const [selectedDates, setSelectedDates] = useState([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  
+  // Trade types list
+  const TRADE_TYPES = [
+    'Electrician', 'Plumber', 'Carpenter', 'Painter', 'Gardener', 
+    'Cleaner', 'Handyman', 'Roofer', 'Builder', 'Tiler', 
+    'Locksmith', 'Decorator', 'Flooring Specialist'
+  ];
 
   // Time slot definitions
   const TIME_SLOTS = {
@@ -41,7 +47,7 @@ const BrowseTradesmen = () => {
 
   useEffect(() => {
     filterTradesmen();
-  }, [tradesmen, searchName, searchTrade, searchArea, searchServices]);
+  }, [tradesmen, selectedTradeTypes, selectedDates]);
 
   const fetchTradesmen = async () => {
     try {
@@ -156,45 +162,144 @@ const BrowseTradesmen = () => {
   const filterTradesmen = () => {
     let filtered = tradesmen;
 
-    if (searchName.trim()) {
+    // Filter by selected trade types
+    if (selectedTradeTypes.length > 0) {
       filtered = filtered.filter(tradesman =>
-        tradesman.name.toLowerCase().includes(searchName.toLowerCase())
+        selectedTradeTypes.some(tradeType => 
+          tradesman.tradeType.toLowerCase().includes(tradeType.toLowerCase())
+        )
       );
     }
 
-    if (searchTrade.trim()) {
-      filtered = filtered.filter(tradesman =>
-        tradesman.tradeType.toLowerCase().includes(searchTrade.toLowerCase())
-      );
-    }
-
-    if (searchArea.trim()) {
-      filtered = filtered.filter(tradesman =>
-        tradesman.areaCovered.toLowerCase().includes(searchArea.toLowerCase())
-      );
-    }
-
-    if (searchServices.trim()) {
+    // Filter by selected dates - only show tradesmen with availability on those dates
+    if (selectedDates.length > 0) {
       filtered = filtered.filter(tradesman => {
-        const searchTerm = searchServices.toLowerCase();
-        const searchFields = [
-          tradesman.servicesOffered || '',
-          tradesman.bio || ''
-        ];
-        return searchFields.some(field => 
-          field.toLowerCase().includes(searchTerm)
-        );
+        return selectedDates.some(selectedDate => {
+          return tradesman.availableTimeSlots.some(slot => slot.date === selectedDate);
+        });
       });
     }
 
     setFilteredTradesmen(filtered);
   };
 
+  const toggleTradeType = (tradeType) => {
+    setSelectedTradeTypes(prev => 
+      prev.includes(tradeType)
+        ? prev.filter(type => type !== tradeType)
+        : [...prev, tradeType]
+    );
+  };
+
+  const toggleDate = (dateStr) => {
+    setSelectedDates(prev => 
+      prev.includes(dateStr)
+        ? prev.filter(date => date !== dateStr)
+        : [...prev, dateStr]
+    );
+  };
+
   const clearFilters = () => {
-    setSearchName('');
-    setSearchTrade('');
-    setSearchArea('');
-    setSearchServices('');
+    setSelectedTradeTypes([]);
+    setSelectedDates([]);
+  };
+
+  // Calendar helper functions
+  const getDaysInMonth = (date) => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (date) => {
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+    return firstDay === 0 ? 6 : firstDay - 1; // Make Monday = 0
+  };
+
+  const formatDateString = (year, month, day) => {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+  const isDateInPast = (year, month, day) => {
+    const today = new Date();
+    const checkDate = new Date(year, month, day);
+    return checkDate < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  };
+
+  const navigateMonth = (direction) => {
+    setCurrentDate(prev => {
+      const newDate = new Date(prev);
+      newDate.setMonth(prev.getMonth() + direction);
+      return newDate;
+    });
+  };
+
+  const hasAvailabilityOnDate = (dateStr) => {
+    return tradesmen.some(tradesman => 
+      tradesman.availableTimeSlots.some(slot => slot.date === dateStr)
+    );
+  };
+
+  const renderAvailabilityCalendar = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(currentDate);
+    const firstDay = getFirstDayOfMonth(currentDate);
+    
+    const days = [];
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    // Day headers
+    dayNames.forEach(day => {
+      days.push(
+        <div key={day} className="p-2 text-center font-semibold text-gray-600 text-sm">
+          {day}
+        </div>
+      );
+    });
+
+    // Empty cells for days before the first day of the month
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="p-2"></div>);
+    }
+
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateString(year, month, day);
+      const isPast = isDateInPast(year, month, day);
+      const hasAvailability = hasAvailabilityOnDate(dateStr);
+      const isSelected = selectedDates.includes(dateStr);
+      
+      let className = "p-3 text-center cursor-pointer rounded-lg border-2 transition-colors ";
+      
+      if (isPast) {
+        className += "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200";
+      } else if (isSelected) {
+        className += "bg-blue-100 text-blue-800 border-blue-300";
+      } else if (hasAvailability) {
+        className += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200";
+      } else {
+        className += "bg-white text-gray-400 border-gray-200 cursor-not-allowed";
+      }
+
+      days.push(
+        <div
+          key={day}
+          className={className}
+          onClick={() => {
+            if (isPast || !hasAvailability) return;
+            toggleDate(dateStr);
+          }}
+        >
+          <div className="font-medium">{day}</div>
+          {hasAvailability && !isPast && (
+            <div className="text-xs mt-1">
+              {isSelected ? 'Selected' : 'Available'}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return days;
   };
 
   const handleBooking = (tradesmanId) => {
@@ -373,72 +478,121 @@ const BrowseTradesmen = () => {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Browse Tradesmen</h1>
+      <h1 className="text-3xl font-bold mb-6">Find Available Tradesmen</h1>
       
-      {/* Search Filters */}
+      {/* Instructions */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <h3 className="font-semibold text-blue-800 mb-2">How to find tradesmen:</h3>
+        <ul className="text-blue-700 text-sm space-y-1">
+          <li>• <strong>Select trade types</strong> you need (can choose multiple)</li>
+          <li>• <strong>Click dates on the calendar</strong> when you need work done</li>
+          <li>• <strong>Green dates</strong> have tradesmen available</li>
+          <li>• Only tradesmen with availability on your selected dates will be shown</li>
+        </ul>
+      </div>
+      
+      {/* Trade Type Selection */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Search & Filter</h2>
+        <h2 className="text-lg font-semibold mb-4">Select Trade Types</h2>
         
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Search by Name
-            </label>
-            <input
-              type="text"
-              value={searchName}
-              onChange={(e) => setSearchName(e.target.value)}
-              placeholder="Enter tradesman name..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <div className="flex flex-wrap gap-3 mb-4">
+          {TRADE_TYPES.map(tradeType => (
+            <button
+              key={tradeType}
+              onClick={() => toggleTradeType(tradeType)}
+              className={`px-4 py-2 rounded-full border-2 transition-colors ${
+                selectedTradeTypes.includes(tradeType)
+                  ? 'bg-blue-100 border-blue-300 text-blue-800'
+                  : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+              }`}
+            >
+              {tradeType}
+            </button>
+          ))}
+        </div>
+        
+        {selectedTradeTypes.length > 0 && (
+          <div className="text-sm text-gray-600">
+            Selected: {selectedTradeTypes.join(', ')}
           </div>
+        )}
+      </div>
+
+      {/* Date Selection Calendar */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-lg font-semibold mb-4">Select Available Dates</h2>
+        
+        {/* Calendar Header */}
+        <div className="flex justify-between items-center mb-4">
+          <button
+            onClick={() => navigateMonth(-1)}
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+          >
+            ← Previous
+          </button>
           
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Trade Type
-            </label>
-            <input
-              type="text"
-              value={searchTrade}
-              onChange={(e) => setSearchTrade(e.target.value)}
-              placeholder="e.g. Electrician, Plumber..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <h3 className="text-xl font-semibold">
+            {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+          </h3>
+          
+          <button
+            onClick={() => navigateMonth(1)}
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+          >
+            Next →
+          </button>
+        </div>
+
+        {/* Calendar Grid */}
+        <div className="grid grid-cols-7 gap-2 mb-4">
+          {renderAvailabilityCalendar()}
+        </div>
+
+        {/* Legend */}
+        <div className="flex flex-wrap gap-4 justify-center text-sm mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
+            <span>Has Availability</span>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Area
-            </label>
-            <input
-              type="text"
-              value={searchArea}
-              onChange={(e) => setSearchArea(e.target.value)}
-              placeholder="e.g. London, Manchester..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-blue-100 border-2 border-blue-300 rounded"></div>
+            <span>Selected</span>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Services/Jobs
-            </label>
-            <input
-              type="text"
-              value={searchServices}
-              onChange={(e) => setSearchServices(e.target.value)}
-              placeholder="e.g. change plugs, fix toilet..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
+            <span>No Availability</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-gray-100 border-2 border-gray-200 rounded"></div>
+            <span>Past Date</span>
           </div>
         </div>
         
-        <div className="flex justify-between items-center">
+        {/* Selected Dates Display */}
+        {selectedDates.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p className="text-blue-800 font-medium mb-2">Selected Dates:</p>
+            <div className="flex flex-wrap gap-2">
+              {selectedDates.map(dateStr => (
+                <span key={dateStr} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                  {new Date(dateStr).toLocaleDateString('en-GB', { 
+                    day: 'numeric', 
+                    month: 'short',
+                    weekday: 'short'
+                  })}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Filter Summary */}
+        <div className="flex justify-between items-center mt-4">
           <p className="text-sm text-gray-600">
             Showing {filteredTradesmen.length} of {tradesmen.length} tradesmen
           </p>
           
-          {(searchName || searchTrade || searchArea || searchServices) && (
+          {(selectedTradeTypes.length > 0 || selectedDates.length > 0) && (
             <button
               onClick={clearFilters}
               className="text-blue-600 hover:text-blue-800 text-sm font-medium"
@@ -456,7 +610,7 @@ const BrowseTradesmen = () => {
             <p className="text-gray-500">No tradesmen available at the moment.</p>
           ) : (
             <div>
-              <p className="text-gray-500 mb-2">No tradesmen match your search criteria.</p>
+              <p className="text-gray-500 mb-2">No tradesmen match your selected criteria.</p>
               <button
                 onClick={clearFilters}
                 className="text-blue-600 hover:text-blue-800 font-medium"
