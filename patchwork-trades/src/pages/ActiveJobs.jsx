@@ -177,6 +177,7 @@ const JobCard = React.memo(({
   onUpdateJobStatus, 
   onCancelJob,
   onOpenReviewModal,
+  onHireAgain,
   getFinalPrice,
   getStatusColor,
   formatDate 
@@ -380,7 +381,10 @@ const JobCard = React.memo(({
                           ✅ Review Left
                         </span>
                       )}
-                      <button className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors">
+                      <button 
+                        onClick={() => onHireAgain(job.tradesman_id)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                      >
                         Hire Again
                       </button>
                     </>
@@ -582,6 +586,12 @@ const ActiveJobs = () => {
       return newExpanded;
     });
   }, [comments]);
+
+  // 🆕 NEW: Handle Hire Again functionality
+  const handleHireAgain = useCallback((tradesmanId) => {
+    // Redirect to booking page for this specific tradesman
+    window.location.href = `/booking-request?tradesman=${tradesmanId}`;
+  }, []);
 
   // Helper functions
   const getActiveJobs = () => activeJobs.filter(job => job.status === 'accepted' || job.status === 'in_progress' || job.status === 'pending_approval');
@@ -1089,6 +1099,7 @@ Are you sure you want to cancel?`;
                 onUpdateJobStatus={handleUpdateJobStatus}
                 onCancelJob={handleCancelJob}
                 onOpenReviewModal={handleOpenReviewModal}
+                onHireAgain={handleHireAgain}
                 getFinalPrice={getFinalPrice}
                 getStatusColor={getStatusColor}
                 formatDate={formatDate}
@@ -1151,6 +1162,7 @@ Are you sure you want to cancel?`;
                   onUpdateJobStatus={handleUpdateJobStatus}
                   onCancelJob={handleCancelJob}
                   onOpenReviewModal={handleOpenReviewModal}
+                  onHireAgain={handleHireAgain}
                   getFinalPrice={getFinalPrice}
                   getStatusColor={getStatusColor}
                   formatDate={formatDate}
@@ -1189,6 +1201,7 @@ Are you sure you want to cancel?`;
                   onUpdateJobStatus={handleUpdateJobStatus}
                   onCancelJob={handleCancelJob}
                   onOpenReviewModal={handleOpenReviewModal}
+                  onHireAgain={handleHireAgain}
                   getFinalPrice={getFinalPrice}
                   getStatusColor={getStatusColor}
                   formatDate={formatDate}
