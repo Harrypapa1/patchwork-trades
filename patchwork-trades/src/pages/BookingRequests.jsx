@@ -26,6 +26,27 @@ const BookingRequests = () => {
   const activeListeners = useRef({});
   const isUpdating = useRef(false);
 
+  // EMAIL NOTIFICATION HELPER FUNCTION
+  const sendEmailNotification = async (emailData) => {
+    try {
+      const response = await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData)
+      });
+      
+      if (!response.ok) {
+        console.error('Email notification failed:', response.statusText);
+      } else {
+        console.log('Email notification sent successfully');
+      }
+    } catch (error) {
+      console.error('Error sending email notification:', error);
+    }
+  };
+
   useEffect(() => {
     if (currentUser) {
       fetchBookingRequests();
@@ -175,6 +196,23 @@ const BookingRequests = () => {
 
       console.log('Comment saved successfully!');
 
+      // EMAIL NOTIFICATION FOR NEW COMMENT
+      const booking = bookingRequests.find(b => b.id === bookingId);
+      if (booking) {
+        const recipientIsCustomer = userType === 'tradesman';
+        const recipientEmail = recipientIsCustomer ? booking.customer_email : booking.tradesman_email;
+        const recipientName = recipientIsCustomer ? booking.customer_name : booking.tradesman_name;
+        const senderName = recipientIsCustomer ? booking.tradesman_name : booking.customer_name;
+
+        await sendEmailNotification({
+          recipientEmail: recipientEmail,
+          recipientName: recipientName,
+          senderName: senderName,
+          messageText: `New comment on job "${booking.job_title}": ${commentText}`,
+          replyLink: `https://patchworktrades.com/booking-requests`
+        });
+      }
+
     } catch (error) {
       console.error('Error adding comment:', error);
       alert('Error adding comment. Please try again.');
@@ -301,6 +339,28 @@ const BookingRequests = () => {
         // Don't fail the whole operation for comment errors
       }
 
+      // EMAIL NOTIFICATION FOR JOB ACCEPTANCE
+      if (newStatus === 'Accepted') {
+        const booking = currentBookingData;
+        
+        // Email both customer and tradesman
+        await sendEmailNotification({
+          recipientEmail: booking.customer_email,
+          recipientName: booking.customer_name,
+          senderName: booking.tradesman_name,
+          messageText: `Great news! ${booking.tradesman_name} has accepted your job "${booking.job_title}". The job will now move to your Booked Jobs section.`,
+          replyLink: `https://patchworktrades.com/booked-jobs`
+        });
+
+        await sendEmailNotification({
+          recipientEmail: booking.tradesman_email,
+          recipientName: booking.tradesman_name,
+          senderName: booking.customer_name,
+          messageText: `You have successfully accepted the job "${booking.job_title}" from ${booking.customer_name}. The job has moved to your Booked Jobs section.`,
+          replyLink: `https://patchworktrades.com/booked-jobs`
+        });
+      }
+
       // STEP 7: Wait a moment, then refresh (prevents immediate conflicts)
       console.log('⏳ Step 7: Waiting before refresh to prevent conflicts...');
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -356,6 +416,18 @@ const BookingRequests = () => {
         console.log('Could not add system comment (collection may not exist yet):', commentError);
       }
 
+      // EMAIL NOTIFICATION FOR CUSTOM QUOTE
+      const booking = bookingRequests.find(b => b.id === bookingId);
+      if (booking) {
+        await sendEmailNotification({
+          recipientEmail: booking.customer_email,
+          recipientName: booking.customer_name,
+          senderName: booking.tradesman_name,
+          messageText: `${booking.tradesman_name} has sent you a custom quote for "${booking.job_title}": ${customQuote}. Please review and respond.`,
+          replyLink: `https://patchworktrades.com/booking-requests`
+        });
+      }
+
     } catch (error) {
       console.error('Error proposing custom quote:', error);
       alert('Error proposing custom quote. Please try again.');
@@ -384,6 +456,18 @@ const BookingRequests = () => {
         });
       } catch (commentError) {
         console.log('Could not add system comment:', commentError);
+      }
+
+      // EMAIL NOTIFICATION FOR QUOTE ACCEPTANCE
+      const booking = bookingRequests.find(b => b.id === bookingId);
+      if (booking) {
+        await sendEmailNotification({
+          recipientEmail: booking.tradesman_email,
+          recipientName: booking.tradesman_name,
+          senderName: booking.customer_name,
+          messageText: `Excellent! ${booking.customer_name} has accepted your custom quote for "${booking.job_title}". The job has moved to your Booked Jobs section.`,
+          replyLink: `https://patchworktrades.com/booked-jobs`
+        });
       }
 
     } catch (error) {
@@ -421,6 +505,18 @@ const BookingRequests = () => {
         console.log('Could not add system comment:', commentError);
       }
 
+      // EMAIL NOTIFICATION FOR QUOTE REJECTION
+      const booking = bookingRequests.find(b => b.id === bookingId);
+      if (booking) {
+        await sendEmailNotification({
+          recipientEmail: booking.tradesman_email,
+          recipientName: booking.tradesman_name,
+          senderName: booking.customer_name,
+          messageText: `${booking.customer_name} has declined your custom quote for "${booking.job_title}". You can now provide a new quote or proposal.`,
+          replyLink: `https://patchworktrades.com/booking-requests`
+        });
+      }
+
     } catch (error) {
       console.error('Error rejecting custom quote:', error);
       alert('Error rejecting custom quote. Please try again.');
@@ -456,6 +552,18 @@ const BookingRequests = () => {
         console.log('Could not add system comment:', commentError);
       }
 
+      // EMAIL NOTIFICATION FOR CUSTOMER COUNTER-OFFER
+      const booking = bookingRequests.find(b => b.id === bookingId);
+      if (booking) {
+        await sendEmailNotification({
+          recipientEmail: booking.tradesman_email,
+          recipientName: booking.tradesman_name,
+          senderName: booking.customer_name,
+          messageText: `${booking.customer_name} has made a counter-offer for "${booking.job_title}": ${counterQuote}${reasoning ? `. Reason: ${reasoning}` : ''}. Please review and respond.`,
+          replyLink: `https://patchworktrades.com/booking-requests`
+        });
+      }
+
     } catch (error) {
       console.error('Error proposing counter-offer:', error);
       alert('Error proposing counter-offer. Please try again.');
@@ -484,6 +592,18 @@ const BookingRequests = () => {
         });
       } catch (commentError) {
         console.log('Could not add system comment:', commentError);
+      }
+
+      // EMAIL NOTIFICATION FOR COUNTER-OFFER ACCEPTANCE
+      const booking = bookingRequests.find(b => b.id === bookingId);
+      if (booking) {
+        await sendEmailNotification({
+          recipientEmail: booking.customer_email,
+          recipientName: booking.customer_name,
+          senderName: booking.tradesman_name,
+          messageText: `Great news! ${booking.tradesman_name} has accepted your counter-offer for "${booking.job_title}". The job has moved to your Booked Jobs section.`,
+          replyLink: `https://patchworktrades.com/booked-jobs`
+        });
       }
 
     } catch (error) {
@@ -517,6 +637,18 @@ const BookingRequests = () => {
         });
       } catch (commentError) {
         console.log('Could not add system comment:', commentError);
+      }
+
+      // EMAIL NOTIFICATION FOR COUNTER-OFFER REJECTION
+      const booking = bookingRequests.find(b => b.id === bookingId);
+      if (booking) {
+        await sendEmailNotification({
+          recipientEmail: booking.customer_email,
+          recipientName: booking.customer_name,
+          senderName: booking.tradesman_name,
+          messageText: `${booking.tradesman_name} has declined your counter-offer for "${booking.job_title}". They may provide a new quote or proposal.`,
+          replyLink: `https://patchworktrades.com/booking-requests`
+        });
       }
 
     } catch (error) {
