@@ -1,29 +1,4 @@
-const fetchBookings = async () => {
-    if (!currentUser) return;
-    
-    try {
-      const q = query(
-        collection(db, 'bookings'),
-        where('tradesman_id', '==', currentUser.uid)
-      );
-      const querySnapshot = await getDocs(q);
-      const bookingsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setBookings(bookingsData);
-    } catch (error) {
-      console.error('Error fetching bookings:', error);
-    }
-  };
-
-  const handleBookedDateClick = (dateStr) => {
-    // Find the booking for this date
-    const booking = bookings.find(b => b.date_booked === dateStr);
-    if (booking) {
-      navigate(`/messaging/${booking.id}`);
-    }
-  };import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -32,6 +7,7 @@ import {
   where, 
   getDocs, 
   addDoc, 
+  updateDoc,
   deleteDoc,
   doc
 } from 'firebase/firestore';
@@ -42,12 +18,19 @@ const ManageAvailability = () => {
   const navigate = useNavigate();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [availability, setAvailability] = useState([]);
-  const [bookings, setBookings] = useState([]);
+  const [bookedSlots, setBookedSlots] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Time slot definitions
+  const TIME_SLOTS = [
+    { id: 'morning', label: 'Morning', time: '9am-1pm', start: '09:00', end: '13:00' },
+    { id: 'afternoon', label: 'Afternoon', time: '1pm-5pm', start: '13:00', end: '17:00' },
+    { id: 'evening', label: 'Evening', time: '5pm-8pm', start: '17:00', end: '20:00' }
+  ];
 
   useEffect(() => {
     fetchAvailability();
-    fetchBookings();
+    fetchBookedSlots();
   }, [currentDate, currentUser]);
 
   const fetchAvailability = async () => {
@@ -72,32 +55,113 @@ const ManageAvailability = () => {
     }
   };
 
-  const toggleAvailability = async (dateStr) => {
+  const fetchBookedSlots = async () => {
+    if (!currentUser) return;
+    
+    try {
+      // Fetch from active_jobs to see what's booked
+      const q = query(
+        collection(db, 'active_jobs'),
+        where('tradesman_id', '==', currentUser.uid),
+        where('status', 'in', ['accepted', 'in_progress'])
+      );
+      const querySnapshot = await getDocs(q);
+      const bookedData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setBookedSlots(bookedData);
+    } catch (error) {
+      console.error('Error fetching booked slots:', error);
+    }
+  };
+
+  const toggleTimeSlot = async (dateStr, slotId) => {
     if (!currentUser) return;
 
-    // Check if date already exists
-    const existingDate = availability.find(item => item.date_available === dateStr);
+    // Check if this specific slot is booked
+    const isBooked = bookedSlots.some(booking => 
+      booking.agreed_date === dateStr && booking.time_slot === slotId
+    );
     
-    if (existingDate) {
-      // If date exists and is not booked, remove it
-      if (!existingDate.is_booked) {
+    if (isBooked) {
+      // If booked, navigate to job details
+      const booking = bookedSlots.find(b => 
+        b.agreed_date === dateStr && b.time_slot === slotId
+      );
+      if (booking) {
+        navigate('/active-jobs');
+      }
+      return;
+    }
+
+    // Find existing availability document for this date
+    let availabilityDoc = availability.find(item => item.date === dateStr);
+    
+    if (availabilityDoc) {
+      // Update existing document
+      const currentSlots = availabilityDoc.available_slots || [];
+      const slotIndex = currentSlots.findIndex(slot => slot.slot_id === slotId);
+      
+      let updatedSlots;
+      if (slotIndex >= 0) {
+        // Remove slot
+        updatedSlots = currentSlots.filter(slot => slot.slot_id !== slotId);
+      } else {
+        // Add slot
+        const slotInfo = TIME_SLOTS.find(s => s.id === slotId);
+        updatedSlots = [...currentSlots, {
+          slot_id: slotId,
+          start_time: slotInfo.start,
+          end_time: slotInfo.end,
+          is_booked: false,
+          booking_id: null
+        }];
+      }
+
+      if (updatedSlots.length === 0) {
+        // Remove document if no slots left
         try {
-          await deleteDoc(doc(db, 'availability', existingDate.id));
-          setAvailability(prev => prev.filter(item => item.id !== existingDate.id));
+          await deleteDoc(doc(db, 'availability', availabilityDoc.id));
+          setAvailability(prev => prev.filter(item => item.id !== availabilityDoc.id));
         } catch (error) {
           console.error('Error removing availability:', error);
         }
+      } else {
+        // Update document
+        try {
+          await updateDoc(doc(db, 'availability', availabilityDoc.id), {
+            available_slots: updatedSlots,
+            updated_at: new Date().toISOString()
+          });
+          
+          setAvailability(prev => prev.map(item => 
+            item.id === availabilityDoc.id 
+              ? { ...item, available_slots: updatedSlots }
+              : item
+          ));
+        } catch (error) {
+          console.error('Error updating availability:', error);
+        }
       }
     } else {
-      // Add new availability
-      try {
-        const newAvailability = {
-          tradesman_id: currentUser.uid,
-          date_available: dateStr,
+      // Create new availability document
+      const slotInfo = TIME_SLOTS.find(s => s.id === slotId);
+      const newAvailability = {
+        tradesman_id: currentUser.uid,
+        date: dateStr,
+        available_slots: [{
+          slot_id: slotId,
+          start_time: slotInfo.start,
+          end_time: slotInfo.end,
           is_booked: false,
-          created_at: new Date().toISOString()
-        };
-        
+          booking_id: null
+        }],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      try {
         const docRef = await addDoc(collection(db, 'availability'), newAvailability);
         setAvailability(prev => [...prev, { id: docRef.id, ...newAvailability }]);
       } catch (error) {
@@ -113,17 +177,29 @@ const ManageAvailability = () => {
 
   const getFirstDayOfMonth = (date) => {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-    return firstDay === 0 ? 6 : firstDay - 1; // Make Monday = 0
+    return firstDay === 0 ? 6 : firstDay - 1;
   };
 
   const formatDateString = (year, month, day) => {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
-  const getDateStatus = (dateStr) => {
-    const availabilityItem = availability.find(item => item.date_available === dateStr);
-    if (!availabilityItem) return 'unavailable';
-    return availabilityItem.is_booked ? 'booked' : 'available';
+  const getSlotStatus = (dateStr, slotId) => {
+    // Check if slot is booked
+    const isBooked = bookedSlots.some(booking => 
+      booking.agreed_date === dateStr && booking.time_slot === slotId
+    );
+    
+    if (isBooked) return 'booked';
+
+    // Check if slot is available
+    const availabilityDoc = availability.find(item => item.date === dateStr);
+    if (availabilityDoc && availabilityDoc.available_slots) {
+      const hasSlot = availabilityDoc.available_slots.some(slot => slot.slot_id === slotId);
+      return hasSlot ? 'available' : 'unavailable';
+    }
+    
+    return 'unavailable';
   };
 
   const isDateInPast = (year, month, day) => {
@@ -138,6 +214,53 @@ const ManageAvailability = () => {
       newDate.setMonth(prev.getMonth() + direction);
       return newDate;
     });
+  };
+
+  const renderTimeSlots = (dateStr, isPast) => {
+    return (
+      <div className="space-y-1 mt-1">
+        {TIME_SLOTS.map(slot => {
+          const status = getSlotStatus(dateStr, slot.id);
+          
+          let className = "w-full text-xs py-1 px-1 rounded transition-colors cursor-pointer ";
+          
+          if (isPast) {
+            className += "bg-gray-100 text-gray-400 cursor-not-allowed";
+          } else {
+            switch (status) {
+              case 'available':
+                className += "bg-green-100 text-green-800 hover:bg-green-200 border border-green-300";
+                break;
+              case 'booked':
+                className += "bg-red-100 text-red-800 hover:bg-red-200 border border-red-300";
+                break;
+              default:
+                className += "bg-white text-gray-600 hover:bg-blue-50 border border-gray-200";
+            }
+          }
+
+          return (
+            <button
+              key={slot.id}
+              className={className}
+              onClick={() => {
+                if (isPast) return;
+                toggleTimeSlot(dateStr, slot.id);
+              }}
+              disabled={isPast}
+            >
+              <div className="font-medium">{slot.time}</div>
+              {status === 'available' && !isPast && (
+                <div className="text-xs">Available</div>
+              )}
+              {status === 'booked' && (
+                <div className="text-xs">Job Booked</div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
   };
 
   const renderCalendar = () => {
@@ -166,46 +289,20 @@ const ManageAvailability = () => {
     // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDateString(year, month, day);
-      const status = getDateStatus(dateStr);
       const isPast = isDateInPast(year, month, day);
       
-      let className = "p-2 text-center cursor-pointer rounded-lg border-2 transition-colors ";
+      let className = "p-2 border-2 rounded-lg transition-colors min-h-[120px] ";
       
       if (isPast) {
-        className += "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200";
+        className += "bg-gray-50 border-gray-200";
       } else {
-        switch (status) {
-          case 'available':
-            className += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200";
-            break;
-          case 'booked':
-            className += "bg-red-100 text-red-800 border-red-300 hover:bg-red-200";
-            break;
-          default:
-            className += "bg-white text-gray-700 border-gray-200 hover:bg-blue-50 hover:border-blue-300";
-        }
+        className += "bg-white border-gray-200 hover:border-blue-300";
       }
 
       days.push(
-        <div
-          key={day}
-          className={className}
-          onClick={() => {
-            if (isPast) return;
-            if (status === 'booked') {
-              handleBookedDateClick(dateStr);
-            } else {
-              toggleAvailability(dateStr);
-            }
-          }}
-        >
-          <div className="font-medium">{day}</div>
-          {status === 'available' && !isPast && (
-            <div className="text-xs mt-1">Available</div>
-          )}
-          {status === 'booked' && (
-            <div className="text-xs mt-1">Click for job</div>
-          )}
+        <div key={day} className={className}>
+          <div className="font-medium text-center mb-2">{day}</div>
+          {renderTimeSlots(dateStr, isPast)}
         </div>
       );
     }
@@ -213,24 +310,34 @@ const ManageAvailability = () => {
     return days;
   };
 
+  // Calculate stats
+  const totalAvailableSlots = availability.reduce((total, day) => 
+    total + (day.available_slots?.length || 0), 0
+  );
+  
+  const totalBookedSlots = bookedSlots.filter(booking => 
+    booking.status === 'accepted' || booking.status === 'in_progress'
+  ).length;
+
   if (loading) {
     return <div className="text-center py-8">Loading calendar...</div>;
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Manage Your Availability</h1>
       
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold text-blue-800 mb-2">How to use this calendar:</h3>
+        <h3 className="font-semibold text-blue-800 mb-2">How to use the time slot calendar:</h3>
         <ul className="text-blue-700 text-sm space-y-1">
-          <li>• <strong>Click any future date</strong> to mark yourself as available</li>
-          <li>• <strong>Click available dates again</strong> to remove availability</li>
-          <li>• <strong>Click red booked dates</strong> to view job details and message customer</li>
-          <li>• <strong>Green dates</strong> = You're available for booking</li>
-          <li>• <strong>Red dates</strong> = Already booked by customers</li>
-          <li>• <strong>Gray dates</strong> = Past dates (cannot be changed)</li>
+          <li>• <strong>Click time slots</strong> to toggle your availability</li>
+          <li>• <strong>Morning:</strong> 9am-1pm (4 hours)</li>
+          <li>• <strong>Afternoon:</strong> 1pm-5pm (4 hours)</li>
+          <li>• <strong>Evening:</strong> 5pm-8pm (3 hours)</li>
+          <li>• <strong>Green slots</strong> = Available for booking</li>
+          <li>• <strong>Red slots</strong> = Booked by customers (click to view job)</li>
+          <li>• <strong>White slots</strong> = Not available</li>
         </ul>
       </div>
 
@@ -265,11 +372,11 @@ const ManageAvailability = () => {
         <div className="mt-6 flex flex-wrap gap-4 justify-center text-sm">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
-            <span>Available</span>
+            <span>Available Slot</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
-            <span>Booked (click to view job)</span>
+            <span>Booked Slot (click to view)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
@@ -286,23 +393,23 @@ const ManageAvailability = () => {
       <div className="mt-6 grid md:grid-cols-3 gap-4">
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-green-700">
-            {availability.filter(item => !item.is_booked).length}
+            {totalAvailableSlots}
           </div>
-          <div className="text-green-600">Available Days</div>
+          <div className="text-green-600">Available Time Slots</div>
         </div>
         
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-red-700">
-            {availability.filter(item => item.is_booked).length}
+            {totalBookedSlots}
           </div>
-          <div className="text-red-600">Booked Days</div>
+          <div className="text-red-600">Booked Time Slots</div>
         </div>
         
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-blue-700">
-            {availability.length}
+            {totalAvailableSlots + totalBookedSlots}
           </div>
-          <div className="text-blue-600">Total Days Listed</div>
+          <div className="text-blue-600">Total Time Slots</div>
         </div>
       </div>
     </div>
