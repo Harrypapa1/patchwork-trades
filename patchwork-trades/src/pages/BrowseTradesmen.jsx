@@ -19,7 +19,7 @@ const BrowseTradesmen = () => {
   const [filteredTradesmen, setFilteredTradesmen] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedCard, setExpandedCard] = useState(null);
-  const [detailedData, setDetailedData] = useState({}); // Cache for portfolio/reviews
+  const [detailedData, setDetailedData] = useState({});
   const [loadingDetails, setLoadingDetails] = useState(false);
   
   // Search filters
@@ -28,11 +28,17 @@ const BrowseTradesmen = () => {
   const [searchArea, setSearchArea] = useState('');
   const [searchServices, setSearchServices] = useState('');
 
+  // Time slot definitions
+  const TIME_SLOTS = {
+    'morning': { label: 'Morning', time: '9am-1pm' },
+    'afternoon': { label: 'Afternoon', time: '1pm-5pm' },
+    'evening': { label: 'Evening', time: '5pm-8pm' }
+  };
+
   useEffect(() => {
     fetchTradesmen();
   }, []);
 
-  // Filter tradesmen when search terms change
   useEffect(() => {
     filterTradesmen();
   }, [tradesmen, searchName, searchTrade, searchArea, searchServices]);
@@ -45,19 +51,48 @@ const BrowseTradesmen = () => {
       for (const tradesmanDoc of tradesmenSnapshot.docs) {
         const tradesmanData = tradesmanDoc.data();
         
-        // Fetch availability for this tradesman
+        // Fetch availability with time slots for this tradesman
         const availabilityQuery = query(
           collection(db, 'availability'),
-          where('tradesman_id', '==', tradesmanDoc.id),
-          where('is_booked', '==', false)
+          where('tradesman_id', '==', tradesmanDoc.id)
         );
         const availabilitySnapshot = await getDocs(availabilityQuery);
-        const availableDates = availabilitySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
         
-        // Only load basic info initially - NO portfolio or reviews
+        // Process availability data to extract individual time slots
+        const availableTimeSlots = [];
+        
+        availabilitySnapshot.docs.forEach(doc => {
+          const availabilityData = doc.data();
+          const date = availabilityData.date;
+          const slots = availabilityData.available_slots || [];
+          
+          // Only include future dates
+          const slotDate = new Date(date);
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          if (slotDate >= today) {
+            slots.forEach(slot => {
+              if (!slot.is_booked) {
+                availableTimeSlots.push({
+                  date: date,
+                  slot_id: slot.slot_id,
+                  start_time: slot.start_time,
+                  end_time: slot.end_time,
+                  display_time: TIME_SLOTS[slot.slot_id]?.time || `${slot.start_time}-${slot.end_time}`
+                });
+              }
+            });
+          }
+        });
+
+        // Sort slots by date then by time
+        availableTimeSlots.sort((a, b) => {
+          const dateCompare = new Date(a.date) - new Date(b.date);
+          if (dateCompare !== 0) return dateCompare;
+          return a.start_time.localeCompare(b.start_time);
+        });
+        
         tradesmenData.push({
           id: tradesmanDoc.id,
           name: tradesmanData.name,
@@ -70,8 +105,7 @@ const BrowseTradesmen = () => {
           insuranceStatus: tradesmanData.insuranceStatus,
           profilePhoto: tradesmanData.profilePhoto,
           servicesOffered: tradesmanData.servicesOffered,
-          availableDates,
-          // Basic stats only
+          availableTimeSlots, // New structure with time slots
           completed_jobs_count: tradesmanData.completed_jobs_count || 0,
           average_rating: tradesmanData.average_rating || 0,
           review_count: tradesmanData.reviews?.length || 0
@@ -86,9 +120,7 @@ const BrowseTradesmen = () => {
     }
   };
 
-  // Fetch detailed info (portfolio/reviews) for specific tradesman
   const fetchTradesmanDetails = async (tradesmanId) => {
-    // Return cached data if already loaded
     if (detailedData[tradesmanId]) {
       return detailedData[tradesmanId];
     }
@@ -105,7 +137,6 @@ const BrowseTradesmen = () => {
           reviews: data.reviews || []
         };
         
-        // Cache the details
         setDetailedData(prev => ({
           ...prev,
           [tradesmanId]: details
@@ -125,38 +156,31 @@ const BrowseTradesmen = () => {
   const filterTradesmen = () => {
     let filtered = tradesmen;
 
-    // Filter by name
     if (searchName.trim()) {
       filtered = filtered.filter(tradesman =>
         tradesman.name.toLowerCase().includes(searchName.toLowerCase())
       );
     }
 
-    // Filter by trade type
     if (searchTrade.trim()) {
       filtered = filtered.filter(tradesman =>
         tradesman.tradeType.toLowerCase().includes(searchTrade.toLowerCase())
       );
     }
 
-    // Filter by area
     if (searchArea.trim()) {
       filtered = filtered.filter(tradesman =>
         tradesman.areaCovered.toLowerCase().includes(searchArea.toLowerCase())
       );
     }
 
-    // Filter by services/jobs
     if (searchServices.trim()) {
       filtered = filtered.filter(tradesman => {
         const searchTerm = searchServices.toLowerCase();
-        
-        // Search in various fields where services might be listed
         const searchFields = [
           tradesman.servicesOffered || '',
           tradesman.bio || ''
         ];
-        
         return searchFields.some(field => 
           field.toLowerCase().includes(searchTerm)
         );
@@ -186,10 +210,8 @@ const BrowseTradesmen = () => {
 
   const toggleExpanded = async (tradesmanId) => {
     if (expandedCard === tradesmanId) {
-      // Closing
       setExpandedCard(null);
     } else {
-      // Opening - fetch details if needed
       setExpandedCard(tradesmanId);
       await fetchTradesmanDetails(tradesmanId);
     }
@@ -292,6 +314,53 @@ const BrowseTradesmen = () => {
         {reviews.length > 3 && (
           <p className="text-xs text-gray-500 text-center">
             +{reviews.length - 3} more reviews
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  const renderAvailableTimeSlots = (tradesman) => {
+    if (tradesman.availableTimeSlots.length === 0) {
+      return <p className="text-gray-500 text-sm mb-3">No time slots available</p>;
+    }
+
+    // Group slots by date for better display
+    const slotsByDate = {};
+    tradesman.availableTimeSlots.slice(0, 6).forEach(slot => {
+      if (!slotsByDate[slot.date]) {
+        slotsByDate[slot.date] = [];
+      }
+      slotsByDate[slot.date].push(slot);
+    });
+
+    return (
+      <div className="mb-3 space-y-2">
+        {Object.entries(slotsByDate).map(([date, slots]) => (
+          <div key={date} className="text-sm">
+            <div className="font-medium text-gray-700 mb-1">
+              {new Date(date).toLocaleDateString('en-GB', { 
+                day: 'numeric', 
+                month: 'short',
+                weekday: 'short'
+              })}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {slots.map((slot, index) => (
+                <span 
+                  key={index}
+                  className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs"
+                >
+                  {slot.display_time}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+        
+        {tradesman.availableTimeSlots.length > 6 && (
+          <p className="text-xs text-gray-500">
+            +{tradesman.availableTimeSlots.length - 6} more time slots available
           </p>
         )}
       </div>
@@ -420,168 +489,144 @@ const BrowseTradesmen = () => {
                   <div 
                     className="p-6 cursor-pointer"
                     onClick={(e) => {
-                      // Don't expand if clicking on quote button
                       if (!e.target.closest('button')) {
                         toggleExpanded(tradesman.id);
                       }
                     }}
                   >
-                  {/* Profile Header */}
-                  <div className="flex items-center mb-4">
-                    {tradesman.profilePhoto ? (
-                      <LazyImage 
-                        src={tradesman.profilePhoto} 
-                        alt={tradesman.name} 
-                        className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-3"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mr-3 text-xs">
-                        No Photo
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <h3 className="text-xl font-semibold">{tradesman.name}</h3>
-                      <p className="text-gray-600">{tradesman.tradeType}</p>
-                    </div>
-                    
-                    {/* Expand/Collapse Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleExpanded(tradesman.id);
-                      }}
-                      className="text-blue-600 hover:text-blue-800 ml-2 p-2"
-                    >
-                      {isExpanded ? '−' : '+'}
-                    </button>
-                  </div>
-
-                  {/* Stats Row */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-4 text-sm">
-                      {/* Job Count */}
-                      <div className="flex items-center space-x-1">
-                        <span className="text-green-600 font-medium">
-                          {tradesman.completed_jobs_count} jobs
-                        </span>
+                    {/* Profile Header */}
+                    <div className="flex items-center mb-4">
+                      {tradesman.profilePhoto ? (
+                        <LazyImage 
+                          src={tradesman.profilePhoto} 
+                          alt={tradesman.name} 
+                          className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-3"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mr-3 text-xs">
+                          No Photo
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <h3 className="text-xl font-semibold">{tradesman.name}</h3>
+                        <p className="text-gray-600">{tradesman.tradeType}</p>
                       </div>
                       
-                      {/* Star Rating */}
-                      {tradesman.average_rating > 0 && (
+                      {/* Expand/Collapse Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExpanded(tradesman.id);
+                        }}
+                        className="text-blue-600 hover:text-blue-800 ml-2 p-2"
+                      >
+                        {isExpanded ? '−' : '+'}
+                      </button>
+                    </div>
+
+                    {/* Stats Row */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-4 text-sm">
                         <div className="flex items-center space-x-1">
-                          <div className="flex">{renderStars(tradesman.average_rating)}</div>
-                          <span className="text-gray-600">
-                            ({tradesman.review_count})
+                          <span className="text-green-600 font-medium">
+                            {tradesman.completed_jobs_count} jobs
+                          </span>
+                        </div>
+                        
+                        {tradesman.average_rating > 0 && (
+                          <div className="flex items-center space-x-1">
+                            <div className="flex">{renderStars(tradesman.average_rating)}</div>
+                            <span className="text-gray-600">
+                              ({tradesman.review_count})
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Key Details */}
+                    <div className="mb-4 space-y-2">
+                      <p className="text-gray-600"><strong>Area:</strong> {tradesman.areaCovered}</p>
+                      
+                      {/* Hourly Rate */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-blue-800 font-semibold">
+                          {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
+                        </p>
+                        {tradesman.yearsExperience && (
+                          <p className="text-blue-600 text-sm">{tradesman.yearsExperience} years experience</p>
+                        )}
+                      </div>
+
+                      {/* Insurance Badge */}
+                      {tradesman.insuranceStatus && (
+                        <div>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
+                            tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {tradesman.insuranceStatus}
                           </span>
                         </div>
                       )}
-                    </div>
-                  </div>
 
-                  {/* Key Details */}
-                  <div className="mb-4 space-y-2">
-                    <p className="text-gray-600"><strong>Area:</strong> {tradesman.areaCovered}</p>
-                    
-                    {/* Hourly Rate - Prominent Display */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <p className="text-blue-800 font-semibold">
-                        {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
+                      {/* Bio Preview */}
+                      <p className="text-gray-600 text-sm">
+                        {isExpanded ? tradesman.bio : `${tradesman.bio?.slice(0, 100)}...`}
                       </p>
-                      {tradesman.yearsExperience && (
-                        <p className="text-blue-600 text-sm">{tradesman.yearsExperience} years experience</p>
-                      )}
                     </div>
 
-                    {/* Insurance Badge */}
-                    {tradesman.insuranceStatus && (
-                      <div>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
-                          tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {tradesman.insuranceStatus}
-                        </span>
-                      </div>
-                    )}
+                    {/* Expanded Content */}
+                    {isExpanded && (
+                      <div className="border-t pt-3 space-y-4">
+                        {/* Full Services */}
+                        {tradesman.servicesOffered && (
+                          <div>
+                            <h4 className="font-medium mb-2 text-sm">Services Offered:</h4>
+                            <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                              {tradesman.servicesOffered}
+                            </p>
+                          </div>
+                        )}
 
-                    {/* Bio Preview */}
-                    <p className="text-gray-600 text-sm">
-                      {isExpanded ? tradesman.bio : `${tradesman.bio?.slice(0, 100)}...`}
-                    </p>
-                  </div>
-
-                  {/* Expanded Content */}
-                  {isExpanded && (
-                    <div className="border-t pt-3 space-y-4">
-                      {/* Full Services */}
-                      {tradesman.servicesOffered && (
+                        {/* Portfolio Gallery */}
                         <div>
-                          <h4 className="font-medium mb-2 text-sm">Services Offered:</h4>
-                          <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                            {tradesman.servicesOffered}
-                          </p>
+                          <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
+                          {renderPortfolioGallery(details.portfolio_images, loadingDetails)}
                         </div>
-                      )}
 
-                      {/* Portfolio Gallery */}
-                      <div>
-                        <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
-                        {renderPortfolioGallery(details.portfolio_images, loadingDetails)}
-                      </div>
-
-                      {/* Recent Reviews */}
-                      <div>
-                        <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
-                        {renderReviews(details.reviews, loadingDetails)}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Available Dates & Booking */}
-                  <div className="border-t pt-4 mt-4">
-                    <h4 className="font-medium mb-2">Next Available:</h4>
-                    {tradesman.availableDates.length === 0 ? (
-                      <p className="text-gray-500 text-sm mb-3">No dates available</p>
-                    ) : (
-                      <div className="mb-3">
-                        <ul className="text-sm text-green-600 space-y-1">
-                          {tradesman.availableDates.slice(0, 3).map(date => (
-                            <li key={date.id} className="flex items-center">
-                              <span className="w-1 h-1 bg-green-600 rounded-full mr-2"></span>
-                              {new Date(date.date_available).toLocaleDateString('en-GB', { 
-                                day: 'numeric', 
-                                month: 'long' 
-                              })}
-                            </li>
-                          ))}
-                          {tradesman.availableDates.length > 3 && (
-                            <li className="text-gray-500 text-xs ml-3">
-                              +{tradesman.availableDates.length - 3} more dates
-                            </li>
-                          )}
-                        </ul>
+                        {/* Recent Reviews */}
+                        <div>
+                          <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
+                          {renderReviews(details.reviews, loadingDetails)}
+                        </div>
                       </div>
                     )}
                     
-                    {/* Request Quote Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleBooking(tradesman.id);
-                      }}
-                      className={`w-full py-2 px-4 rounded font-medium transition-colors ${
-                        tradesman.availableDates.length > 0 
-                          ? 'bg-green-600 text-white hover:bg-green-700' 
-                          : 'bg-gray-400 text-white cursor-not-allowed'
-                      }`}
-                      disabled={tradesman.availableDates.length === 0}
-                    >
-                      {tradesman.availableDates.length > 0 ? 'Request Quote' : 'No Availability'}
-                    </button>
+                    {/* Available Time Slots & Booking */}
+                    <div className="border-t pt-4 mt-4">
+                      <h4 className="font-medium mb-2">Available Time Slots:</h4>
+                      {renderAvailableTimeSlots(tradesman)}
+                      
+                      {/* Request Quote Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBooking(tradesman.id);
+                        }}
+                        className={`w-full py-2 px-4 rounded font-medium transition-colors ${
+                          tradesman.availableTimeSlots.length > 0 
+                            ? 'bg-green-600 text-white hover:bg-green-700' 
+                            : 'bg-gray-400 text-white cursor-not-allowed'
+                        }`}
+                        disabled={tradesman.availableTimeSlots.length === 0}
+                      >
+                        {tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
               </div>
             );
           })}
