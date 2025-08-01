@@ -17,6 +17,7 @@ import { db } from '../config/firebase';
 
 // 🚀 NEW BULLETPROOF QUOTE REQUESTS COMPONENT
 // Connects to 'quote_requests' collection - no more race conditions!
+// 💳 UPDATED WITH PAYMENT-FIRST FLOW
 const QuoteRequests = () => {
   const { currentUser, userType } = useAuth();
   const navigate = useNavigate();
@@ -226,9 +227,9 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🚀 BULLETPROOF ACCEPT OPERATION - THE MAGIC HAPPENS HERE!
+  // 💳 UPDATED PAYMENT-FIRST ACCEPT OPERATION - THE MAGIC HAPPENS HERE!
   const acceptQuote = async (quoteRequestId) => {
-    console.log('🚀 Starting bulletproof quote acceptance:', quoteRequestId);
+    console.log('🚀 Starting quote acceptance with payment-first flow:', quoteRequestId);
     
     if (acceptingQuote[quoteRequestId]) {
       console.log('⏳ Accept already in progress for this quote');
@@ -248,110 +249,48 @@ const QuoteRequests = () => {
       
       const quoteData = quoteDoc.data();
       console.log('✅ Quote data retrieved:', quoteData);
+
+      // STEP 2: UPDATE QUOTE STATUS TO "PAYMENT_PENDING" (instead of creating job)
+      console.log('💳 Step 2: Marking quote as payment pending...');
+      await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
+        status: 'payment_pending',
+        payment_required: true,
+        final_agreed_price: getFinalNegotiatedPrice(quoteData),
+        accepted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
+      // STEP 3: REDIRECT TO PAYMENT CHECKOUT (with quote data)
+      console.log('🛒 Step 3: Redirecting to payment checkout...');
       
-      // STEP 2: Create the active job record
-      console.log('📝 Step 2: Creating active job...');
-      const jobData = {
-        // Reference to original quote
-        quote_request_id: quoteRequestId,
+      if (userType === 'customer') {
+        // Customer accepts quote → goes to payment
+        navigate('/payment-checkout', { 
+          state: { 
+            quoteId: quoteRequestId,
+            quoteData: quoteData,
+            finalPrice: getFinalNegotiatedPrice(quoteData),
+            paymentRequired: true
+          }
+        });
+      } else {
+        // Tradesman accepts customer counter-offer → customer must pay
+        // Send email to customer with payment link
+        await sendEmailNotification({
+          recipientEmail: quoteData.customer_email,
+          recipientName: quoteData.customer_name,
+          senderName: quoteData.tradesman_name,
+          messageText: `${quoteData.tradesman_name} has accepted your counter-offer of ${getFinalNegotiatedPrice(quoteData)} for "${quoteData.job_title}". Please complete payment to confirm the job.`,
+          replyLink: `https://patchworktrades.com/payment-checkout?quoteId=${quoteRequestId}`
+        });
         
-        // Copy all quote data
-        customer_id: quoteData.customer_id,
-        customer_name: quoteData.customer_name,
-        customer_email: quoteData.customer_email,
-        customer_photo: quoteData.customer_photo,
-        tradesman_id: quoteData.tradesman_id,
-        tradesman_name: quoteData.tradesman_name,
-        tradesman_email: quoteData.tradesman_email,
-        tradesman_photo: quoteData.tradesman_photo,
-        
-        // Job details
-        job_title: quoteData.job_title,
-        job_description: quoteData.job_description,
-        job_images: quoteData.job_images || [],
-        additional_notes: quoteData.additional_notes,
-        
-        // Final agreement from negotiation
-        final_price: getFinalNegotiatedPrice(quoteData),
-        final_reasoning: quoteData.quote_reasoning || 'Quote accepted',
-        agreed_date: quoteData.preferred_dates_list?.[0] || new Date().toISOString().split('T')[0],
-        
-        // Job status
-        status: 'accepted',
-        
-        // Initialize job fields
-        progress_notes: '',
-        work_started_at: null,
-        estimated_completion: null,
-        completion_photos: [],
-        completion_notes: '',
-        submitted_for_approval_at: null,
-        
-        // Review system
-        reviewed_by_customer: false,
-        customer_rating: null,
-        customer_review: null,
-        review_submitted_at: null,
-        
-        // Cancellation
-        cancelled_by: null,
-        cancelled_at: null,
-        cancellation_reason: null,
-        
-        // Payment (for future)
-        payment_intent_id: null,
-        payment_status: 'pending',
-        platform_commission: 0, // 0% commission period
-        tradesman_payout: extractNumericValue(getFinalNegotiatedPrice(quoteData)),
-        
-        // Timestamps
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        completed_at: null
-      };
-      
-      // Create job document
-      const jobRef = await addDoc(collection(db, 'active_jobs'), jobData);
-      console.log('✅ Active job created with ID:', jobRef.id);
-      
-      // STEP 3: Update comments to reference the new job
-      console.log('🔄 Step 3: Migrating comments to job...');
-      const commentsQuery = query(
-        collection(db, 'booking_comments'),
-        where('quote_request_id', '==', quoteRequestId)
-      );
-      const commentsSnapshot = await getDocs(commentsQuery);
-      
-      const commentUpdates = commentsSnapshot.docs.map(commentDoc => 
-        updateDoc(commentDoc.ref, {
-          active_job_id: jobRef.id,
-          quote_request_id: null // Clear the quote reference
-        })
-      );
-      
-      if (commentUpdates.length > 0) {
-        await Promise.all(commentUpdates);
-        console.log(`✅ ${commentUpdates.length} comments migrated to job`);
+        alert(`✅ Counter-offer accepted!\n\n${quoteData.customer_name} has been notified and will receive a payment link to complete the booking.`);
       }
       
-      // STEP 4: Delete the quote request (NO MORE RACE CONDITIONS!)
-      console.log('🗑️ Step 4: Deleting quote request...');
-      await deleteDoc(doc(db, 'quote_requests', quoteRequestId));
-      console.log('✅ Quote request deleted successfully');
-      
-      // STEP 5: Send email notifications
-      console.log('📧 Step 5: Sending email notifications...');
-      await sendQuoteAcceptedEmails(quoteData, jobRef.id, jobData.final_price);
-      
-      // STEP 6: Refresh data and redirect
-      console.log('🔄 Step 6: Refreshing data...');
+      // STEP 4: Refresh quotes to show new status
       await fetchQuoteRequests();
       
-      console.log('🎉 QUOTE ACCEPTED SUCCESSFULLY - NO RACE CONDITIONS!');
-      
-      // Success message and redirect
-      alert(`✅ Quote accepted successfully!\n\nJob created and moved to Active Jobs section.`);
-      navigate('/active-jobs'); // Redirect to see the new job
+      console.log('🎉 QUOTE ACCEPTED - CUSTOMER REDIRECTED TO PAYMENT!');
       
     } catch (error) {
       console.error('❌ Quote acceptance failed:', error);
@@ -378,33 +317,6 @@ const QuoteRequests = () => {
   const extractNumericValue = (priceString) => {
     const match = priceString.match(/£?(\d+)/);
     return match ? parseInt(match[1]) : 0;
-  };
-
-  // Enhanced email notification for quote acceptance
-  const sendQuoteAcceptedEmails = async (quoteData, jobId, finalPrice) => {
-    try {
-      // Email to customer
-      await sendEmailNotification({
-        recipientEmail: quoteData.customer_email,
-        recipientName: quoteData.customer_name,
-        senderName: quoteData.tradesman_name,
-        messageText: `Great news! Your quote for "${quoteData.job_title}" has been accepted. Final price: ${finalPrice}. The job has moved to your Active Jobs section where you can track progress.`,
-        replyLink: `https://patchworktrades.com/active-jobs`
-      });
-
-      // Email to tradesman
-      await sendEmailNotification({
-        recipientEmail: quoteData.tradesman_email,
-        recipientName: quoteData.tradesman_name,
-        senderName: quoteData.customer_name,
-        messageText: `Congratulations! ${quoteData.customer_name} has accepted your quote for "${quoteData.job_title}". Final price: ${finalPrice}. The job has moved to your Active Jobs section.`,
-        replyLink: `https://patchworktrades.com/active-jobs`
-      });
-      
-      console.log('✅ Quote acceptance emails sent successfully');
-    } catch (error) {
-      console.error('⚠️ Error sending acceptance emails (non-critical):', error);
-    }
   };
 
   // Quote update functions (same patterns as your existing, but for quotes)
@@ -616,7 +528,7 @@ const QuoteRequests = () => {
                     </p>
                   </div>
                   
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center flex-wrap">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${getUrgencyColor(request.urgency)}`}>
                       {request.urgency?.charAt(0).toUpperCase() + request.urgency?.slice(1)} Priority
                     </span>
@@ -625,6 +537,13 @@ const QuoteRequests = () => {
                     {request.status === 'negotiating' && (
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                         Negotiating
+                      </span>
+                    )}
+
+                    {/* 💳 NEW: Payment Required Badge */}
+                    {request.status === 'payment_pending' && (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        💳 Payment Required
                       </span>
                     )}
                     
@@ -732,8 +651,48 @@ const QuoteRequests = () => {
 
                 {/* Actions Section */}
                 <div className="mt-6 pt-4 border-t border-gray-200">
-                  {/* TRADESMAN ACTIONS */}
-                  {userType === 'tradesman' && (
+                  {/* 💳 PAYMENT PENDING STATUS */}
+                  {request.status === 'payment_pending' && (
+                    <>
+                      <h3 className="font-medium text-gray-900 mb-3">Payment Required</h3>
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                        <div className="flex items-center text-red-800 mb-3">
+                          <span className="text-lg mr-2">💳</span>
+                          <span className="font-semibold">Quote Accepted - Payment Required</span>
+                        </div>
+                        <p className="text-red-700 mb-3">
+                          Final agreed price: <strong>{request.final_agreed_price}</strong>
+                        </p>
+                        {userType === 'customer' ? (
+                          <div>
+                            <p className="text-red-700 text-sm mb-3">
+                              Complete payment to confirm this job and move it to your Active Jobs.
+                            </p>
+                            <button
+                              onClick={() => navigate('/payment-checkout', { 
+                                state: { 
+                                  quoteId: request.id,
+                                  quoteData: request,
+                                  finalPrice: request.final_agreed_price,
+                                  paymentRequired: true
+                                }
+                              })}
+                              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium"
+                            >
+                              💳 Complete Payment ({request.final_agreed_price})
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-red-700 text-sm">
+                            Waiting for <strong>{request.customer_name}</strong> to complete payment. They have been notified via email.
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* TRADESMAN ACTIONS (only show if not payment pending) */}
+                  {userType === 'tradesman' && request.status !== 'payment_pending' && (
                     <>
                       {/* No quotes sent yet - original buttons */}
                       {!request.has_custom_quote && !request.has_customer_counter && (
@@ -843,8 +802,8 @@ const QuoteRequests = () => {
                     </>
                   )}
 
-                  {/* CUSTOMER ACTIONS */}
-                  {userType === 'customer' && (
+                  {/* CUSTOMER ACTIONS (only show if not payment pending) */}
+                  {userType === 'customer' && request.status !== 'payment_pending' && (
                     <>
                       {/* Customer sent counter, waiting for tradesman */}
                       {request.has_customer_counter && (
