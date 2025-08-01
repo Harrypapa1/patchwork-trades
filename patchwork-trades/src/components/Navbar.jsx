@@ -168,7 +168,6 @@ const Navbar = () => {
                     </Link>
                   )}
 
-
                   
                   {userType === 'customer' && (
                     <Link to="/customer-dashboard" className="hover:text-blue-200 transition-colors">
@@ -185,6 +184,9 @@ const Navbar = () => {
                       <div className="absolute top-full left-0 bg-blue-700 rounded-md shadow-lg py-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                         <Link to="/tradesman-dashboard" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
                           Dashboard Home
+                        </Link>
+                        <Link to="/earnings-overview" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
+                          💰 Earnings Overview
                         </Link>
                         <Link to="/make-more-money" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
                           Make More Money
@@ -285,7 +287,6 @@ const Navbar = () => {
                   </Link>
                 )}
 
-
                 
                 {userType === 'customer' && (
                   <Link 
@@ -317,6 +318,13 @@ const Navbar = () => {
                           onClick={closeMenu}
                         >
                           Dashboard Home
+                        </Link>
+                        <Link 
+                          to="/earnings-overview" 
+                          className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
+                          onClick={closeMenu}
+                        >
+                          💰 Earnings Overview
                         </Link>
                         <Link 
                           to="/make-more-money" 
