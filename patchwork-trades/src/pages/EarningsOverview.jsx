@@ -58,11 +58,17 @@ const EarningsOverview = () => {
         ...doc.data()
       }));
 
-      // Calculate earnings
-      calculateEarnings(completedJobs);
-      
-      // Generate recent payments (demo data based on completed jobs)
-      generatePaymentHistory(completedJobs);
+      // 🆕 ADD DEMO DATA IF NO REAL DATA EXISTS
+      if (completedJobs.length === 0) {
+        // Generate demo completed jobs for demonstration
+        const demoJobs = generateDemoJobs();
+        calculateEarnings(demoJobs);
+        generatePaymentHistory(demoJobs);
+      } else {
+        // Use real data if it exists
+        calculateEarnings(completedJobs);
+        generatePaymentHistory(completedJobs);
+      }
       
       // Fetch pending payments
       const pendingQuery = query(
@@ -77,13 +83,101 @@ const EarningsOverview = () => {
         ...doc.data()
       }));
 
-      setPendingPayments(pending);
+      // 🆕 ADD DEMO PENDING JOBS IF NO REAL ONES
+      if (pending.length === 0) {
+        const demoPending = generateDemoPendingJobs();
+        setPendingPayments(demoPending);
+      } else {
+        setPendingPayments(pending);
+      }
 
     } catch (error) {
       console.error('Error fetching earnings data:', error);
+      
+      // 🆕 FALLBACK TO DEMO DATA ON ERROR
+      const demoJobs = generateDemoJobs();
+      calculateEarnings(demoJobs);
+      generatePaymentHistory(demoJobs);
+      setPendingPayments(generateDemoPendingJobs());
     } finally {
       setLoading(false);
     }
+  };
+
+  // 🆕 GENERATE DEMO COMPLETED JOBS
+  const generateDemoJobs = () => {
+    const now = new Date();
+    const demoJobs = [];
+    
+    // Generate jobs from the last 3 months
+    for (let i = 0; i < 12; i++) {
+      const completedDate = new Date(now.getTime() - (i * 7 + Math.random() * 7) * 24 * 60 * 60 * 1000);
+      const jobAmount = 150 + Math.floor(Math.random() * 300); // £150-£450
+      
+      demoJobs.push({
+        id: `demo_job_${i}`,
+        job_title: [
+          'Kitchen Sink Installation',
+          'Bathroom Tile Repair',
+          'Garden Fence Fix',
+          'Electrical Socket Installation',
+          'Boiler Maintenance',
+          'Painting Living Room',
+          'Door Lock Replacement',
+          'Window Repair',
+          'Ceiling Light Installation',
+          'Plumbing Emergency Fix',
+          'Garden Decking Repair',
+          'Radiator Installation'
+        ][i] || `Job ${i + 1}`,
+        customer_name: [
+          'Sarah Johnson',
+          'Michael Brown',
+          'Emma Wilson',
+          'David Smith',
+          'Lisa Taylor',
+          'John Davis',
+          'Rachel Green',
+          'Tom Wilson',
+          'Amy Clark',
+          'Steve Miller',
+          'Kate Thompson',
+          'Mark Jones'
+        ][i] || `Customer ${i + 1}`,
+        final_price: `£${jobAmount}`,
+        completed_at: completedDate.toISOString(),
+        status: 'completed'
+      });
+    }
+    
+    return demoJobs;
+  };
+
+  // 🆕 GENERATE DEMO PENDING JOBS
+  const generateDemoPendingJobs = () => {
+    return [
+      {
+        id: 'demo_pending_1',
+        job_title: 'Kitchen Cabinet Installation',
+        customer_name: 'Helen Roberts',
+        final_price: '£280',
+        status: 'in_progress'
+      },
+      {
+        id: 'demo_pending_2',
+        job_title: 'Bathroom Renovation',
+        customer_name: 'Peter Jackson',
+        custom_quote: '£450',
+        status: 'pending_approval'
+      },
+      {
+        id: 'demo_pending_3',
+        job_title: 'Garden Shed Assembly',
+        customer_name: 'Mary Collins',
+        final_price: '£180',
+        status: 'accepted'
+      },
+    ];
   };
 
   const calculateEarnings = (jobs) => {
@@ -168,25 +262,26 @@ const EarningsOverview = () => {
     );
   }
 
-  if (!profile?.payment_enabled) {
-    return (
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <div className="text-4xl text-yellow-500 mb-4">💳</div>
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Payment Setup Required</h2>
-          <p className="text-gray-600 mb-6">
-            You need to complete your payment setup to start receiving earnings from jobs.
-          </p>
-          <button
-            onClick={() => navigate('/tradesman-onboarding')}
-            className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-medium"
-          >
-            Set Up Payments
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // 🆕 ALWAYS SHOW EARNINGS PAGE (removed payment_enabled check for demo)
+  // if (!profile?.payment_enabled) {
+  //   return (
+  //     <div className="max-w-6xl mx-auto">
+  //       <div className="bg-white rounded-lg shadow-md p-6 text-center">
+  //         <div className="text-4xl text-yellow-500 mb-4">💳</div>
+  //         <h2 className="text-2xl font-semibold text-gray-900 mb-4">Payment Setup Required</h2>
+  //         <p className="text-gray-600 mb-6">
+  //           You need to complete your payment setup to start receiving earnings from jobs.
+  //         </p>
+  //         <button
+  //           onClick={() => navigate('/tradesman-onboarding')}
+  //           className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-medium"
+  //         >
+  //           Set Up Payments
+  //         </button>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -195,6 +290,13 @@ const EarningsOverview = () => {
         <p className="text-gray-600 mt-2">
           Track your earnings, payment history, and upcoming payouts
         </p>
+        {/* 🆕 DEMO NOTICE */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+          <p className="text-blue-800 text-sm">
+            📊 <strong>Demo Data:</strong> This page shows sample earnings data to demonstrate functionality. 
+            Real earnings will appear here once you complete actual jobs.
+          </p>
+        </div>
       </div>
 
       {/* Earnings Summary Cards */}
@@ -333,7 +435,7 @@ const EarningsOverview = () => {
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-gray-600">Account ending in</span>
-                <span className="font-medium">****{profile.bank_account_last_4 || '1234'}</span>
+                <span className="font-medium">****{profile?.bank_account_last_4 || '1234'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-600">Status</span>
