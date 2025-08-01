@@ -21,6 +21,7 @@ const BrowseTradesmen = () => {
   const [expandedCard, setExpandedCard] = useState(null);
   const [detailedData, setDetailedData] = useState({});
   const [loadingDetails, setLoadingDetails] = useState(false);
+  const [isMobileView, setIsMobileView] = useState(false);
   
   // Filters
   const [selectedTradeTypes, setSelectedTradeTypes] = useState([]);
@@ -40,6 +41,18 @@ const BrowseTradesmen = () => {
     'afternoon': { label: 'Afternoon', time: '1pm-5pm' },
     'evening': { label: 'Evening', time: '5pm-8pm' }
   };
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     fetchTradesmen();
@@ -238,6 +251,64 @@ const BrowseTradesmen = () => {
     );
   };
 
+  // Mobile date selection calendar
+  const renderMobileDateSelection = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(currentDate);
+    const firstDay = getFirstDayOfMonth(currentDate);
+    
+    const days = [];
+
+    // Empty cells for days before the first day of the month
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
+    }
+
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateString(year, month, day);
+      const isPast = isDateInPast(year, month, day);
+      const hasAvailability = hasAvailabilityOnDate(dateStr);
+      const isSelected = selectedDates.includes(dateStr);
+      
+      let className = "aspect-square p-2 rounded-lg border-2 transition-all duration-200 touch-manipulation ";
+      
+      if (isPast) {
+        className += "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200";
+      } else if (isSelected) {
+        className += "bg-blue-500 text-white border-blue-600 transform scale-105 shadow-lg cursor-pointer";
+      } else if (hasAvailability) {
+        className += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200 cursor-pointer active:scale-95";
+      } else {
+        className += "bg-white text-gray-400 border-gray-200 cursor-not-allowed";
+      }
+
+      days.push(
+        <button
+          key={day}
+          className={className}
+          onClick={() => {
+            if (isPast || !hasAvailability) return;
+            toggleDate(dateStr);
+          }}
+          style={{ minHeight: '60px' }} // Ensure minimum touch target
+          disabled={isPast || !hasAvailability}
+        >
+          <div className="flex flex-col items-center justify-center h-full">
+            <div className="font-bold text-lg">{day}</div>
+            {hasAvailability && !isPast && (
+              <div className="w-2 h-2 bg-green-500 rounded-full mt-1"></div>
+            )}
+          </div>
+        </button>
+      );
+    }
+
+    return days;
+  };
+
+  // Desktop calendar (original)
   const renderAvailabilityCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -300,6 +371,194 @@ const BrowseTradesmen = () => {
     }
 
     return days;
+  };
+
+  // Date selection section with mobile optimization
+  const renderDateSelectionSection = () => {
+    if (!isMobileView) {
+      // Desktop version (original)
+      return (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-4">Select Available Dates</h2>
+          
+          {/* Calendar Header */}
+          <div className="flex justify-between items-center mb-4">
+            <button
+              onClick={() => navigateMonth(-1)}
+              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+            >
+              ← Previous
+            </button>
+            
+            <h3 className="text-xl font-semibold">
+              {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+            </h3>
+            
+            <button
+              onClick={() => navigateMonth(1)}
+              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+            >
+              Next →
+            </button>
+          </div>
+
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 gap-2 mb-4">
+            {renderAvailabilityCalendar()}
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap gap-4 justify-center text-sm mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
+              <span>Has Availability</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-blue-100 border-2 border-blue-300 rounded"></div>
+              <span>Selected</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
+              <span>No Availability</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-gray-100 border-2 border-gray-200 rounded"></div>
+              <span>Past Date</span>
+            </div>
+          </div>
+          
+          {/* Selected Dates Display */}
+          {selectedDates.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-blue-800 font-medium mb-2">Selected Dates:</p>
+              <div className="flex flex-wrap gap-2">
+                {selectedDates.map(dateStr => (
+                  <span key={dateStr} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                    {new Date(dateStr).toLocaleDateString('en-GB', { 
+                      day: 'numeric', 
+                      month: 'short',
+                      weekday: 'short'
+                    })}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Filter Summary */}
+          <div className="flex justify-between items-center mt-4">
+            <p className="text-sm text-gray-600">
+              Showing {filteredTradesmen.length} of {tradesmen.length} tradesmen
+            </p>
+            
+            {(selectedTradeTypes.length > 0 || selectedDates.length > 0) && (
+              <button
+                onClick={clearFilters}
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Mobile version
+    return (
+      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
+        <div className="p-4 border-b">
+          <h2 className="text-lg font-semibold text-center">Select Dates</h2>
+          <p className="text-sm text-gray-600 text-center mt-1">
+            Tap green dates when you need work done
+          </p>
+        </div>
+        
+        {/* Month display */}
+        <div className="p-4 text-center border-b">
+          <h3 className="text-xl font-bold">
+            {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+          </h3>
+        </div>
+
+        {/* Calendar */}
+        <div className="p-4">
+          {/* Day headers */}
+          <div className="grid grid-cols-7 gap-1 mb-2">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+              <div key={day} className="text-center font-medium text-gray-600 text-sm py-2">
+                {day}
+              </div>
+            ))}
+          </div>
+          
+          {/* Calendar grid */}
+          <div className="grid grid-cols-7 gap-2 mb-4">
+            {renderMobileDateSelection()}
+          </div>
+          
+          {/* Legend */}
+          <div className="flex justify-center gap-4 text-xs mb-4">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-green-100 border border-green-300 rounded"></div>
+              <span>Available</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-blue-500 rounded"></div>
+              <span>Selected</span>
+            </div>
+          </div>
+          
+          {/* Selected dates summary */}
+          {selectedDates.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-blue-800 font-medium mb-2 text-sm">
+                Selected ({selectedDates.length}):
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {selectedDates.map(dateStr => (
+                  <span key={dateStr} className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                    {new Date(dateStr).toLocaleDateString('en-GB', { 
+                      day: 'numeric', 
+                      month: 'short'
+                    })}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleDate(dateStr);
+                      }}
+                      className="ml-1 text-blue-600 hover:text-blue-800"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Bottom Navigation - THUMB FRIENDLY */}
+        <div className="border-t bg-gray-50">
+          <div className="flex">
+            <button
+              onClick={() => navigateMonth(-1)}
+              className="flex-1 py-4 px-6 text-blue-600 font-medium hover:bg-gray-100 transition-colors"
+              style={{ minHeight: '56px' }}
+            >
+              ← Previous Month
+            </button>
+            <button
+              onClick={() => navigateMonth(1)}
+              className="flex-1 py-4 px-6 text-blue-600 font-medium hover:bg-gray-100 transition-colors border-l"
+              style={{ minHeight: '56px' }}
+            >
+              Next Month →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const handleBooking = (tradesmanId) => {
@@ -477,7 +736,7 @@ const BrowseTradesmen = () => {
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className={`${isMobileView ? 'max-w-full px-4' : 'max-w-6xl mx-auto'}`}>
       <h1 className="text-3xl font-bold mb-6">Find Available Tradesmen</h1>
       
       {/* Instructions */}
@@ -491,11 +750,11 @@ const BrowseTradesmen = () => {
         </ul>
       </div>
       
-      {/* Trade Type Selection */}
+      {/* Trade Type Selection - Mobile Optimized */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-lg font-semibold mb-4">Select Trade Types</h2>
         
-        <div className="flex flex-wrap gap-3 mb-4">
+        <div className={`flex flex-wrap gap-3 mb-4 ${isMobileView ? 'justify-center' : ''}`}>
           {TRADE_TYPES.map(tradeType => (
             <button
               key={tradeType}
@@ -505,6 +764,7 @@ const BrowseTradesmen = () => {
                   ? 'bg-blue-100 border-blue-300 text-blue-800'
                   : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
               }`}
+              style={{ minHeight: '44px' }} // Mobile touch target
             >
               {tradeType}
             </button>
@@ -518,89 +778,24 @@ const BrowseTradesmen = () => {
         )}
       </div>
 
-      {/* Date Selection Calendar */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Select Available Dates</h2>
-        
-        {/* Calendar Header */}
-        <div className="flex justify-between items-center mb-4">
-          <button
-            onClick={() => navigateMonth(-1)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-          >
-            ← Previous
-          </button>
-          
-          <h3 className="text-xl font-semibold">
-            {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-          </h3>
-          
-          <button
-            onClick={() => navigateMonth(1)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-          >
-            Next →
-          </button>
-        </div>
+      {/* Date Selection Calendar - Mobile Optimized */}
+      {renderDateSelectionSection()}
 
-        {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-2 mb-4">
-          {renderAvailabilityCalendar()}
-        </div>
-
-        {/* Legend */}
-        <div className="flex flex-wrap gap-4 justify-center text-sm mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
-            <span>Has Availability</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-blue-100 border-2 border-blue-300 rounded"></div>
-            <span>Selected</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
-            <span>No Availability</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-gray-100 border-2 border-gray-200 rounded"></div>
-            <span>Past Date</span>
-          </div>
-        </div>
+      {/* Filter Summary - Mobile Optimized */}
+      <div className="flex justify-between items-center mb-6">
+        <p className="text-sm text-gray-600">
+          Showing {filteredTradesmen.length} of {tradesmen.length} tradesmen
+        </p>
         
-        {/* Selected Dates Display */}
-        {selectedDates.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-blue-800 font-medium mb-2">Selected Dates:</p>
-            <div className="flex flex-wrap gap-2">
-              {selectedDates.map(dateStr => (
-                <span key={dateStr} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                  {new Date(dateStr).toLocaleDateString('en-GB', { 
-                    day: 'numeric', 
-                    month: 'short',
-                    weekday: 'short'
-                  })}
-                </span>
-              ))}
-            </div>
-          </div>
+        {(selectedTradeTypes.length > 0 || selectedDates.length > 0) && (
+          <button
+            onClick={clearFilters}
+            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+            style={{ minHeight: '44px' }} // Mobile touch target
+          >
+            Clear all filters
+          </button>
         )}
-        
-        {/* Filter Summary */}
-        <div className="flex justify-between items-center mt-4">
-          <p className="text-sm text-gray-600">
-            Showing {filteredTradesmen.length} of {tradesmen.length} tradesmen
-          </p>
-          
-          {(selectedTradeTypes.length > 0 || selectedDates.length > 0) && (
-            <button
-              onClick={clearFilters}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-            >
-              Clear all filters
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Results */}
@@ -614,6 +809,7 @@ const BrowseTradesmen = () => {
               <button
                 onClick={clearFilters}
                 className="text-blue-600 hover:text-blue-800 font-medium"
+                style={{ minHeight: '44px' }} // Mobile touch target
               >
                 Clear filters to see all tradesmen
               </button>
@@ -621,7 +817,7 @@ const BrowseTradesmen = () => {
           )}
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className={`grid gap-6 ${isMobileView ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
           {filteredTradesmen.map(tradesman => {
             const isExpanded = expandedCard === tradesman.id;
             const details = detailedData[tradesman.id] || { portfolio_images: [], reviews: [] };
@@ -666,13 +862,14 @@ const BrowseTradesmen = () => {
                         <p className="text-gray-600">{tradesman.tradeType}</p>
                       </div>
                       
-                      {/* Expand/Collapse Button */}
+                      {/* Expand/Collapse Button - Mobile Optimized */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleExpanded(tradesman.id);
                         }}
-                        className="text-blue-600 hover:text-blue-800 ml-2 p-2"
+                        className="text-blue-600 hover:text-blue-800 ml-2 p-2 rounded-full hover:bg-blue-50"
+                        style={{ minHeight: '44px', minWidth: '44px' }} // Mobile touch target
                       >
                         {isExpanded ? '−' : '+'}
                       </button>
@@ -763,17 +960,18 @@ const BrowseTradesmen = () => {
                       <h4 className="font-medium mb-2">Available Time Slots:</h4>
                       {renderAvailableTimeSlots(tradesman)}
                       
-                      {/* Request Quote Button */}
+                      {/* Request Quote Button - Mobile Optimized */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           handleBooking(tradesman.id);
                         }}
-                        className={`w-full py-2 px-4 rounded font-medium transition-colors ${
+                        className={`w-full py-3 px-4 rounded font-medium transition-colors ${
                           tradesman.availableTimeSlots.length > 0 
                             ? 'bg-green-600 text-white hover:bg-green-700' 
                             : 'bg-gray-400 text-white cursor-not-allowed'
                         }`}
+                        style={{ minHeight: '48px' }} // Mobile touch target
                         disabled={tradesman.availableTimeSlots.length === 0}
                       >
                         {tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available'}
@@ -786,6 +984,9 @@ const BrowseTradesmen = () => {
           })}
         </div>
       )}
+      
+      {/* Bottom padding for mobile */}
+      {isMobileView && <div className="h-20"></div>}
     </div>
   );
 };
