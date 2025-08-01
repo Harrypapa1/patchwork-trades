@@ -111,8 +111,19 @@ const EarningsOverview = () => {
     
     // Generate jobs from the last 3 months
     for (let i = 0; i < 12; i++) {
-      const completedDate = new Date(now.getTime() - (i * 7 + Math.random() * 7) * 24 * 60 * 60 * 1000);
-      const jobAmount = 150 + Math.floor(Math.random() * 300); // £150-£450
+      let completedDate;
+      let jobAmount;
+      
+      // Ensure this week has £750 worth of jobs
+      if (i < 3) {
+        // Recent jobs (this week) - make them higher value
+        completedDate = new Date(now.getTime() - (i * 2 + Math.random() * 2) * 24 * 60 * 60 * 1000);
+        jobAmount = 200 + Math.floor(Math.random() * 200); // £200-£400 for recent jobs
+      } else {
+        // Older jobs
+        completedDate = new Date(now.getTime() - (i * 7 + Math.random() * 7) * 24 * 60 * 60 * 1000);
+        jobAmount = 150 + Math.floor(Math.random() * 300); // £150-£450 for older jobs
+      }
       
       demoJobs.push({
         id: `demo_job_${i}`,
@@ -148,6 +159,23 @@ const EarningsOverview = () => {
         completed_at: completedDate.toISOString(),
         status: 'completed'
       });
+    }
+    
+    // Ensure we hit close to £750 for this week by adjusting the first job
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    let weeklyTotal = 0;
+    demoJobs.forEach(job => {
+      const completedDate = new Date(job.completed_at);
+      if (completedDate >= oneWeekAgo) {
+        weeklyTotal += parseInt(job.final_price.replace('£', ''));
+      }
+    });
+    
+    // Adjust first job to reach £750 target
+    if (weeklyTotal < 750 && demoJobs.length > 0) {
+      const adjustment = 750 - weeklyTotal;
+      const firstJobAmount = parseInt(demoJobs[0].final_price.replace('£', '')) + adjustment;
+      demoJobs[0].final_price = `£${firstJobAmount}`;
     }
     
     return demoJobs;
