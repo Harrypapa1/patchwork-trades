@@ -22,6 +22,11 @@ import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
 import ManageAvailability from './pages/ManageAvailability';
+// 🆕 NEW IMPORTS - Payment System
+import PaymentCheckout from './pages/PaymentCheckout';
+import PaymentSuccess from './pages/PaymentSuccess';
+import TradesmanOnboarding from './pages/TradesmanOnboarding';
+import EarningsOverview from './pages/EarningsOverview';
 // Import legal pages
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
@@ -72,6 +77,43 @@ function App() {
                 element={
                   <ProtectedRoute userType="tradesman">
                     <MakeMoreMoney />
+                  </ProtectedRoute>
+                }
+              />
+              
+              {/* 🆕 NEW ROUTES: Payment System */}
+              <Route
+                path="/payment-checkout"
+                element={
+                  <ProtectedRoute userType="customer">
+                    <PaymentCheckout />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/payment-success"
+                element={
+                  <ProtectedRoute userType="customer">
+                    <PaymentSuccess />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/tradesman-onboarding"
+                element={
+                  <ProtectedRoute userType="tradesman">
+                    <TradesmanOnboarding />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/earnings-overview"
+                element={
+                  <ProtectedRoute userType="tradesman">
+                    <EarningsOverview />
                   </ProtectedRoute>
                 }
               />
