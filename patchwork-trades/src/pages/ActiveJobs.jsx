@@ -252,7 +252,7 @@ const JobCard = React.memo(({
                 )}
               </div>
               <span><strong>Date:</strong> {getJobDate(job)}</span>
-              <span className="text-green-600 font-semibold"><strong>Final Price:</strong> {getFinalPrice(job)}</span>
+              <span className="text-green-600 font-semibold"><strong>💳 Payment Secured:</strong> {getFinalPrice(job)}</span>
             </div>
           </div>
         </div>
@@ -268,6 +268,20 @@ const JobCard = React.memo(({
         {/* Expandable Content - Only load when expanded */}
         {isExpanded && (
           <>
+            {/* Payment Status Banner */}
+            <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center text-green-800">
+                <span className="text-lg mr-2">💳</span>
+                <div>
+                  <span className="font-semibold">Payment Secured</span>
+                  <p className="text-green-700 text-sm mt-1">
+                    Customer payment of <strong>{getFinalPrice(job)}</strong> has been processed and secured. 
+                    {userType === 'tradesman' ? ' You will receive payout within 2-3 business days of completion.' : ''}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Job Description */}
             <div className="mb-4">
               <h3 className="font-medium text-gray-900 mb-2">Job Description</h3>
