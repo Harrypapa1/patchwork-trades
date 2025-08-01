@@ -4,7 +4,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   doc, 
   getDoc, 
-  updateDoc 
+  updateDoc,
+  addDoc,
+  collection,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -27,16 +30,36 @@ const PaymentCheckout = () => {
     postcode: ''
   });
 
-  // Get job ID from URL params or navigation state
+  // 🆕 UPDATED: Handle both job payments and quote payments
   const jobId = new URLSearchParams(location.search).get('jobId') || location.state?.jobId;
+  const quoteId = new URLSearchParams(location.search).get('quoteId') || location.state?.quoteId;
+  const quoteData = location.state?.quoteData;
+  const isQuotePayment = !!quoteId && !!quoteData;
 
   useEffect(() => {
-    if (jobId) {
+    if (isQuotePayment) {
+      // For quote payments, use the passed quote data
+      setJob({
+        id: quoteId,
+        job_title: quoteData.job_title,
+        job_description: quoteData.job_description,
+        tradesman_name: quoteData.tradesman_name,
+        customer_name: quoteData.customer_name,
+        final_price: quoteData.final_agreed_price,
+        agreed_date: quoteData.selected_time_slot?.date,
+        time_slot: quoteData.selected_time_slot?.label,
+        status: 'payment_pending',
+        created_at: quoteData.created_at,
+        // Include all quote data for job creation
+        quoteData: quoteData
+      });
+      setLoading(false);
+    } else if (jobId) {
       fetchJobDetails();
     } else {
       setLoading(false);
     }
-  }, [jobId]);
+  }, [jobId, quoteId, isQuotePayment]);
 
   const fetchJobDetails = async () => {
     try {
@@ -110,6 +133,7 @@ const PaymentCheckout = () => {
     return { subtotal, platformFee, processingFee, total };
   };
 
+  // 🆕 UPDATED: Handle both quote and job payments
   const handlePayment = async (e) => {
     e.preventDefault();
     setProcessing(true);
@@ -118,30 +142,97 @@ const PaymentCheckout = () => {
       // DEMO: Simulate payment processing
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Update job with payment information
       const { total } = calculateFees();
-      await updateDoc(doc(db, 'active_jobs', jobId), {
-        payment_status: 'completed',
-        payment_amount: total,
-        payment_method: 'card',
-        payment_processed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      });
 
-      // Navigate to success page
-      navigate('/payment-success', { 
-        state: { 
-          jobId: jobId,
-          job: job,
-          paymentAmount: total
-        }
-      });
+      if (isQuotePayment) {
+        // 🆕 QUOTE PAYMENT: Convert quote to active job
+        console.log('🚀 Converting quote to active job after payment...');
+        
+        const quoteData = job.quoteData;
+        
+        // Create new active job
+        const activeJobData = {
+          // Copy all quote data
+          quote_request_id: quoteId,
+          customer_id: quoteData.customer_id,
+          customer_name: quoteData.customer_name,
+          customer_email: quoteData.customer_email,
+          customer_photo: quoteData.customer_photo,
+          tradesman_id: quoteData.tradesman_id,
+          tradesman_name: quoteData.tradesman_name,
+          tradesman_email: quoteData.tradesman_email,
+          tradesman_photo: quoteData.tradesman_photo,
+          
+          // Job details
+          job_title: quoteData.job_title,
+          job_description: quoteData.job_description,
+          job_images: quoteData.job_images || [],
+          additional_notes: quoteData.additional_notes,
+          
+          // Time slot details
+          agreed_date: quoteData.selected_time_slot?.date,
+          time_slot: quoteData.selected_time_slot?.slot_id,
+          agreed_time_start: quoteData.selected_time_slot?.start_time,
+          agreed_time_end: quoteData.selected_time_slot?.end_time,
+          
+          // Pricing
+          final_price: quoteData.final_agreed_price,
+          
+          // Status
+          status: 'accepted',
+          
+          // Payment info
+          payment_status: 'completed',
+          payment_amount: total,
+          payment_method: 'card',
+          payment_processed_at: new Date().toISOString(),
+          
+          // Timestamps
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        console.log('Creating active job with data:', activeJobData);
+        const newJobRef = await addDoc(collection(db, 'active_jobs'), activeJobData);
+        
+        // Delete the quote request
+        console.log('Deleting quote request:', quoteId);
+        await deleteDoc(doc(db, 'quote_requests', quoteId));
+
+        // Navigate to success page with new job ID
+        navigate('/payment-success', { 
+          state: { 
+            jobId: newJobRef.id,
+            job: activeJobData,
+            paymentAmount: total,
+            convertedFromQuote: true
+          }
+        });
+
+      } else {
+        // Regular job payment
+        await updateDoc(doc(db, 'active_jobs', jobId), {
+          payment_status: 'completed',
+          payment_amount: total,
+          payment_method: 'card',
+          payment_processed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+
+        navigate('/payment-success', { 
+          state: { 
+            jobId: jobId,
+            job: job,
+            paymentAmount: total
+          }
+        });
+      }
       
     } catch (error) {
       console.error('Payment processing error:', error);
       navigate('/payment-failed', { 
         state: { 
-          jobId: jobId,
+          jobId: jobId || quoteId,
           error: error.message
         }
       });
@@ -162,13 +253,20 @@ const PaymentCheckout = () => {
     return (
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Job Not Found</h2>
-          <p className="text-gray-600 mb-4">The job you're trying to pay for could not be found.</p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            {isQuotePayment ? 'Quote Not Found' : 'Job Not Found'}
+          </h2>
+          <p className="text-gray-600 mb-4">
+            {isQuotePayment 
+              ? 'The quote you\'re trying to pay for could not be found.'
+              : 'The job you\'re trying to pay for could not be found.'
+            }
+          </p>
           <button
-            onClick={() => navigate('/active-jobs')}
+            onClick={() => navigate(isQuotePayment ? '/quote-requests' : '/active-jobs')}
             className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
           >
-            Back to Active Jobs
+            {isQuotePayment ? 'Back to Quote Requests' : 'Back to Active Jobs'}
           </button>
         </div>
       </div>
@@ -180,6 +278,19 @@ const PaymentCheckout = () => {
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Complete Payment</h1>
+      
+      {/* 🆕 Quote Payment Notice */}
+      {isQuotePayment && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center text-blue-800 mb-2">
+            <span className="text-lg mr-2">💳</span>
+            <span className="font-semibold">Quote Payment</span>
+          </div>
+          <p className="text-blue-700 text-sm">
+            After payment, this quote will be converted to an active job and you'll be able to track progress.
+          </p>
+        </div>
+      )}
       
       <div className="grid md:grid-cols-2 gap-6">
         {/* Payment Form */}
@@ -327,10 +438,17 @@ const PaymentCheckout = () => {
             <h3 className="font-medium text-gray-900 mb-2">{job.job_title}</h3>
             <div className="text-sm text-gray-600 space-y-1">
               <p><strong>Tradesman:</strong> {job.tradesman_name}</p>
-              <p><strong>Date:</strong> {new Date(job.agreed_date || job.created_at).toLocaleDateString('en-GB')}</p>
+              <p><strong>Date:</strong> {job.agreed_date ? 
+                new Date(job.agreed_date).toLocaleDateString('en-GB') : 
+                'To be arranged'
+              }</p>
+              {job.time_slot && (
+                <p><strong>Time:</strong> {job.time_slot}</p>
+              )}
               <p><strong>Status:</strong> 
                 <span className="ml-1 px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800">
-                  {job.status.charAt(0).toUpperCase() + job.status.slice(1).replace('_', ' ')}
+                  {isQuotePayment ? 'Quote Payment' : 
+                   job.status.charAt(0).toUpperCase() + job.status.slice(1).replace('_', ' ')}
                 </span>
               </p>
             </div>
@@ -395,10 +513,10 @@ const PaymentCheckout = () => {
       {/* Cancel Button */}
       <div className="mt-6 text-center">
         <button
-          onClick={() => navigate('/active-jobs')}
+          onClick={() => navigate(isQuotePayment ? '/quote-requests' : '/active-jobs')}
           className="text-gray-600 hover:text-gray-800 underline"
         >
-          Cancel and return to jobs
+          Cancel and return to {isQuotePayment ? 'quotes' : 'jobs'}
         </button>
       </div>
     </div>
