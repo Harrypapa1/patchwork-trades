@@ -198,10 +198,10 @@ const Navbar = () => {
                           Dashboard Home
                         </Link>
                         <Link to="/tradesman-how-it-works" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
-                          📚 How It Works
+                          How It Works
                         </Link>
                         <Link to="/earnings-overview" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
-                          💰 Earnings Overview
+                          Earnings Overview
                         </Link>
                         <Link to="/make-more-money" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
                           Make More Money
@@ -276,7 +276,7 @@ const Navbar = () => {
                     className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                     onClick={closeMenu}
                   >
-                    📚 How It Works
+                    How It Works
                   </Link>
                 )}
                 
@@ -300,7 +300,7 @@ const Navbar = () => {
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
-                  📅 Weekly Jobs
+                  Weekly Jobs
                 </Link>
 
                 {/* 🆕 NEW ROUTE: Active Jobs */}
@@ -359,14 +359,14 @@ const Navbar = () => {
                           className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
                           onClick={closeMenu}
                         >
-                          📚 How It Works
+                          How It Works
                         </Link>
                         <Link 
                           to="/earnings-overview" 
                           className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
                           onClick={closeMenu}
                         >
-                          💰 Earnings Overview
+                          Earnings Overview
                         </Link>
                         <Link 
                           to="/make-more-money" 
