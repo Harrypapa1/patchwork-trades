@@ -157,6 +157,11 @@ const Navbar = () => {
                     )}
                   </Link>
 
+                  {/* 🆕 NEW ROUTE: Weekly Jobs */}
+                  <Link to="/weekly-jobs" className="hover:text-blue-200 transition-colors">
+                    Weekly Jobs
+                  </Link>
+
                   {/* 🆕 NEW ROUTE: Active Jobs */}
                   <Link to="/active-jobs" className="hover:text-blue-200 transition-colors">
                     Active Jobs
@@ -266,6 +271,15 @@ const Navbar = () => {
                       {quoteRequestsCount}
                     </span>
                   )}
+                </Link>
+
+                {/* 🆕 NEW ROUTE: Weekly Jobs */}
+                <Link 
+                  to="/weekly-jobs" 
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
+                  onClick={closeMenu}
+                >
+                  📅 Weekly Jobs
                 </Link>
 
                 {/* 🆕 NEW ROUTE: Active Jobs */}
