@@ -144,10 +144,17 @@ const Navbar = () => {
                     </Link>
                   )}
                   
+                  {/* 🆕 NEW: How It Works Links - User Type Specific */}
+                  {userType === 'customer' && (
+                    <Link to="/customer-how-it-works" className="hover:text-blue-200 transition-colors">
+                      How It Works
+                    </Link>
+                  )}
+                  
                   {/* 🆕 NEW ROUTE: Quote Requests */}
                   <Link 
                     to="/quote-requests" 
-                    className="hover:text-blue-200 transition-colors"
+                    className="hover:text-blue-200 transition-colors relative"
                   >
                     Quote Requests
                     {quoteRequestsCount > 0 && (
@@ -189,6 +196,9 @@ const Navbar = () => {
                       <div className="absolute top-full left-0 bg-blue-700 rounded-md shadow-lg py-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                         <Link to="/tradesman-dashboard" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
                           Dashboard Home
+                        </Link>
+                        <Link to="/tradesman-how-it-works" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
+                          📚 How It Works
                         </Link>
                         <Link to="/earnings-overview" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
                           💰 Earnings Overview
@@ -259,10 +269,21 @@ const Navbar = () => {
                   </Link>
                 )}
                 
+                {/* 🆕 NEW: How It Works Links - User Type Specific (Mobile) */}
+                {userType === 'customer' && (
+                  <Link 
+                    to="/customer-how-it-works" 
+                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
+                    onClick={closeMenu}
+                  >
+                    📚 How It Works
+                  </Link>
+                )}
+                
                 {/* 🆕 NEW ROUTE: Quote Requests */}
                 <Link 
                   to="/quote-requests" 
-                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
                   onClick={closeMenu}
                 >
                   Quote Requests
@@ -332,6 +353,13 @@ const Navbar = () => {
                           onClick={closeMenu}
                         >
                           Dashboard Home
+                        </Link>
+                        <Link 
+                          to="/tradesman-how-it-works" 
+                          className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
+                          onClick={closeMenu}
+                        >
+                          📚 How It Works
                         </Link>
                         <Link 
                           to="/earnings-overview" 
