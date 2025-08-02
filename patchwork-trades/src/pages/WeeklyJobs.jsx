@@ -171,6 +171,7 @@ const WeeklyJobs = () => {
         time_slot: 'morning',
         final_price: '£75',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Replace old kitchen tap with modern mixer tap'
       },
       {
@@ -184,6 +185,7 @@ const WeeklyJobs = () => {
         time_slot: 'afternoon',
         final_price: '£85',
         status: 'in_progress',
+        location: 'Stoke Newington, London',
         job_description: 'Diagnose and fix flickering ceiling light in living room'
       },
       {
@@ -197,6 +199,7 @@ const WeeklyJobs = () => {
         time_slot: 'evening',
         final_price: '£60',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Clear blocked kitchen sink drain'
       },
       {
@@ -210,6 +213,7 @@ const WeeklyJobs = () => {
         time_slot: 'morning',
         final_price: '£95',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Securely hang family pictures and large bathroom mirror'
       },
       {
@@ -223,6 +227,7 @@ const WeeklyJobs = () => {
         time_slot: 'afternoon',
         final_price: '£50',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Oil and adjust squeaky hinges on 4 doors'
       },
       {
@@ -236,6 +241,7 @@ const WeeklyJobs = () => {
         time_slot: 'evening',
         final_price: '£80',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Mount floating shelf above bathroom sink'
       },
       // MEDIUM VALUE JOBS - Common household needs
@@ -250,6 +256,7 @@ const WeeklyJobs = () => {
         time_slot: 'morning',
         final_price: '£280',
         status: 'in_progress',
+        location: 'Stoke Newington, London',
         job_description: 'Remove old toilet and install new close-coupled suite'
       },
       {
@@ -263,6 +270,7 @@ const WeeklyJobs = () => {
         time_slot: 'afternoon',
         final_price: '£320',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Paint master bedroom with customer-supplied paint'
       },
       {
@@ -276,6 +284,7 @@ const WeeklyJobs = () => {
         time_slot: 'morning',
         final_price: '£120',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Repair broken lock mechanism on wooden garden gate'
       },
       {
@@ -289,6 +298,7 @@ const WeeklyJobs = () => {
         time_slot: 'afternoon',
         final_price: '£240',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Add 4 double sockets to living room for new TV setup'
       },
       {
@@ -302,6 +312,7 @@ const WeeklyJobs = () => {
         time_slot: 'morning',
         final_price: '£150',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Professional assembly of large IKEA PAX wardrobe system'
       },
       // HIGHER VALUE JOBS - For those bigger projects
@@ -316,6 +327,7 @@ const WeeklyJobs = () => {
         time_slot: 'afternoon',
         final_price: '£2,400',
         status: 'pending_approval',
+        location: 'Stoke Newington, London',
         job_description: 'Complete bathroom renovation with new suite and tiling'
       },
       {
@@ -329,6 +341,7 @@ const WeeklyJobs = () => {
         time_slot: 'morning',
         final_price: '£180',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Professional pressure washing of block paved driveway'
       },
       {
@@ -342,6 +355,7 @@ const WeeklyJobs = () => {
         time_slot: 'afternoon',
         final_price: '£110',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Replace worn shower cartridge to stop persistent drip'
       },
       {
@@ -355,6 +369,7 @@ const WeeklyJobs = () => {
         time_slot: 'morning',
         final_price: '£160',
         status: 'accepted',
+        location: 'Stoke Newington, London',
         job_description: 'Install ceiling fan with light in master bedroom'
       }
     ];
@@ -371,6 +386,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(0),
         final_price: '£65',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Replace cracked light switch in hallway',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -385,6 +401,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(0),
         final_price: '£40',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Tighten and stabilize wobbly dining table legs',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -399,6 +416,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(0),
         final_price: '£35',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Replace hard-to-reach bathroom spotlight bulb',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -413,6 +431,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(1),
         final_price: '£80',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Bleed all 6 radiators and check heating system',
         reviewed_by_customer: true,
         customer_rating: 4
@@ -427,6 +446,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(1),
         final_price: '£140',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Re-grout bathroom tiles around shower area',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -441,6 +461,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(1),
         final_price: '£90',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Secure loose floorboard in bedroom',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -455,6 +476,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(2),
         final_price: '£75',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Install mains-powered smoke detector in hallway',
         reviewed_by_customer: true,
         customer_rating: 4
@@ -469,6 +491,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(2),
         final_price: '£120',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Clear blocked gutters and downpipes',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -483,6 +506,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(2),
         final_price: '£95',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Replace 3 cracked tiles behind kitchen sink',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -497,6 +521,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(3),
         final_price: '£150',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Annual boiler service and safety check',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -511,6 +536,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(3),
         final_price: '£220',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Sand and paint wooden garden shed with weather protection',
         reviewed_by_customer: true,
         customer_rating: 4
@@ -525,6 +551,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(4),
         final_price: '£85',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Cut hole and install cat flap in back door',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -539,6 +566,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(4),
         final_price: '£55',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Replace washer in dripping bathroom tap',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -553,6 +581,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(5),
         final_price: '£120',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Assemble chest of drawers and bedside tables',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -567,6 +596,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(5),
         final_price: '£3,200',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Complete kitchen renovation with new units and worktops',
         reviewed_by_customer: true,
         customer_rating: 5
@@ -581,6 +611,7 @@ const WeeklyJobs = () => {
         completed_at: getDateInLastWeek(6),
         final_price: '£110',
         status: 'completed',
+        location: 'Stoke Newington, London',
         job_description: 'Securely mount 55" TV on living room wall with cable management',
         reviewed_by_customer: true,
         customer_rating: 4
@@ -739,6 +770,10 @@ const WeeklyJobs = () => {
                 </>
               )}
               
+              {job.location && (
+                <span><strong>Location:</strong> {job.location}</span>
+              )}
+              
               <span className="text-green-600 font-semibold">
                 <strong>Value:</strong> {getFinalPrice(job)}
               </span>
@@ -812,43 +847,7 @@ const WeeklyJobs = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Weekly Jobs Overview</h1>
-        <p className="text-gray-600 mt-2">
-          {userType === 'customer' 
-            ? 'Your jobs scheduled for this week and completed last week' 
-            : 'Jobs you have this week and completed last week'
-          }
-        </p>
-        
-        {/* SUCCESS BANNER - INCLUSIVE FOR ALL BUDGETS */}
-        <div className="bg-gradient-to-r from-green-50 to-blue-50 border-2 border-green-300 rounded-lg p-4 mt-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="text-3xl">🎉</div>
-              <div>
-                <h3 className="text-lg font-bold text-green-800">Jobs for Every Budget!</h3>
-                <p className="text-green-700 text-sm">
-                  From £35 bulb changes to £3,200 renovations - 31 jobs serving everyone! 
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-green-800">£8,295</div>
-              <div className="text-sm text-green-600">2-week value</div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Demo Notice - ACCESSIBLE VERSION */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-4">
-          <p className="text-green-800 text-sm">
-            🏠 <strong>Real-World Mix:</strong> This shows jobs for every budget - from £35 quick fixes to £3,200 renovations. 
-            With 15 jobs this week (£4,050 value) and 16 completed last week (£4,245 value) - everyone wins! 
-            Real data will replace this when you have actual bookings.
-          </p>
-        </div>
-      </div>
+
 
       {/* Weekly Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -913,8 +912,8 @@ const WeeklyJobs = () => {
               <h3 className="text-lg font-medium">Ready to Get This Busy?</h3>
               <p className="text-sm">
                 {userType === 'customer' 
-                  ? 'This demo shows 15 jobs from £35 to £2,400 this week - browse tradesmen for jobs big and small!' 
-                  : 'This demo shows what earning £4,050 a week looks like - from quick £35 fixes to £2,400 renovations!'}
+                  ? 'This demo shows 15 jobs from £35 to £2,400 this week in Stoke Newington - browse tradesmen for jobs big and small!' 
+                  : 'This demo shows what earning £4,050 a week in Stoke Newington looks like - from quick £35 fixes to £2,400 renovations!'}
               </p>
             </div>
             {userType === 'customer' && (
@@ -922,7 +921,7 @@ const WeeklyJobs = () => {
                 onClick={() => navigate('/browse')}
                 className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 mt-4"
               >
-                🏠 Find Jobs £35-£3200
+                🏠 Find Jobs in Stoke Newington
               </button>
             )}
           </div>
@@ -957,7 +956,7 @@ const WeeklyJobs = () => {
             <div className="text-gray-500 mb-4">
               <div className="text-4xl mb-2">💎</div>
               <h3 className="text-lg font-medium">Building Success at Every Level</h3>
-              <p className="text-sm">This demo shows £4,245 in completed jobs last week - from £35 quick fixes to £3,200 projects. Your completed jobs will appear here as you serve every type of customer!</p>
+              <p className="text-sm">This demo shows £4,245 in completed jobs last week in Stoke Newington - from £35 quick fixes to £3,200 projects. Your completed jobs will appear here as you serve every type of customer!</p>
             </div>
           </div>
         ) : (
@@ -971,7 +970,7 @@ const WeeklyJobs = () => {
 
       {/* Success-Focused Quick Actions - ACCESSIBLE VERSION */}
       <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg shadow-md p-6 border border-blue-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Jobs for Every Budget! 🏠</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Jobs for Every Budget in Stoke Newington! 🏠</h3>
         <p className="text-gray-600 text-sm mb-4">From £35 quick fixes to £3,200 renovations - everyone's welcome on Patchwork Trades:</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <button
@@ -986,7 +985,7 @@ const WeeklyJobs = () => {
               onClick={() => navigate('/browse')}
               className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium transition-colors"
             >
-              🔍 Find Jobs £35-£3200
+              🔍 Find Stoke Newington Tradesmen
             </button>
           ) : (
             <button
