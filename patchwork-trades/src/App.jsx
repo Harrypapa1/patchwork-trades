@@ -31,6 +31,9 @@ import EarningsOverview from './pages/EarningsOverview';
 // 🆕 NEW IMPORTS - Password Reset System
 import ForgotPassword from './pages/ForgotPassword';
 import ResetConfirmation from './pages/ResetConfirmation';
+// 🆕 NEW IMPORTS - How It Works Pages
+import CustomerHowItWorks from './pages/CustomerHowItWorks';
+import TradesmanHowItWorks from './pages/TradesmanHowItWorks';
 // Import legal pages
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
@@ -55,6 +58,25 @@ function App() {
               {/* 🆕 NEW ROUTES - Password Reset System (Public Routes) */}
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-confirmation" element={<ResetConfirmation />} />
+              
+              {/* 🆕 NEW ROUTES - How It Works Pages (User-Type Restricted) */}
+              <Route
+                path="/customer-how-it-works"
+                element={
+                  <ProtectedRoute userType="customer">
+                    <CustomerHowItWorks />
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route
+                path="/tradesman-how-it-works"
+                element={
+                  <ProtectedRoute userType="tradesman">
+                    <TradesmanHowItWorks />
+                  </ProtectedRoute>
+                }
+              />
               
               {/* Legal & Information Pages - Public Access */}
               <Route path="/terms" element={<TermsOfService />} />
