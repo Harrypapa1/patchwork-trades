@@ -17,6 +17,7 @@ import BookingRequest from './pages/BookingRequest';
 // 🆕 NEW IMPORTS - Bulletproof Architecture
 import QuoteRequests from './pages/QuoteRequests';
 import ActiveJobs from './pages/ActiveJobs';
+import WeeklyJobs from './pages/WeeklyJobs'; // 🆕 NEW IMPORT - Weekly Jobs
 import MakeMoreMoney from './pages/MakeMoreMoney'; // 🆕 NEW IMPORT
 import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
@@ -149,6 +150,16 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <QuoteRequests />
+                  </ProtectedRoute>
+                }
+              />
+              
+              {/* 🆕 NEW ROUTE: Weekly Jobs - Available to both customers and tradesmen */}
+              <Route
+                path="/weekly-jobs"
+                element={
+                  <ProtectedRoute>
+                    <WeeklyJobs />
                   </ProtectedRoute>
                 }
               />
