@@ -27,6 +27,9 @@ import PaymentCheckout from './pages/PaymentCheckout';
 import PaymentSuccess from './pages/PaymentSuccess';
 import TradesmanOnboarding from './pages/TradesmanOnboarding';
 import EarningsOverview from './pages/EarningsOverview';
+// 🆕 NEW IMPORTS - Password Reset System
+import ForgotPassword from './pages/ForgotPassword';
+import ResetConfirmation from './pages/ResetConfirmation';
 // Import legal pages
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
@@ -47,6 +50,10 @@ function App() {
               <Route path="/register-customer" element={<CustomerRegister />} />
               <Route path="/browse" element={<BrowseTradesmen />} />
               <Route path="/tradesman/:tradesmanId" element={<TradesmanPublicProfile />} />
+              
+              {/* 🆕 NEW ROUTES - Password Reset System (Public Routes) */}
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-confirmation" element={<ResetConfirmation />} />
               
               {/* Legal & Information Pages - Public Access */}
               <Route path="/terms" element={<TermsOfService />} />
