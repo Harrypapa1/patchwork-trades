@@ -1,5 +1,4 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-console.log('Stripe key exists:', !!process.env.STRIPE_SECRET_KEY);
+const stripe = require('stripe')('sk_test_51Bt5TL992gNc5EB8p9VlI2MeFFSMvJlinCSmQwch8bPvqQHQYEPVRlMTXZ29kLF2y2wlk6L40xJu4NIhCDJtAY2fI00e0pnnXQd');
 
 exports.handler = async (event, context) => {
   // Enable CORS
@@ -9,7 +8,6 @@ exports.handler = async (event, context) => {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',
   };
-
   // Handle preflight requests
   if (event.httpMethod === 'OPTIONS') {
     return {
@@ -18,7 +16,6 @@ exports.handler = async (event, context) => {
       body: '',
     };
   }
-
   // Only allow POST requests
   if (event.httpMethod !== 'POST') {
     return {
@@ -27,10 +24,8 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({ error: 'Method not allowed' }),
     };
   }
-
   try {
     const { amount, currency = 'gbp', quoteId, customerId } = JSON.parse(event.body);
-
     // Validate required fields
     if (!amount || amount <= 0) {
       return {
@@ -39,7 +34,6 @@ exports.handler = async (event, context) => {
         body: JSON.stringify({ error: 'Valid amount is required' }),
       };
     }
-
     // Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert pounds to pence
@@ -53,7 +47,6 @@ exports.handler = async (event, context) => {
         enabled: true,
       },
     });
-
     return {
       statusCode: 200,
       headers,
@@ -62,7 +55,6 @@ exports.handler = async (event, context) => {
         paymentIntentId: paymentIntent.id,
       }),
     };
-
   } catch (error) {
     console.error('Stripe error:', error);
     
