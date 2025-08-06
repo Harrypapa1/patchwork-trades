@@ -13,8 +13,7 @@ import { db } from '../config/firebase';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
-// TEMPORARY: Hardcoded key for testing (replace with env variable later)
-const stripePromise = loadStripe('pk_test_51Bt5TL992gNc5EB8p9VlI2MeFFSMvJlinCSmQwch8bPvqQHQYEPVRlMTXZ29kLF2y2wlk6L40xJu4NIhCDJtAY2fI00e0pnnXQd');
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
 
 const PaymentForm = ({ job, isQuotePayment, jobId, quoteId }) => {
   const { currentUser } = useAuth();
