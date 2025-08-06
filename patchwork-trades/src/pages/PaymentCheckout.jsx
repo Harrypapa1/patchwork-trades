@@ -74,10 +74,14 @@ const PaymentForm = ({ job, isQuotePayment, jobId, quoteId }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create payment intent');
+        const errorText = await response.text();
+        console.error('Function response:', errorText);
+        throw new Error(`Failed to create payment intent: ${response.status}`);
       }
 
-      const { clientSecret } = await response.json();
+      const responseData = await response.json();
+      console.log('Payment intent response:', responseData);
+      const { clientSecret } = responseData;
       
       // Confirm payment
       const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
