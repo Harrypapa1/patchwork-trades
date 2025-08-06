@@ -10,6 +10,10 @@ import {
   deleteDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { loadStripe } from '@stripe/stripe-js';
+
+// Initialize Stripe with your publishable key
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
 
 const PaymentCheckout = () => {
   const { currentUser } = useAuth();
@@ -35,6 +39,12 @@ const PaymentCheckout = () => {
   const quoteId = new URLSearchParams(location.search).get('quoteId') || location.state?.quoteId;
   const quoteData = location.state?.quoteData;
   const isQuotePayment = !!quoteId && !!quoteData;
+
+  // Test if Stripe loaded
+  useEffect(() => {
+    console.log("Stripe key:", process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY ? "✅ Loaded" : "❌ Missing");
+    console.log("Stripe promise:", stripePromise ? "✅ Created" : "❌ Failed");
+  }, []);
 
   useEffect(() => {
     if (isQuotePayment) {
