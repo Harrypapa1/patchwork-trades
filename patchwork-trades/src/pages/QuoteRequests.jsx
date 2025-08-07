@@ -102,10 +102,21 @@ const QuoteRequests = () => {
       // FIXED: Client-side filtering instead of Firebase query to avoid != limitations
       const activeRequests = allRequests.filter(request => {
         const status = request.status;
-        return status !== 'completed' && 
-               status !== 'moved_to_active_jobs' && 
-               status !== 'rejected' &&
-               !request.archived;
+        
+        // Hide completed, moved, rejected, or archived quotes
+        if (status === 'completed' || 
+            status === 'moved_to_active_jobs' || 
+            status === 'rejected' || 
+            request.archived) {
+          return false;
+        }
+
+        // For tradesmen: hide dismissed quotes
+        if (userType === 'tradesman' && request.dismissed_by_tradesman) {
+          return false;
+        }
+
+        return true;
       });
 
       console.log('Found active quote requests:', activeRequests);
@@ -267,6 +278,85 @@ const QuoteRequests = () => {
   const extractNumericValue = (priceString) => {
     const match = priceString.toString().match(/£?(\d+)/);
     return match ? parseInt(match[1]) : 0;
+  };
+
+  // 🆕 NEW: Handle quote rejection with customer notification
+  const handleRejectQuote = async (quoteRequestId) => {
+    try {
+      const quote = quoteRequests.find(q => q.id === quoteRequestId);
+      if (!quote) return;
+
+      // Update quote status to rejected
+      await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
+        status: 'rejected',
+        rejected_at: new Date().toISOString(),
+        rejected_by: currentUser.uid,
+        updated_at: new Date().toISOString()
+      });
+
+      // Add system comment
+      await addDoc(collection(db, 'booking_comments'), {
+        quote_request_id: quoteRequestId,
+        user_id: currentUser.uid,
+        user_type: 'system',
+        user_name: 'System',
+        comment: `Quote request rejected by ${quote.tradesman_name}`,
+        timestamp: new Date().toISOString()
+      });
+
+      // Send email notification to customer
+      await sendEmailNotification({
+        recipientEmail: quote.customer_email,
+        recipientName: quote.customer_name,
+        senderName: quote.tradesman_name,
+        messageText: `${quote.tradesman_name} is unable to take on your job "${quote.job_title}" at this time. You can search for other tradesmen or adjust your requirements.`,
+        replyLink: `https://patchworktrades.com/browse`
+      });
+
+      // Refresh the list to remove the rejected quote
+      fetchQuoteRequests();
+
+      alert('Quote request rejected and customer has been notified.');
+
+    } catch (error) {
+      console.error('Error rejecting quote:', error);
+      alert('Error rejecting quote. Please try again.');
+    }
+  };
+
+  // 🆕 NEW: Handle quote dismissal (hide from tradesman, no customer notification)
+  const handleDismissQuote = async (quoteRequestId) => {
+    try {
+      const quote = quoteRequests.find(q => q.id === quoteRequestId);
+      if (!quote) return;
+
+      // Update quote to be dismissed by this tradesman
+      await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
+        dismissed_by_tradesman: true,
+        dismissed_at: new Date().toISOString(),
+        dismissed_by: currentUser.uid,
+        updated_at: new Date().toISOString()
+      });
+
+      // Add system comment (for record keeping, not visible to customer)
+      await addDoc(collection(db, 'booking_comments'), {
+        quote_request_id: quoteRequestId,
+        user_id: currentUser.uid,
+        user_type: 'system',
+        user_name: 'System',
+        comment: `Quote request dismissed by tradesman (hidden from tradesman view)`,
+        timestamp: new Date().toISOString()
+      });
+
+      // Refresh the list to remove the dismissed quote
+      fetchQuoteRequests();
+
+      alert('Quote request dismissed from your list.');
+
+    } catch (error) {
+      console.error('Error dismissing quote:', error);
+      alert('Error dismissing quote. Please try again.');
+    }
   };
 
   // 💳 FIXED PAYMENT-FIRST ACCEPT OPERATION - THE MAGIC HAPPENS HERE!
@@ -744,17 +834,24 @@ const QuoteRequests = () => {
                             
                             <button
                               onClick={() => {
-                                if (confirm('Are you sure you want to reject this request?')) {
-                                  // For now, we can keep rejected quotes in the collection with a status
-                                  updateDoc(doc(db, 'quote_requests', request.id), {
-                                    status: 'rejected',
-                                    updated_at: new Date().toISOString()
-                                  }).then(() => fetchQuoteRequests());
+                                if (confirm('Are you sure you want to reject this request? This will remove it from your list and notify the customer.')) {
+                                  handleRejectQuote(request.id);
                                 }
                               }}
                               className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
                             >
                               Reject
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                if (confirm('Dismiss this quote? It will be hidden from your list but the customer won\'t be notified. They can still see it as pending.')) {
+                                  handleDismissQuote(request.id);
+                                }
+                              }}
+                              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                            >
+                              Dismiss
                             </button>
                           </div>
                         </>
