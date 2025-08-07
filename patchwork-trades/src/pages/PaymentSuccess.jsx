@@ -30,7 +30,7 @@ const PaymentSuccess = () => {
         
         // STEP 1: Create new job in active_jobs collection
         const activeJobData = {
-          // Copy all quote data to active job
+          // Copy all quote data to active job (excluding quote-specific fields)
           ...job,
           
           // Payment and status info
@@ -42,17 +42,17 @@ const PaymentSuccess = () => {
           // Timestamps
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          payment_completed_at: new Date().toISOString(),
-          
-          // Remove quote-specific fields that don't belong in active jobs
-          has_custom_quote: undefined,
-          custom_quote: undefined,
-          has_customer_counter: undefined,
-          customer_counter_quote: undefined,
-          customer_reasoning: undefined,
-          payment_required: undefined,
-          final_agreed_price: undefined
+          payment_completed_at: new Date().toISOString()
         };
+
+        // Remove quote-specific fields that don't belong in active jobs
+        delete activeJobData.has_custom_quote;
+        delete activeJobData.custom_quote;
+        delete activeJobData.has_customer_counter;
+        delete activeJobData.customer_counter_quote;
+        delete activeJobData.customer_reasoning;
+        delete activeJobData.payment_required;
+        delete activeJobData.final_agreed_price;
 
         console.log('📋 Creating active job with data:', activeJobData);
         const activeJobRef = await addDoc(collection(db, 'active_jobs'), activeJobData);
