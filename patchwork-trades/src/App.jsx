@@ -39,6 +39,8 @@ import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import CookiePolicy from './pages/CookiePolicy';
 import ContactHelp from './pages/ContactHelp';
+// 🆕 NEW IMPORT - Admin Dashboard
+import AdminDashboard from './pages/AdminDashboard';
 
 // Error Boundary Component
 class ErrorBoundary extends Component {
@@ -127,6 +129,9 @@ function App() {
                 <Route path="/register-customer" element={<CustomerRegister />} />
                 <Route path="/browse" element={<BrowseTradesmen />} />
                 <Route path="/tradesman/:tradesmanId" element={<TradesmanPublicProfile />} />
+                
+                {/* 🆕 ADMIN ROUTE - Password Protected */}
+                <Route path="/admin" element={<AdminDashboard />} />
                 
                 {/* 🆕 NEW ROUTES - Password Reset System (Public Routes) */}
                 <Route path="/forgot-password" element={<ForgotPassword />} />
