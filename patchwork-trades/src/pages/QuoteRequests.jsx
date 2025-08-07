@@ -15,9 +15,9 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-// 🚀 NEW BULLETPROOF QUOTE REQUESTS COMPONENT
+// 🚀 FIXED BULLETPROOF QUOTE REQUESTS COMPONENT - PAYMENT DATA FIXED
 // Connects to 'quote_requests' collection - no more race conditions!
-// 💳 UPDATED WITH PAYMENT-FIRST FLOW
+// 💳 UPDATED WITH PAYMENT-FIRST FLOW - FIXED NAVIGATION DATA
 const QuoteRequests = () => {
   const { currentUser, userType } = useAuth();
   const navigate = useNavigate();
@@ -240,7 +240,26 @@ const QuoteRequests = () => {
     }
   };
 
-  // 💳 UPDATED PAYMENT-FIRST ACCEPT OPERATION - THE MAGIC HAPPENS HERE!
+  // Helper function to determine final negotiated price
+  const getFinalNegotiatedPrice = (quoteData) => {
+    if (quoteData.customer_counter_quote && quoteData.has_customer_counter) {
+      return quoteData.customer_counter_quote;
+    } else if (quoteData.custom_quote && quoteData.has_custom_quote) {
+      return quoteData.custom_quote;
+    } else if (quoteData.tradesman_hourly_rate) {
+      return `£${quoteData.tradesman_hourly_rate}/hour`;
+    } else {
+      return 'Standard Rate';
+    }
+  };
+
+  // Helper function to extract numeric value from price string
+  const extractNumericValue = (priceString) => {
+    const match = priceString.toString().match(/£?(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  };
+
+  // 💳 FIXED PAYMENT-FIRST ACCEPT OPERATION - THE MAGIC HAPPENS HERE!
   const acceptQuote = async (quoteRequestId) => {
     console.log('🚀 Starting quote acceptance with payment-first flow:', quoteRequestId);
     
@@ -273,15 +292,16 @@ const QuoteRequests = () => {
         updated_at: new Date().toISOString()
       });
 
-      // STEP 3: REDIRECT TO PAYMENT CHECKOUT (with quote data)
+      // STEP 3: REDIRECT TO PAYMENT CHECKOUT (with FIXED data structure)
       console.log('🛒 Step 3: Redirecting to payment checkout...');
       
       if (userType === 'customer') {
-        // Customer accepts quote → goes to payment
+        // Customer accepts quote → goes to payment - FIXED DATA STRUCTURE
         navigate('/payment-checkout', { 
           state: { 
-            quoteId: quoteRequestId,
-            quoteData: quoteData,
+            jobId: quoteRequestId,                    // FIXED: was quoteId
+            job: quoteData,                           // FIXED: was quoteData
+            paymentAmount: extractNumericValue(getFinalNegotiatedPrice(quoteData)), // FIXED: added numeric amount
             finalPrice: getFinalNegotiatedPrice(quoteData),
             paymentRequired: true
           }
@@ -311,25 +331,6 @@ const QuoteRequests = () => {
     } finally {
       setAcceptingQuote(prev => ({ ...prev, [quoteRequestId]: false }));
     }
-  };
-
-  // Helper function to determine final negotiated price
-  const getFinalNegotiatedPrice = (quoteData) => {
-    if (quoteData.customer_counter_quote && quoteData.has_customer_counter) {
-      return quoteData.customer_counter_quote;
-    } else if (quoteData.custom_quote && quoteData.has_custom_quote) {
-      return quoteData.custom_quote;
-    } else if (quoteData.tradesman_hourly_rate) {
-      return `£${quoteData.tradesman_hourly_rate}/hour`;
-    } else {
-      return 'Standard Rate';
-    }
-  };
-
-  // Helper function to extract numeric value from price string
-  const extractNumericValue = (priceString) => {
-    const match = priceString.match(/£?(\d+)/);
-    return match ? parseInt(match[1]) : 0;
   };
 
   // Quote update functions (same patterns as your existing, but for quotes)
@@ -684,8 +685,9 @@ const QuoteRequests = () => {
                             <button
                               onClick={() => navigate('/payment-checkout', { 
                                 state: { 
-                                  quoteId: request.id,
-                                  quoteData: request,
+                                  jobId: request.id,                    // FIXED: consistent naming
+                                  job: request,                         // FIXED: consistent naming
+                                  paymentAmount: extractNumericValue(request.final_agreed_price), // FIXED: numeric amount
                                   finalPrice: request.final_agreed_price,
                                   paymentRequired: true
                                 }
