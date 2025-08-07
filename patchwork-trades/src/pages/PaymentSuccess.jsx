@@ -1,17 +1,110 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { 
+  collection, 
+  addDoc, 
+  updateDoc,
+  doc
+} from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useAuth();
   const [emailSent, setEmailSent] = useState(false);
+  const [jobCreated, setJobCreated] = useState(false);
+  const [processing, setProcessing] = useState(true);
   
   // Get payment data from navigation state
-  const { jobId, job, paymentAmount } = location.state || {};
+  const { jobId, job, paymentAmount, paymentIntent } = location.state || {};
   
   useEffect(() => {
+    // Create active job and update quote status after payment success
+    const processPaymentCompletion = async () => {
+      if (!job || !jobId || jobCreated) return;
+      
+      try {
+        console.log('🚀 Processing payment completion for job:', jobId);
+        
+        // STEP 1: Create new job in active_jobs collection
+        const activeJobData = {
+          // Copy all quote data to active job
+          ...job,
+          
+          // Payment and status info
+          quote_id: jobId,
+          final_price: `£${paymentAmount}`,
+          payment_intent_id: paymentIntent?.id || null,
+          status: 'accepted',
+          
+          // Timestamps
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          payment_completed_at: new Date().toISOString(),
+          
+          // Remove quote-specific fields that don't belong in active jobs
+          has_custom_quote: undefined,
+          custom_quote: undefined,
+          has_customer_counter: undefined,
+          customer_counter_quote: undefined,
+          customer_reasoning: undefined,
+          payment_required: undefined,
+          final_agreed_price: undefined
+        };
+
+        console.log('📋 Creating active job with data:', activeJobData);
+        const activeJobRef = await addDoc(collection(db, 'active_jobs'), activeJobData);
+        console.log('✅ Active job created with ID:', activeJobRef.id);
+
+        // STEP 2: Update quote request status to completed/paid
+        await updateDoc(doc(db, 'quote_requests', jobId), {
+          status: 'completed',
+          active_job_id: activeJobRef.id,
+          payment_completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        console.log('✅ Quote request updated to completed status');
+
+        // STEP 3: Add system comment to the new active job
+        await addDoc(collection(db, 'booking_comments'), {
+          active_job_id: activeJobRef.id,
+          quote_request_id: jobId,
+          booking_id: null,
+          user_id: currentUser.uid,
+          user_type: 'system',
+          user_name: 'System',
+          comment: `Payment completed successfully! Job moved to Active Jobs. Amount: £${paymentAmount}`,
+          timestamp: new Date().toISOString()
+        });
+        console.log('✅ System comment added to active job');
+
+        // STEP 4: Send email notification to tradesman
+        try {
+          await sendEmailNotification({
+            recipientEmail: job.tradesman_email,
+            recipientName: job.tradesman_name,
+            senderName: job.customer_name,
+            messageText: `Great news! ${job.customer_name} has completed payment for "${job.job_title}". The job is now active and ready to start.`,
+            replyLink: 'https://patchworktrades.com/active-jobs'
+          });
+          console.log('✅ Tradesman notification email sent');
+        } catch (emailError) {
+          console.error('Email notification failed (non-critical):', emailError);
+        }
+
+        setJobCreated(true);
+        console.log('🎉 Payment completion processing finished successfully');
+        
+      } catch (error) {
+        console.error('❌ Error processing payment completion:', error);
+        alert('Payment successful, but there was an error setting up your job. Please contact support.');
+      } finally {
+        setProcessing(false);
+      }
+    };
+
     // Send confirmation email (demo)
     const sendConfirmationEmail = async () => {
       try {
@@ -26,7 +119,29 @@ const PaymentSuccess = () => {
     if (job && !emailSent) {
       sendConfirmationEmail();
     }
-  }, [job, emailSent]);
+
+    // Process payment completion
+    processPaymentCompletion();
+  }, [job, jobId, jobCreated, paymentAmount, paymentIntent, currentUser.uid]);
+
+  // Email notification helper function
+  const sendEmailNotification = async (emailData) => {
+    try {
+      const response = await fetch('/.netlify/functions/send-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailData)
+      });
+      
+      if (!response.ok) {
+        console.error('Email notification failed:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error sending email notification:', error);
+    }
+  };
 
   const generateReceiptNumber = () => {
     return `PW-${new Date().getFullYear()}-${Math.random().toString(36).substr(2, 8).toUpperCase()}`;
@@ -61,6 +176,19 @@ const PaymentSuccess = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* Processing Indicator */}
+      {processing && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center text-blue-800">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
+            <span className="font-medium">Setting up your job...</span>
+          </div>
+          <p className="text-blue-700 text-sm mt-1">
+            We're moving your job to Active Jobs and notifying the tradesman.
+          </p>
+        </div>
+      )}
+
       {/* Success Header */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6 text-center">
         <div className="text-6xl text-green-500 mb-4">✅</div>
@@ -68,6 +196,14 @@ const PaymentSuccess = () => {
         <p className="text-lg text-gray-600">
           Your payment of <span className="font-semibold text-green-600">£{paymentAmount}</span> has been processed
         </p>
+        {jobCreated && (
+          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-3">
+            <p className="text-green-800 font-medium">🎉 Your job has been activated!</p>
+            <p className="text-green-700 text-sm mt-1">
+              You can now track progress and communicate with your tradesman in Active Jobs.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -93,7 +229,7 @@ const PaymentSuccess = () => {
             
             <div className="flex justify-between items-center py-2 border-b border-gray-200">
               <span className="text-gray-600">Transaction ID</span>
-              <span className="font-medium">txn_{Math.random().toString(36).substr(2, 10)}</span>
+              <span className="font-medium">{paymentIntent?.id || `txn_${Math.random().toString(36).substr(2, 10)}`}</span>
             </div>
             
             <div className="flex justify-between items-center py-3 bg-green-50 px-3 rounded-lg">
@@ -161,7 +297,7 @@ const PaymentSuccess = () => {
                 <span className="text-sm text-gray-600">Status</span>
                 <div className="mt-1">
                   <span className="px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                    Payment Completed
+                    {jobCreated ? 'Active Job' : 'Payment Completed'}
                   </span>
                 </div>
               </div>
