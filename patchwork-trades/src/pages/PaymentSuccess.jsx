@@ -17,8 +17,21 @@ const PaymentSuccess = () => {
   const [jobCreated, setJobCreated] = useState(false);
   const [processing, setProcessing] = useState(true);
   
-  // Get payment data from navigation state
-  const { jobId, job, paymentAmount, paymentIntent } = location.state || {};
+  // FIXED: Handle both old and new data structures
+  const locationState = location.state || {};
+  
+  // Try both naming conventions to be safe
+  const jobId = locationState.jobId || locationState.quoteId;
+  const job = locationState.job || locationState.quoteData;  
+  const paymentAmount = locationState.paymentAmount || extractNumericValue(locationState.finalPrice);
+  const paymentIntent = locationState.paymentIntent;
+
+  // Helper function to extract numeric value from price string
+  const extractNumericValue = (priceString) => {
+    if (!priceString) return 0;
+    const match = priceString.toString().match(/£?(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  };
   
   useEffect(() => {
     // Create active job and update quote status after payment success
@@ -27,6 +40,8 @@ const PaymentSuccess = () => {
       
       try {
         console.log('🚀 Processing payment completion for job:', jobId);
+        console.log('📊 Job data received:', job);
+        console.log('💰 Payment amount:', paymentAmount);
         
         // STEP 1: Create new job in active_jobs collection
         const activeJobData = {
