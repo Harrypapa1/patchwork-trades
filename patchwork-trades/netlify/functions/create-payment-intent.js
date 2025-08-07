@@ -1,19 +1,4 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const admin = require('firebase-admin');
-
-// Initialize Firebase Admin if not already initialized
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-    databaseURL: `https://${process.env.VITE_FIREBASE_PROJECT_ID}.firebaseio.com`
-  });
-}
-
-const db = admin.firestore();
 
 exports.handler = async (event, context) => {
   // Enable CORS
@@ -43,7 +28,18 @@ exports.handler = async (event, context) => {
   }
   
   try {
-    const { amount, currency = 'gbp', quoteId, customerId } = JSON.parse(event.body);
+    const { 
+      amount, 
+      currency = 'gbp', 
+      quoteId, 
+      customerId,
+      tradesmanId,
+      tradesmanName,
+      customerName,
+      tradesmanEmail,
+      customerEmail,
+      jobDescription
+    } = JSON.parse(event.body);
     
     // Validate required fields
     if (!amount || amount <= 0) {
@@ -54,43 +50,28 @@ exports.handler = async (event, context) => {
       };
     }
     
-    if (!quoteId) {
+    if (!quoteId || !customerId || !tradesmanId) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Quote ID is required' }),
+        body: JSON.stringify({ error: 'Quote ID, customer ID, and tradesman ID are required' }),
       };
     }
     
-    // Fetch quote data from Firebase
-    console.log('Fetching quote data for ID:', quoteId);
-    const quoteDoc = await db.collection('quote_requests').doc(quoteId).get();
-    
-    if (!quoteDoc.exists) {
-      return {
-        statusCode: 404,
-        headers,
-        body: JSON.stringify({ error: 'Quote request not found' }),
-      };
-    }
-    
-    const quoteData = quoteDoc.data();
-    console.log('Quote data retrieved:', quoteData);
-    
-    // Create payment intent with complete metadata
+    // Create payment intent with minimal metadata for webhook
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(amount * 100), // Convert pounds to pence
       currency: currency.toLowerCase(),
       metadata: {
         quote_request_id: quoteId,
-        customer_id: customerId || quoteData.customer_id,
-        tradesman_id: quoteData.tradesman_id,
-        tradesman_name: quoteData.tradesman_name,
-        customer_name: quoteData.customer_name,
-        tradesman_email: quoteData.tradesman_email,
-        customer_email: quoteData.customer_email,
-        job_description: quoteData.job_title || quoteData.job_description || 'Job',
-        final_price: `£${amount}`,
+        customer_id: customerId,
+        tradesman_id: tradesmanId,
+        tradesman_name: tradesmanName || '',
+        customer_name: customerName || '',
+        tradesman_email: tradesmanEmail || '',
+        customer_email: customerEmail || '',
+        job_description: jobDescription || 'Job',
+        final_price: amount.toString(),
         platform: 'patchwork-trades',
       },
       automatic_payment_methods: {
@@ -98,7 +79,7 @@ exports.handler = async (event, context) => {
       },
     });
     
-    console.log('Payment intent created with metadata:', paymentIntent.metadata);
+    console.log('Payment intent created:', paymentIntent.id);
     
     return {
       statusCode: 200,
