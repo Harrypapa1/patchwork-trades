@@ -5,7 +5,7 @@ import {
   collection, 
   query, 
   where, 
-  getDocs, 
+  onSnapshot,
   doc, 
   getDoc 
 } from 'firebase/firestore';
@@ -20,10 +20,114 @@ const TopEarners = () => {
   const [weekRange, setWeekRange] = useState({ start: '', end: '' });
 
   useEffect(() => {
-    fetchTopEarners();
-    if (currentUser && userType === 'tradesman') {
-      fetchCurrentUserStats();
+    let unsubscribe = null;
+    
+    const setupRealTimeListener = () => {
+      const weekRange = getCurrentWeekRange();
+      setWeekRange(weekRange);
+
+      console.log('🔴 Setting up real-time Top Earners listener...');
+
+      // Set up real-time listener for completed jobs this week
+      const jobsQuery = query(
+        collection(db, 'active_jobs'),
+        where('status', '==', 'completed'),
+        where('completed_at', '>=', weekRange.start),
+        where('completed_at', '<=', weekRange.end)
+      );
+
+      unsubscribe = onSnapshot(
+        jobsQuery,
+        async (snapshot) => {
+          console.log('📊 Top Earners data updated - processing changes...');
+          
+          const completedJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          console.log('✅ Found completed jobs this week:', completedJobs.length);
+
+          // Group jobs by tradesman and calculate earnings
+          const tradesmanEarnings = {};
+
+          completedJobs.forEach(job => {
+            const tradesmanId = job.tradesman_id;
+            if (!tradesmanEarnings[tradesmanId]) {
+              tradesmanEarnings[tradesmanId] = {
+                tradesman_id: tradesmanId,
+                tradesman_name: job.tradesman_name,
+                trade_type: job.tradesman_trade_type || job.job_category || 'Tradesman',
+                area: job.tradesman_area || job.area_covered || 'London',
+                total_earnings: 0,
+                job_count: 0,
+                jobs: []
+              };
+            }
+
+            const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || job.agreed_price || '0');
+            tradesmanEarnings[tradesmanId].total_earnings += jobEarnings;
+            tradesmanEarnings[tradesmanId].job_count += 1;
+            tradesmanEarnings[tradesmanId].jobs.push(job);
+          });
+
+          // Convert to array and sort by earnings
+          const sortedEarners = Object.values(tradesmanEarnings)
+            .sort((a, b) => b.total_earnings - a.total_earnings)
+            .slice(0, 5); // Top 5
+
+          console.log('💰 Top earners calculated:', sortedEarners.length);
+
+          // Get additional profile data for top earners
+          const enrichedEarners = await Promise.all(
+            sortedEarners.map(async (earner, index) => {
+              try {
+                const profileDoc = await getDoc(doc(db, 'tradesmen_profiles', earner.tradesman_id));
+                const profileData = profileDoc.exists() ? profileDoc.data() : {};
+                
+                return {
+                  ...earner,
+                  rank: index + 1,
+                  average_rating: profileData.average_rating || 0,
+                  completed_jobs_total: profileData.completed_jobs_count || 0,
+                  profile_photo: profileData.profilePhoto,
+                  area_covered: profileData.areaCovered || earner.area
+                };
+              } catch (error) {
+                console.warn(`Error fetching profile for ${earner.tradesman_id}:`, error);
+                return {
+                  ...earner,
+                  rank: index + 1,
+                  average_rating: 0,
+                  completed_jobs_total: 0
+                };
+              }
+            })
+          );
+
+          console.log('🚀 Real-time Top Earners updated!');
+          setTopEarners(enrichedEarners);
+          setLoading(false);
+
+          // Update current user stats if they're a tradesman
+          if (currentUser && userType === 'tradesman') {
+            updateCurrentUserStats(enrichedEarners, completedJobs);
+          }
+        },
+        (error) => {
+          console.error('Error in real-time Top Earners listener:', error);
+          setLoading(false);
+        }
+      );
+    };
+
+    if (currentUser) {
+      setupRealTimeListener();
     }
+
+    // Cleanup function
+    return () => {
+      if (unsubscribe) {
+        console.log('🧹 Cleaning up Top Earners real-time listener');
+        unsubscribe();
+      }
+    };
   }, [currentUser, userType]);
 
   const getCurrentWeekRange = () => {
@@ -39,120 +143,25 @@ const TopEarners = () => {
     };
   };
 
-  const fetchTopEarners = async () => {
-    try {
-      const weekRange = getCurrentWeekRange();
-      setWeekRange(weekRange);
-
-      // Get all completed jobs from this week
-      const jobsQuery = query(
-        collection(db, 'active_jobs'),
-        where('status', '==', 'completed'),
-        where('completed_at', '>=', weekRange.start),
-        where('completed_at', '<=', weekRange.end)
-      );
-
-      const jobsSnapshot = await getDocs(jobsQuery);
-      const completedJobs = jobsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Group jobs by tradesman and calculate earnings
-      const tradesmanEarnings = {};
-
-      completedJobs.forEach(job => {
-        const tradesmanId = job.tradesman_id;
-        if (!tradesmanEarnings[tradesmanId]) {
-          tradesmanEarnings[tradesmanId] = {
-            tradesman_id: tradesmanId,
-            tradesman_name: job.tradesman_name,
-            trade_type: job.tradesman_trade_type || 'Tradesman',
-            area: job.tradesman_area || 'London',
-            total_earnings: 0,
-            job_count: 0,
-            jobs: []
-          };
-        }
-
-        const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || '0');
-        tradesmanEarnings[tradesmanId].total_earnings += jobEarnings;
-        tradesmanEarnings[tradesmanId].job_count += 1;
-        tradesmanEarnings[tradesmanId].jobs.push(job);
-      });
-
-      // Convert to array and sort by earnings
-      const sortedEarners = Object.values(tradesmanEarnings)
-        .sort((a, b) => b.total_earnings - a.total_earnings)
-        .slice(0, 5); // Top 5
-
-      // Get additional profile data for top earners
-      const enrichedEarners = await Promise.all(
-        sortedEarners.map(async (earner, index) => {
-          try {
-            const profileDoc = await getDoc(doc(db, 'tradesmen_profiles', earner.tradesman_id));
-            const profileData = profileDoc.exists() ? profileDoc.data() : {};
-            
-            return {
-              ...earner,
-              rank: index + 1,
-              average_rating: profileData.average_rating || 0,
-              completed_jobs_total: profileData.completed_jobs_count || 0,
-              profile_photo: profileData.profilePhoto,
-              area_covered: profileData.areaCovered || earner.area
-            };
-          } catch (error) {
-            console.warn(`Error fetching profile for ${earner.tradesman_id}:`, error);
-            return {
-              ...earner,
-              rank: index + 1,
-              average_rating: 0,
-              completed_jobs_total: 0
-            };
-          }
-        })
-      );
-
-      setTopEarners(enrichedEarners);
-    } catch (error) {
-      console.error('Error fetching top earners:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCurrentUserStats = async () => {
+  const updateCurrentUserStats = (earners, allJobs) => {
     if (!currentUser || userType !== 'tradesman') return;
 
-    try {
-      const weekRange = getCurrentWeekRange();
+    // Find current user's jobs
+    const userJobs = allJobs.filter(job => job.tradesman_id === currentUser.uid);
+    
+    const totalEarnings = userJobs.reduce((sum, job) => {
+      const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || job.agreed_price || '0');
+      return sum + jobEarnings;
+    }, 0);
 
-      // Get current user's jobs for this week
-      const userJobsQuery = query(
-        collection(db, 'active_jobs'),
-        where('tradesman_id', '==', currentUser.uid),
-        where('status', '==', 'completed'),
-        where('completed_at', '>=', weekRange.start),
-        where('completed_at', '<=', weekRange.end)
-      );
-
-      const userJobsSnapshot = await getDocs(userJobsQuery);
-      const userJobs = userJobsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      const totalEarnings = userJobs.reduce((sum, job) => {
-        const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || '0');
-        return sum + jobEarnings;
-      }, 0);
-
-      // Calculate user's rank
-      const userRank = topEarners.findIndex(earner => earner.tradesman_id === currentUser.uid) + 1;
-      
-      setCurrentUserStats({
-        earnings: totalEarnings,
-        jobCount: userJobs.length,
-        rank: userRank || null
-      });
-
-    } catch (error) {
-      console.error('Error fetching current user stats:', error);
-    }
+    // Calculate user's rank
+    const userRank = earners.findIndex(earner => earner.tradesman_id === currentUser.uid) + 1;
+    
+    setCurrentUserStats({
+      earnings: totalEarnings,
+      jobCount: userJobs.length,
+      rank: userRank || null
+    });
   };
 
   const getRankEmoji = (rank) => {
@@ -194,7 +203,7 @@ const TopEarners = () => {
       <div className="max-w-6xl mx-auto p-4">
         <div className="text-center py-8">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-2 text-gray-600">Loading top earners...</p>
+          <p className="mt-2 text-gray-600">Loading real-time top earners...</p>
         </div>
       </div>
     );
@@ -202,9 +211,15 @@ const TopEarners = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4">
-      {/* Header */}
+      {/* Header with Real-time Indicator */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">🏆 Top Earners</h1>
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900">🏆 Top Earners</h1>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-sm text-gray-600 font-medium">Live</span>
+          </div>
+        </div>
         <p className="text-gray-600">
           Weekly leaderboard for {weekRange.displayStart} - {weekRange.displayEnd}
         </p>
@@ -270,77 +285,95 @@ const TopEarners = () => {
           </div>
         </div>
 
-        <div className="space-y-4">
-          {topEarners.map((earner, index) => (
-            <div 
-              key={earner.tradesman_id}
-              className={`relative p-4 rounded-lg border-2 transition-all hover:shadow-md ${
-                earner.rank === 1 ? 'border-yellow-300 bg-yellow-50' :
-                earner.rank === 2 ? 'border-gray-300 bg-gray-50' :
-                earner.rank === 3 ? 'border-orange-300 bg-orange-50' :
-                'border-gray-200 bg-white'
-              }`}
-            >
-              {earner.rank === 1 && (
-                <div className="absolute -top-2 -right-2 bg-purple-500 text-white px-2 py-1 rounded-full text-xs font-bold">
-                  🏆 Invited
-                </div>
-              )}
-              
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  {/* Rank */}
-                  <div className={`text-3xl font-bold ${
-                    earner.rank === 1 ? 'text-yellow-600' :
-                    earner.rank === 2 ? 'text-gray-600' :
-                    earner.rank === 3 ? 'text-orange-600' :
-                    'text-gray-500'
-                  }`}>
-                    {getRankEmoji(earner.rank)}
+        {topEarners.length === 0 ? (
+          <div className="text-center py-8">
+            <div className="text-gray-400 text-4xl mb-2">💰</div>
+            <h3 className="text-lg font-medium text-gray-600 mb-1">No Completed Jobs This Week</h3>
+            <p className="text-gray-500 text-sm">
+              Be the first to complete a job and claim the top spot!
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {topEarners.map((earner, index) => (
+              <div 
+                key={earner.tradesman_id}
+                className={`relative p-4 rounded-lg border-2 transition-all hover:shadow-md ${
+                  earner.rank === 1 ? 'border-yellow-300 bg-yellow-50' :
+                  earner.rank === 2 ? 'border-gray-300 bg-gray-50' :
+                  earner.rank === 3 ? 'border-orange-300 bg-orange-50' :
+                  'border-gray-200 bg-white'
+                }`}
+              >
+                {earner.rank === 1 && (
+                  <div className="absolute -top-2 -right-2 bg-purple-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                    🏆 Invited
                   </div>
-                  
-                  {/* Profile Photo */}
-                  <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-medium border-2 border-gray-300">
-                    {earner.tradesman_name.charAt(0)}
-                  </div>
-                  
-                  {/* Tradesman Details */}
-                  <div>
-                    <div className="flex items-center gap-3 mb-1">
-                      <h3 className="font-semibold text-gray-900 text-lg">
-                        {earner.tradesman_name.split(' ')[0]} {earner.tradesman_name.split(' ')[1]?.charAt(0)}.
-                      </h3>
-                      {earner.average_rating > 0 && (
-                        <div className="flex items-center gap-1">
-                          <div className="flex text-sm">{renderStars(earner.average_rating)}</div>
-                          <span className="text-sm text-gray-600">({earner.average_rating})</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span className="font-medium">{earner.trade_type}</span>
-                      <span>📍 {earner.area_covered}</span>
-                      <span>{earner.job_count} job{earner.job_count !== 1 ? 's' : ''} completed</span>
-                    </div>
-                  </div>
-                </div>
+                )}
                 
-                {/* Earnings */}
-                <div className="text-right">
-                  <div className={`text-2xl font-bold ${
-                    earner.rank === 1 ? 'text-yellow-600' :
-                    earner.rank === 2 ? 'text-gray-600' :
-                    earner.rank === 3 ? 'text-orange-600' :
-                    'text-green-600'
-                  }`}>
-                    {formatEarnings(earner.total_earnings)}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {/* Rank */}
+                    <div className={`text-3xl font-bold ${
+                      earner.rank === 1 ? 'text-yellow-600' :
+                      earner.rank === 2 ? 'text-gray-600' :
+                      earner.rank === 3 ? 'text-orange-600' :
+                      'text-gray-500'
+                    }`}>
+                      {getRankEmoji(earner.rank)}
+                    </div>
+                    
+                    {/* Profile Photo */}
+                    {earner.profile_photo ? (
+                      <img 
+                        src={earner.profile_photo} 
+                        alt="Profile" 
+                        className="w-12 h-12 rounded-full object-cover border-2 border-gray-300"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm font-medium border-2 border-gray-300">
+                        {earner.tradesman_name.charAt(0)}
+                      </div>
+                    )}
+                    
+                    {/* Tradesman Details */}
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        <h3 className="font-semibold text-gray-900 text-lg">
+                          {earner.tradesman_name.split(' ')[0]} {earner.tradesman_name.split(' ')[1]?.charAt(0)}.
+                        </h3>
+                        {earner.average_rating > 0 && (
+                          <div className="flex items-center gap-1">
+                            <div className="flex text-sm">{renderStars(earner.average_rating)}</div>
+                            <span className="text-sm text-gray-600">({earner.average_rating})</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <span className="font-medium text-blue-600">{earner.trade_type}</span>
+                        <span>📍 {earner.area_covered}</span>
+                        <span>{earner.job_count} job{earner.job_count !== 1 ? 's' : ''} completed</span>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-500">This Week</p>
+                  
+                  {/* Earnings */}
+                  <div className="text-right">
+                    <div className={`text-2xl font-bold ${
+                      earner.rank === 1 ? 'text-yellow-600' :
+                      earner.rank === 2 ? 'text-gray-600' :
+                      earner.rank === 3 ? 'text-orange-600' :
+                      'text-green-600'
+                    }`}>
+                      {formatEarnings(earner.total_earnings)}
+                    </div>
+                    <p className="text-sm text-gray-500">This Week</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Success Habits Section */}
