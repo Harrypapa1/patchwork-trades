@@ -28,6 +28,7 @@ import PaymentCheckout from './pages/PaymentCheckout';
 import PaymentSuccess from './pages/PaymentSuccess';
 import TradesmanOnboarding from './pages/TradesmanOnboarding';
 import EarningsOverview from './pages/EarningsOverview';
+import TopEarners from './pages/TopEarners'; // 🆕 NEW IMPORT - Top Earners
 // 🆕 NEW IMPORTS - Password Reset System
 import ForgotPassword from './pages/ForgotPassword';
 import ResetConfirmation from './pages/ResetConfirmation';
@@ -269,6 +270,16 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <ActiveJobs />
+                    </ProtectedRoute>
+                  }
+                />
+                
+                {/* 🆕 NEW ROUTE: Top Earners - Available to all users */}
+                <Route
+                  path="/top-earners"
+                  element={
+                    <ProtectedRoute>
+                      <TopEarners />
                     </ProtectedRoute>
                   }
                 />
