@@ -588,11 +588,27 @@ const ActiveJobs = () => {
     }
   }, [currentUser, userType]);
 
-  // Only load comments when job is expanded
+  // ✅ FIXED - Enhanced toggle expand with proper cleanup
   const handleToggleExpand = useCallback((jobId) => {
     setExpandedJobs(prev => {
       const isCurrentlyExpanded = prev[jobId];
       const newExpanded = { ...prev, [jobId]: !isCurrentlyExpanded };
+      
+      // If collapsing, clean up the listener for this job
+      if (isCurrentlyExpanded && commentsListeners[jobId]) {
+        try {
+          commentsListeners[jobId]();
+        } catch (error) {
+          console.warn(`Error cleaning up listener for job ${jobId}:`, error);
+        }
+        
+        // Remove from listeners tracking
+        setCommentsListeners(prev => {
+          const updated = { ...prev };
+          delete updated[jobId];
+          return updated;
+        });
+      }
       
       // If expanding and don't have comments yet, load them
       if (!isCurrentlyExpanded && !comments[jobId]) {
@@ -601,7 +617,7 @@ const ActiveJobs = () => {
       
       return newExpanded;
     });
-  }, [comments]);
+  }, [comments, commentsListeners]);
 
   // Helper functions
   const getActiveJobs = () => activeJobs.filter(job => job.status === 'accepted' || job.status === 'in_progress' || job.status === 'pending_approval');
@@ -691,15 +707,25 @@ const ActiveJobs = () => {
     }
   };
 
-  // 🎯 ENHANCED COMMENTS FOR NEW ARCHITECTURE
+  // 🎯 ENHANCED COMMENTS FOR NEW ARCHITECTURE - ✅ FIXED MEMORY LEAKS
   const fetchJobComments = async (jobId) => {
     try {
+      // ✅ FIXED - Clean up existing listener if it exists
+      if (commentsListeners[jobId]) {
+        try {
+          commentsListeners[jobId]();
+        } catch (error) {
+          console.warn(`Error cleaning up existing listener for job ${jobId}:`, error);
+        }
+      }
+
       const commentsQuery = query(
         collection(db, 'booking_comments'),
         where('active_job_id', '==', jobId) // 🆕 NEW FIELD
       );
 
-      const unsubscribe = onSnapshot(commentsQuery, 
+      const unsubscribe = onSnapshot(
+        commentsQuery, 
         (snapshot) => {
           const jobComments = snapshot.docs.map(doc => ({
             id: doc.id,
@@ -722,7 +748,7 @@ const ActiveJobs = () => {
         }
       );
 
-      // Track listener for cleanup
+      // ✅ FIXED - Track listener for proper cleanup
       setCommentsListeners(prev => ({
         ...prev,
         [jobId]: unsubscribe
@@ -1065,11 +1091,17 @@ Are you sure you want to cancel?`;
     });
   };
 
-  // Cleanup listeners on unmount
+  // ✅ FIXED - Enhanced cleanup listeners on unmount
   useEffect(() => {
     return () => {
       Object.values(commentsListeners).forEach(unsubscribe => {
-        if (unsubscribe) unsubscribe();
+        if (typeof unsubscribe === 'function') {
+          try {
+            unsubscribe();
+          } catch (error) {
+            console.warn('Error during listener cleanup on unmount:', error);
+          }
+        }
       });
     };
   }, [commentsListeners]);
