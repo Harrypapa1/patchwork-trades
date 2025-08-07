@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -7,17 +9,7 @@ import {
   doc, 
   getDoc 
 } from 'firebase/firestore';
-
-// Mock hooks and components for demo purposes
-const useAuth = () => ({
-  currentUser: { uid: 'demo-user-123' },
-  userType: 'tradesman'
-});
-
-const useNavigate = () => (path) => console.log(`Navigate to: ${path}`);
-
-// Mock Firebase config
-const db = {};
+import { db } from '../config/firebase';
 
 const TopEarners = () => {
   const { currentUser, userType } = useAuth();
@@ -28,97 +20,140 @@ const TopEarners = () => {
   const [weekRange, setWeekRange] = useState({ start: '', end: '' });
 
   useEffect(() => {
-    // Demo data for the Top Earners page
-    const mockTopEarners = [
-      {
-        tradesman_id: 'trader-1',
-        tradesman_name: 'Sarah Thompson',
-        trade_type: 'Electrician',
-        area_covered: 'Hackney, N16',
-        total_earnings: 2850,
-        job_count: 8,
-        rank: 1,
-        average_rating: 4.9,
-        completed_jobs_total: 47,
-        profile_photo: null
-      },
-      {
-        tradesman_id: 'trader-2',
-        tradesman_name: 'Marcus Johnson',
-        trade_type: 'Plumber',
-        area_covered: 'Camden, NW1',
-        total_earnings: 2340,
-        job_count: 6,
-        rank: 2,
-        average_rating: 4.8,
-        completed_jobs_total: 33,
-        profile_photo: null
-      },
-      {
-        tradesman_id: 'trader-3',
-        tradesman_name: 'Emma Davies',
-        trade_type: 'Carpenter',
-        area_covered: 'Islington, N1',
-        total_earnings: 1890,
-        job_count: 5,
-        rank: 3,
-        average_rating: 4.7,
-        completed_jobs_total: 29,
-        profile_photo: null
-      },
-      {
-        tradesman_id: 'trader-4',
-        tradesman_name: 'James Wilson',
-        trade_type: 'Painter',
-        area_covered: 'Shoreditch, E2',
-        total_earnings: 1650,
-        job_count: 7,
-        rank: 4,
-        average_rating: 4.6,
-        completed_jobs_total: 22,
-        profile_photo: null
-      },
-      {
-        tradesman_id: 'trader-5',
-        tradesman_name: 'Lisa Garcia',
-        trade_type: 'Tiler',
-        area_covered: 'Clapham, SW4',
-        total_earnings: 1420,
-        job_count: 4,
-        rank: 5,
-        average_rating: 4.8,
-        completed_jobs_total: 18,
-        profile_photo: null
-      }
-    ];
+    fetchTopEarners();
+    if (currentUser && userType === 'tradesman') {
+      fetchCurrentUserStats();
+    }
+  }, [currentUser, userType]);
 
-    const mockCurrentUserStats = {
-      earnings: 920,
-      jobCount: 3,
-      rank: null // Not in top 5
+  const getCurrentWeekRange = () => {
+    const now = new Date();
+    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay())); // Sunday
+    const endOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 6)); // Saturday
+    
+    return {
+      start: startOfWeek.toISOString(),
+      end: endOfWeek.toISOString(),
+      displayStart: startOfWeek.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
+      displayEnd: endOfWeek.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
     };
+  };
 
-    const getCurrentWeekRange = () => {
-      const now = new Date();
-      const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
-      const endOfWeek = new Date(now.setDate(now.getDate() - now.getDay() + 6));
-      
-      return {
-        start: startOfWeek.toISOString(),
-        end: endOfWeek.toISOString(),
-        displayStart: startOfWeek.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
-        displayEnd: endOfWeek.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
-      };
-    };
+  const fetchTopEarners = async () => {
+    try {
+      const weekRange = getCurrentWeekRange();
+      setWeekRange(weekRange);
 
-    // Simulate loading delay
-    setTimeout(() => {
-      setTopEarners(mockTopEarners);
-      setCurrentUserStats(mockCurrentUserStats);
-      setWeekRange(getCurrentWeekRange());
+      // Get all completed jobs from this week
+      const jobsQuery = query(
+        collection(db, 'active_jobs'),
+        where('status', '==', 'completed'),
+        where('completed_at', '>=', weekRange.start),
+        where('completed_at', '<=', weekRange.end)
+      );
+
+      const jobsSnapshot = await getDocs(jobsQuery);
+      const completedJobs = jobsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Group jobs by tradesman and calculate earnings
+      const tradesmanEarnings = {};
+
+      completedJobs.forEach(job => {
+        const tradesmanId = job.tradesman_id;
+        if (!tradesmanEarnings[tradesmanId]) {
+          tradesmanEarnings[tradesmanId] = {
+            tradesman_id: tradesmanId,
+            tradesman_name: job.tradesman_name,
+            trade_type: job.tradesman_trade_type || 'Tradesman',
+            area: job.tradesman_area || 'London',
+            total_earnings: 0,
+            job_count: 0,
+            jobs: []
+          };
+        }
+
+        const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || '0');
+        tradesmanEarnings[tradesmanId].total_earnings += jobEarnings;
+        tradesmanEarnings[tradesmanId].job_count += 1;
+        tradesmanEarnings[tradesmanId].jobs.push(job);
+      });
+
+      // Convert to array and sort by earnings
+      const sortedEarners = Object.values(tradesmanEarnings)
+        .sort((a, b) => b.total_earnings - a.total_earnings)
+        .slice(0, 5); // Top 5
+
+      // Get additional profile data for top earners
+      const enrichedEarners = await Promise.all(
+        sortedEarners.map(async (earner, index) => {
+          try {
+            const profileDoc = await getDoc(doc(db, 'tradesmen_profiles', earner.tradesman_id));
+            const profileData = profileDoc.exists() ? profileDoc.data() : {};
+            
+            return {
+              ...earner,
+              rank: index + 1,
+              average_rating: profileData.average_rating || 0,
+              completed_jobs_total: profileData.completed_jobs_count || 0,
+              profile_photo: profileData.profilePhoto,
+              area_covered: profileData.areaCovered || earner.area
+            };
+          } catch (error) {
+            console.warn(`Error fetching profile for ${earner.tradesman_id}:`, error);
+            return {
+              ...earner,
+              rank: index + 1,
+              average_rating: 0,
+              completed_jobs_total: 0
+            };
+          }
+        })
+      );
+
+      setTopEarners(enrichedEarners);
+    } catch (error) {
+      console.error('Error fetching top earners:', error);
+    } finally {
       setLoading(false);
-    }, 1000);
-  }, []);
+    }
+  };
+
+  const fetchCurrentUserStats = async () => {
+    if (!currentUser || userType !== 'tradesman') return;
+
+    try {
+      const weekRange = getCurrentWeekRange();
+
+      // Get current user's jobs for this week
+      const userJobsQuery = query(
+        collection(db, 'active_jobs'),
+        where('tradesman_id', '==', currentUser.uid),
+        where('status', '==', 'completed'),
+        where('completed_at', '>=', weekRange.start),
+        where('completed_at', '<=', weekRange.end)
+      );
+
+      const userJobsSnapshot = await getDocs(userJobsQuery);
+      const userJobs = userJobsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      const totalEarnings = userJobs.reduce((sum, job) => {
+        const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || '0');
+        return sum + jobEarnings;
+      }, 0);
+
+      // Calculate user's rank
+      const userRank = topEarners.findIndex(earner => earner.tradesman_id === currentUser.uid) + 1;
+      
+      setCurrentUserStats({
+        earnings: totalEarnings,
+        jobCount: userJobs.length,
+        rank: userRank || null
+      });
+
+    } catch (error) {
+      console.error('Error fetching current user stats:', error);
+    }
+  };
 
   const getRankEmoji = (rank) => {
     switch (rank) {
