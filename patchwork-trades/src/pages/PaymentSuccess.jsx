@@ -48,9 +48,13 @@ const PaymentSuccess = () => {
           // Copy all quote data to active job (excluding quote-specific fields)
           ...job,
           
-          // Payment and status info
+          // Payment and status info - ACCURATE FIGURES FOR ADMIN TRACKING
           quote_id: jobId,
-          final_price: `£${paymentAmount}`,
+          final_price: `£${paymentAmount}`,           // Keep as string for display
+          agreed_price: paymentAmount,                // Job value as number for admin dashboard
+          platform_fee: 0,                          // Currently 0% but could be: parseFloat((paymentAmount * 0.05).toFixed(2))
+          platform_commission_rate: 0,              // Track commission rate (currently 0%)
+          theoretical_commission: parseFloat((paymentAmount * 0.05).toFixed(2)), // What commission WOULD be at 5%
           payment_intent_id: paymentIntent?.id || null,
           status: 'accepted',
           
