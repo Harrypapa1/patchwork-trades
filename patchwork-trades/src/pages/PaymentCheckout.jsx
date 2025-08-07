@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import {
   Elements,
@@ -104,17 +105,74 @@ const CheckoutForm = ({ amount, quoteId, customerId, onSuccess, onError }) => {
   );
 };
 
-const PaymentCheckout = ({ amount, quoteId, customerId, onSuccess, onError }) => {
+const PaymentCheckout = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Get payment data from navigation state
+  const { quoteId, quoteData, finalPrice } = location.state || {};
+  
+  // Extract numeric amount from finalPrice
+  const extractAmount = (priceString) => {
+    if (!priceString) return 0;
+    const match = String(priceString).match(/£?(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  };
+  
+  const amount = extractAmount(finalPrice);
+  
+  const handlePaymentSuccess = (paymentIntent) => {
+    // Navigate to success page with job details
+    navigate('/payment-success', {
+      state: {
+        jobId: quoteId,
+        job: quoteData,
+        paymentAmount: amount,
+        paymentIntent: paymentIntent
+      }
+    });
+  };
+  
+  const handlePaymentError = (error) => {
+    console.error('Payment failed:', error);
+    // Could show error message or redirect
+  };
+  
+  if (!quoteData || !amount) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <h2 className="text-xl font-semibold text-red-900 mb-2">Payment Information Missing</h2>
+          <p className="text-red-700 mb-4">Unable to find payment details. Please try again.</p>
+          <button
+            onClick={() => navigate('/quote-requests')}
+            className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+          >
+            Back to Quote Requests
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Elements stripe={stripePromise}>
-      <CheckoutForm
-        amount={amount}
-        quoteId={quoteId}
-        customerId={customerId}
-        onSuccess={onSuccess}
-        onError={onError}
-      />
-    </Elements>
+    <div className="max-w-4xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-4">Complete Payment</h1>
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-lg font-semibold mb-2">{quoteData.job_title}</h2>
+        <p className="text-gray-600 mb-4">Amount: £{amount}</p>
+        
+        <Elements stripe={stripePromise}>
+          <CheckoutForm
+            amount={amount}
+            quoteId={quoteId}
+            customerId={quoteData.customer_id}
+            onSuccess={handlePaymentSuccess}
+            onError={handlePaymentError}
+          />
+        </Elements>
+      </div>
+    </div>
   );
 };
 
