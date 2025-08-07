@@ -29,6 +29,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import TradesmanOnboarding from './pages/TradesmanOnboarding';
 import EarningsOverview from './pages/EarningsOverview';
 import TopEarners from './pages/TopEarners'; // 🆕 NEW IMPORT - Top Earners
+import TopPerformers from './pages/TopPerformers'; // 🆕 NEW IMPORT - Top Performers (Customer-facing)
 // 🆕 NEW IMPORTS - Password Reset System
 import ForgotPassword from './pages/ForgotPassword';
 import ResetConfirmation from './pages/ResetConfirmation';
@@ -280,6 +281,16 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <TopEarners />
+                    </ProtectedRoute>
+                  }
+                />
+                
+                {/* 🆕 NEW ROUTE: Top Performers - Customer-facing version */}
+                <Route
+                  path="/top-performers"
+                  element={
+                    <ProtectedRoute>
+                      <TopPerformers />
                     </ProtectedRoute>
                   }
                 />
