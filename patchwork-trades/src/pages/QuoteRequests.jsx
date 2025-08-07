@@ -57,14 +57,18 @@ const QuoteRequests = () => {
       fetchQuoteRequests();
     }
     
-    // Cleanup function (same pattern as your existing)
+    // ✅ FIXED - Enhanced cleanup function
     return () => {
       console.log(`🧹 [${componentId.current}] Cleaning up component...`);
       
       // Clean up all listeners
       Object.values(activeListeners.current).forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
-          unsubscribe();
+          try {
+            unsubscribe();
+          } catch (error) {
+            console.warn('Error during listener cleanup:', error);
+          }
         }
       });
       activeListeners.current = {};
@@ -97,10 +101,14 @@ const QuoteRequests = () => {
       console.log('Found quote requests:', requests);
       setQuoteRequests(requests);
 
-      // Clean up existing listeners before setting up new ones
+      // ✅ FIXED - Enhanced cleanup before setting up new listeners
       Object.values(activeListeners.current).forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
-          unsubscribe();
+          try {
+            unsubscribe();
+          } catch (error) {
+            console.warn('Error cleaning up existing listener:', error);
+          }
         }
       });
       activeListeners.current = {};
@@ -117,12 +125,16 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🎯 ENHANCED COMMENTS FOR NEW ARCHITECTURE
+  // 🎯 ENHANCED COMMENTS FOR NEW ARCHITECTURE - ✅ FIXED MEMORY LEAKS
   const fetchComments = (quoteRequestId) => {
     try {
-      // Clean up existing listener for this quote if it exists
+      // ✅ FIXED - Enhanced cleanup for existing listener
       if (activeListeners.current[quoteRequestId]) {
-        activeListeners.current[quoteRequestId]();
+        try {
+          activeListeners.current[quoteRequestId]();
+        } catch (error) {
+          console.warn(`Error cleaning up listener for quote ${quoteRequestId}:`, error);
+        }
         delete activeListeners.current[quoteRequestId];
       }
 
@@ -133,8 +145,9 @@ const QuoteRequests = () => {
 
       console.log('Setting up real-time listener for quote:', quoteRequestId);
 
-      // Set up new listener with proper cleanup
-      const unsubscribe = onSnapshot(commentsQuery, 
+      // ✅ FIXED - Enhanced listener setup with better error handling
+      const unsubscribe = onSnapshot(
+        commentsQuery, 
         (snapshot) => {
           const quoteComments = snapshot.docs.map(doc => ({
             id: doc.id,
@@ -160,7 +173,7 @@ const QuoteRequests = () => {
         }
       );
 
-      // Store the unsubscribe function for cleanup
+      // ✅ FIXED - Store the unsubscribe function for cleanup
       activeListeners.current[quoteRequestId] = unsubscribe;
 
     } catch (error) {
