@@ -15,8 +15,14 @@ const Navbar = () => {
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [quoteRequestsCount, setQuoteRequestsCount] = useState(0); // Updated variable name
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  
+  // Notification counts
+  const [notifications, setNotifications] = useState({
+    quoteRequests: 0,
+    activeJobs: 0,
+    messages: 0
+  });
 
   // Check if mobile screen
   useEffect(() => {
@@ -44,51 +50,143 @@ const Navbar = () => {
     }
   }, [isMenuOpen]);
 
-  // 🆕 NEW BULLETPROOF LISTENER - No more race conditions!
+  // Enhanced notification listeners
   useEffect(() => {
     if (!currentUser) {
-      setQuoteRequestsCount(0);
+      setNotifications({ quoteRequests: 0, activeJobs: 0, messages: 0 });
       return;
     }
 
+    const unsubscribes = [];
+
     try {
+      // 1. Quote Requests Listener
       let quotesQuery;
       if (userType === 'customer') {
         quotesQuery = query(
-          collection(db, 'quote_requests'), // 🆕 NEW COLLECTION
-          where('customer_id', '==', currentUser.uid)
+          collection(db, 'quote_requests'),
+          where('customer_id', '==', currentUser.uid),
+          where('status', 'in', ['pending', 'quoted', 'counter_offered'])
         );
       } else if (userType === 'tradesman') {
         quotesQuery = query(
-          collection(db, 'quote_requests'), // 🆕 NEW COLLECTION
-          where('tradesman_id', '==', currentUser.uid)
+          collection(db, 'quote_requests'),
+          where('tradesman_id', '==', currentUser.uid),
+          where('status', 'in', ['pending', 'customer_counter'])
         );
       }
 
       if (quotesQuery) {
-        const unsubscribe = onSnapshot(
-          quotesQuery, 
+        const quoteUnsubscribe = onSnapshot(
+          quotesQuery,
           (snapshot) => {
-            setQuoteRequestsCount(snapshot.docs.length);
+            setNotifications(prev => ({
+              ...prev,
+              quoteRequests: snapshot.docs.length
+            }));
           },
           (error) => {
             console.error('Error listening to quote requests:', error);
-            setQuoteRequestsCount(0);
           }
         );
-
-        return () => unsubscribe();
+        unsubscribes.push(quoteUnsubscribe);
       }
+
+      // 2. Active Jobs Listener - Look for status changes
+      let jobsQuery;
+      if (userType === 'customer') {
+        jobsQuery = query(
+          collection(db, 'active_jobs'),
+          where('customer_id', '==', currentUser.uid),
+          where('status', 'in', ['in_progress', 'completed', 'pending_approval'])
+        );
+      } else if (userType === 'tradesman') {
+        jobsQuery = query(
+          collection(db, 'active_jobs'),
+          where('tradesman_id', '==', currentUser.uid),
+          where('status', 'in', ['accepted'])
+        );
+      }
+
+      if (jobsQuery) {
+        const jobsUnsubscribe = onSnapshot(
+          jobsQuery,
+          (snapshot) => {
+            // Count jobs with recent updates (last 24 hours)
+            const recentJobs = snapshot.docs.filter(doc => {
+              const data = doc.data();
+              const updatedAt = data.updated_at;
+              if (!updatedAt) return false;
+              
+              const updateTime = new Date(updatedAt);
+              const now = new Date();
+              const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
+              
+              return updateTime > dayAgo;
+            });
+
+            setNotifications(prev => ({
+              ...prev,
+              activeJobs: recentJobs.length
+            }));
+          },
+          (error) => {
+            console.error('Error listening to active jobs:', error);
+          }
+        );
+        unsubscribes.push(jobsUnsubscribe);
+      }
+
+      // 3. Messages Listener - Look for unread comments
+      const commentsQuery = query(
+        collection(db, 'booking_comments'),
+        where(userType === 'customer' ? 'tradesman_id' : 'customer_id', '==', currentUser.uid)
+      );
+
+      const messagesUnsubscribe = onSnapshot(
+        commentsQuery,
+        (snapshot) => {
+          // Count recent comments (last 24 hours) from other party
+          const recentMessages = snapshot.docs.filter(doc => {
+            const data = doc.data();
+            const timestamp = data.timestamp;
+            if (!timestamp) return false;
+            
+            const messageTime = new Date(timestamp);
+            const now = new Date();
+            const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
+            
+            // Only count messages from the other party (not system or self)
+            const isFromOtherParty = data.user_id !== currentUser.uid && data.user_type !== 'system';
+            
+            return messageTime > dayAgo && isFromOtherParty;
+          });
+
+          setNotifications(prev => ({
+            ...prev,
+            messages: recentMessages.length
+          }));
+        },
+        (error) => {
+          console.error('Error listening to messages:', error);
+        }
+      );
+      unsubscribes.push(messagesUnsubscribe);
+
     } catch (error) {
-      console.error('Error setting up quote requests listener:', error);
-      setQuoteRequestsCount(0);
+      console.error('Error setting up notification listeners:', error);
     }
+
+    // Cleanup function
+    return () => {
+      unsubscribes.forEach(unsubscribe => unsubscribe());
+    };
   }, [currentUser, userType]);
 
   // Handle logout function
   const handleLogout = async () => {
     try {
-      setIsMenuOpen(false); // Close mobile menu first
+      setIsMenuOpen(false);
       await signOut(auth);
       navigate('/');
     } catch (error) {
@@ -102,9 +200,25 @@ const Navbar = () => {
     setIsDashboardOpen(false);
   };
 
-  // Prevent menu clicks from bubbling up
   const handleMenuClick = (e) => {
     e.stopPropagation();
+  };
+
+  // Notification badge component
+  const NotificationBadge = ({ count, type = 'default' }) => {
+    if (count === 0) return null;
+    
+    const badgeColors = {
+      default: 'bg-red-500 text-white',
+      warning: 'bg-yellow-500 text-black',
+      success: 'bg-green-500 text-white'
+    };
+    
+    return (
+      <span className={`absolute -top-2 -right-2 ${badgeColors[type]} text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center z-10`}>
+        {count > 99 ? '99+' : count}
+      </span>
+    );
   };
 
   return (
@@ -144,34 +258,37 @@ const Navbar = () => {
                     </Link>
                   )}
                   
-                  {/* 🆕 NEW: How It Works Links - User Type Specific */}
+                  {/* How It Works Links - User Type Specific */}
                   {userType === 'customer' && (
                     <Link to="/customer-how-it-works" className="hover:text-blue-200 transition-colors">
                       How It Works
                     </Link>
                   )}
                   
-                  {/* 🆕 NEW ROUTE: Quote Requests */}
+                  {/* Quote Requests with Notification */}
                   <Link 
                     to="/quote-requests" 
                     className="hover:text-blue-200 transition-colors relative"
                   >
                     Quote Requests
-                    {quoteRequestsCount > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-yellow-500 text-black text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                        {quoteRequestsCount}
-                      </span>
-                    )}
+                    <NotificationBadge count={notifications.quoteRequests} type="warning" />
                   </Link>
 
-                  {/* 🆕 NEW ROUTE: Weekly Jobs */}
+                  {/* Weekly Jobs */}
                   <Link to="/weekly-jobs" className="hover:text-blue-200 transition-colors">
                     Weekly Jobs
                   </Link>
 
-                  {/* 🆕 NEW ROUTE: Active Jobs */}
-                  <Link to="/active-jobs" className="hover:text-blue-200 transition-colors">
+                  {/* Active Jobs with Notification */}
+                  <Link to="/active-jobs" className="hover:text-blue-200 transition-colors relative">
                     Active Jobs
+                    <NotificationBadge count={notifications.activeJobs} type="success" />
+                  </Link>
+
+                  {/* Messages with Notification */}
+                  <Link to="/messages" className="hover:text-blue-200 transition-colors relative">
+                    Messages
+                    <NotificationBadge count={notifications.messages} type="default" />
                   </Link>
 
                   {userType === 'tradesman' && (
@@ -179,7 +296,6 @@ const Navbar = () => {
                       Manage Availability
                     </Link>
                   )}
-
                   
                   {userType === 'customer' && (
                     <Link to="/customer-dashboard" className="hover:text-blue-200 transition-colors">
@@ -229,6 +345,13 @@ const Navbar = () => {
                 <span className="text-2xl">
                   {isMenuOpen ? '✕' : '☰'}
                 </span>
+                {/* Total notifications indicator for mobile menu button */}
+                {(notifications.quoteRequests + notifications.activeJobs + notifications.messages) > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                    {notifications.quoteRequests + notifications.activeJobs + notifications.messages > 9 ? '9+' : 
+                     notifications.quoteRequests + notifications.activeJobs + notifications.messages}
+                  </span>
+                )}
               </button>
             </div>
           )}
@@ -269,7 +392,6 @@ const Navbar = () => {
                   </Link>
                 )}
                 
-                {/* 🆕 NEW: How It Works Links - User Type Specific (Mobile) */}
                 {userType === 'customer' && (
                   <Link 
                     to="/customer-how-it-works" 
@@ -280,21 +402,21 @@ const Navbar = () => {
                   </Link>
                 )}
                 
-                {/* 🆕 NEW ROUTE: Quote Requests */}
+                {/* Quote Requests with Mobile Notification */}
                 <Link 
                   to="/quote-requests" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
                   onClick={closeMenu}
                 >
                   Quote Requests
-                  {quoteRequestsCount > 0 && (
+                  {notifications.quoteRequests > 0 && (
                     <span className="absolute top-2 right-3 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
-                      {quoteRequestsCount}
+                      {notifications.quoteRequests}
                     </span>
                   )}
                 </Link>
 
-                {/* 🆕 NEW ROUTE: Weekly Jobs */}
+                {/* Weekly Jobs */}
                 <Link 
                   to="/weekly-jobs" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
@@ -303,13 +425,32 @@ const Navbar = () => {
                   Weekly Jobs
                 </Link>
 
-                {/* 🆕 NEW ROUTE: Active Jobs */}
+                {/* Active Jobs with Mobile Notification */}
                 <Link 
                   to="/active-jobs" 
-                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
                   onClick={closeMenu}
                 >
                   Active Jobs
+                  {notifications.activeJobs > 0 && (
+                    <span className="absolute top-2 right-3 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
+                      {notifications.activeJobs}
+                    </span>
+                  )}
+                </Link>
+
+                {/* Messages with Mobile Notification */}
+                <Link 
+                  to="/messages" 
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
+                  onClick={closeMenu}
+                >
+                  Messages
+                  {notifications.messages > 0 && (
+                    <span className="absolute top-2 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
+                      {notifications.messages}
+                    </span>
+                  )}
                 </Link>
 
                 {userType === 'tradesman' && (
@@ -321,7 +462,6 @@ const Navbar = () => {
                     Manage Availability
                   </Link>
                 )}
-
                 
                 {userType === 'customer' && (
                   <Link 
