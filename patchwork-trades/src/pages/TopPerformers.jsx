@@ -1,22 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
   where, 
-  getDocs, 
+  onSnapshot,
   doc, 
   getDoc 
 } from 'firebase/firestore';
-
-// Mock hooks for demo
-const useAuth = () => ({
-  currentUser: { uid: 'demo-customer-123' },
-  userType: 'customer'
-});
-
-const useNavigate = () => (path) => console.log(`Navigate to: ${path}`);
-
-const db = {};
+import { db } from '../config/firebase';
 
 const TopPerformers = () => {
   const { currentUser, userType } = useAuth();
@@ -26,7 +19,119 @@ const TopPerformers = () => {
   const [weekRange, setWeekRange] = useState({ start: '', end: '' });
 
   useEffect(() => {
-    fetchTopPerformers();
+    let unsubscribe = null;
+    
+    const setupRealTimeListener = () => {
+      const weekRange = getCurrentWeekRange();
+      setWeekRange(weekRange);
+
+      console.log('🔴 Setting up real-time Top Performers listener...');
+
+      // Set up real-time listener for completed jobs this week
+      const jobsQuery = query(
+        collection(db, 'active_jobs'),
+        where('status', '==', 'completed'),
+        where('completed_at', '>=', weekRange.start),
+        where('completed_at', '<=', weekRange.end)
+      );
+
+      unsubscribe = onSnapshot(
+        jobsQuery,
+        async (snapshot) => {
+          console.log('📊 Top Performers data updated - processing changes...');
+          
+          const completedJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          console.log('✅ Found completed jobs this week:', completedJobs.length);
+
+          // Group jobs by tradesman and calculate performance metrics
+          const tradesmanMetrics = {};
+
+          completedJobs.forEach(job => {
+            const tradesmanId = job.tradesman_id;
+            if (!tradesmanMetrics[tradesmanId]) {
+              tradesmanMetrics[tradesmanId] = {
+                tradesman_id: tradesmanId,
+                tradesman_name: job.tradesman_name,
+                trade_type: job.tradesman_trade_type || job.job_category || 'Tradesman',
+                area: job.tradesman_area || job.area_covered || 'London',
+                total_earnings: 0,
+                job_count: 0,
+                jobs: []
+              };
+            }
+
+            const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || job.agreed_price || '0');
+            tradesmanMetrics[tradesmanId].total_earnings += jobEarnings;
+            tradesmanMetrics[tradesmanId].job_count += 1;
+            tradesmanMetrics[tradesmanId].jobs.push(job);
+          });
+
+          // Convert to array and sort by a combination of jobs completed and quality metrics  
+          const sortedPerformers = Object.values(tradesmanMetrics)
+            .sort((a, b) => {
+              // Sort primarily by job count, then by total value (but don't show earnings to customers)
+              if (b.job_count !== a.job_count) {
+                return b.job_count - a.job_count;
+              }
+              return b.total_earnings - a.total_earnings;
+            })
+            .slice(0, 5); // Top 5
+
+          console.log('🏅 Top performers calculated:', sortedPerformers.length);
+
+          // Get additional profile data for top performers
+          const enrichedPerformers = await Promise.all(
+            sortedPerformers.map(async (performer, index) => {
+              try {
+                const profileDoc = await getDoc(doc(db, 'tradesmen_profiles', performer.tradesman_id));
+                const profileData = profileDoc.exists() ? profileDoc.data() : {};
+                
+                return {
+                  ...performer,
+                  rank: index + 1,
+                  average_rating: profileData.average_rating || 0,
+                  total_jobs_completed: profileData.completed_jobs_count || 0,
+                  profile_photo: profileData.profilePhoto,
+                  area_covered: profileData.areaCovered || performer.area,
+                  years_experience: profileData.yearsExperience || 0,
+                  reviews_count: profileData.reviews?.length || 0
+                };
+              } catch (error) {
+                console.warn(`Error fetching profile for ${performer.tradesman_id}:`, error);
+                return {
+                  ...performer,
+                  rank: index + 1,
+                  average_rating: 0,
+                  total_jobs_completed: 0,
+                  years_experience: 0,
+                  reviews_count: 0
+                };
+              }
+            })
+          );
+
+          console.log('🚀 Real-time Top Performers updated!');
+          setTopPerformers(enrichedPerformers);
+          setLoading(false);
+        },
+        (error) => {
+          console.error('Error in real-time Top Performers listener:', error);
+          setLoading(false);
+        }
+      );
+    };
+
+    if (currentUser) {
+      setupRealTimeListener();
+    }
+
+    // Cleanup function
+    return () => {
+      if (unsubscribe) {
+        console.log('🧹 Cleaning up Top Performers real-time listener');
+        unsubscribe();
+      }
+    };
   }, [currentUser, userType]);
 
   const getCurrentWeekRange = () => {
@@ -40,95 +145,6 @@ const TopPerformers = () => {
       displayStart: startOfWeek.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
       displayEnd: endOfWeek.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
     };
-  };
-
-  const fetchTopPerformers = async () => {
-    try {
-      const weekRange = getCurrentWeekRange();
-      setWeekRange(weekRange);
-
-      // Get all completed jobs from this week
-      const jobsQuery = query(
-        collection(db, 'active_jobs'),
-        where('status', '==', 'completed'),
-        where('completed_at', '>=', weekRange.start),
-        where('completed_at', '<=', weekRange.end)
-      );
-
-      const jobsSnapshot = await getDocs(jobsQuery);
-      const completedJobs = jobsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Group jobs by tradesman and calculate performance metrics
-      const tradesmanMetrics = {};
-
-      completedJobs.forEach(job => {
-        const tradesmanId = job.tradesman_id;
-        if (!tradesmanMetrics[tradesmanId]) {
-          tradesmanMetrics[tradesmanId] = {
-            tradesman_id: tradesmanId,
-            tradesman_name: job.tradesman_name,
-            trade_type: job.tradesman_trade_type || 'Tradesman',
-            area: job.tradesman_area || 'London',
-            total_earnings: 0,
-            job_count: 0,
-            jobs: []
-          };
-        }
-
-        const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || '0');
-        tradesmanMetrics[tradesmanId].total_earnings += jobEarnings;
-        tradesmanMetrics[tradesmanId].job_count += 1;
-        tradesmanMetrics[tradesmanId].jobs.push(job);
-      });
-
-      // Convert to array and sort by a combination of jobs completed and quality metrics  
-      const sortedPerformers = Object.values(tradesmanMetrics)
-        .sort((a, b) => {
-          // Sort primarily by job count, then by total value (but don't show earnings to customers)
-          if (b.job_count !== a.job_count) {
-            return b.job_count - a.job_count;
-          }
-          return b.total_earnings - a.total_earnings;
-        })
-        .slice(0, 5); // Top 5
-
-      // Get additional profile data for top performers
-      const enrichedPerformers = await Promise.all(
-        sortedPerformers.map(async (performer, index) => {
-          try {
-            const profileDoc = await getDoc(doc(db, 'tradesmen_profiles', performer.tradesman_id));
-            const profileData = profileDoc.exists() ? profileDoc.data() : {};
-            
-            return {
-              ...performer,
-              rank: index + 1,
-              average_rating: profileData.average_rating || 0,
-              total_jobs_completed: profileData.completed_jobs_count || 0,
-              profile_photo: profileData.profilePhoto,
-              area_covered: profileData.areaCovered || performer.area,
-              years_experience: profileData.yearsExperience || 0,
-              reviews_count: profileData.reviews?.length || 0
-            };
-          } catch (error) {
-            console.warn(`Error fetching profile for ${performer.tradesman_id}:`, error);
-            return {
-              ...performer,
-              rank: index + 1,
-              average_rating: 0,
-              total_jobs_completed: 0,
-              years_experience: 0,
-              reviews_count: 0
-            };
-          }
-        })
-      );
-
-      setTopPerformers(enrichedPerformers);
-    } catch (error) {
-      console.error('Error fetching top performers:', error);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const getRankEmoji = (rank) => {
@@ -178,7 +194,7 @@ const TopPerformers = () => {
       <div className="max-w-6xl mx-auto p-4">
         <div className="text-center py-8">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-2 text-gray-600">Loading top performers...</p>
+          <p className="mt-2 text-gray-600">Loading real-time top performers...</p>
         </div>
       </div>
     );
@@ -186,9 +202,15 @@ const TopPerformers = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-4">
-      {/* Header */}
+      {/* Header with Real-time Indicator */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">⭐ Top Performers</h1>
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900">⭐ Top Performers</h1>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-sm text-gray-600 font-medium">Live</span>
+          </div>
+        </div>
         <p className="text-gray-600">
           Our most reliable and highest-rated tradespeople this week ({weekRange.displayStart} - {weekRange.displayEnd})
         </p>
@@ -370,7 +392,7 @@ const TopPerformers = () => {
       {/* Customer Benefits Section */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
         <h3 className="text-lg font-semibold text-blue-800 mb-4">🛡️ Your Protection When Booking</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-3 gap-6">
           <div className="text-center">
             <div className="text-3xl mb-2">💳</div>
             <h4 className="font-semibold text-blue-800 mb-1">Secure Payments</h4>
