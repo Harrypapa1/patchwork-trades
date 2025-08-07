@@ -296,13 +296,12 @@ const QuoteRequests = () => {
       console.log('🛒 Step 3: Redirecting to payment checkout...');
       
       if (userType === 'customer') {
-        // Customer accepts quote → goes to payment - FIXED DATA STRUCTURE
+        // Customer accepts quote → goes to payment - FIXED DATA STRUCTURE TO MATCH PaymentCheckout
         navigate('/payment-checkout', { 
           state: { 
-            jobId: quoteRequestId,                    // FIXED: was quoteId
-            job: quoteData,                           // FIXED: was quoteData
-            paymentAmount: extractNumericValue(getFinalNegotiatedPrice(quoteData)), // FIXED: added numeric amount
-            finalPrice: getFinalNegotiatedPrice(quoteData),
+            quoteId: quoteRequestId,                  // FIXED: PaymentCheckout expects 'quoteId'
+            quoteData: quoteData,                     // FIXED: PaymentCheckout expects 'quoteData'
+            finalPrice: getFinalNegotiatedPrice(quoteData), // FIXED: PaymentCheckout expects 'finalPrice'
             paymentRequired: true
           }
         });
@@ -685,10 +684,9 @@ const QuoteRequests = () => {
                             <button
                               onClick={() => navigate('/payment-checkout', { 
                                 state: { 
-                                  jobId: request.id,                    // FIXED: consistent naming
-                                  job: request,                         // FIXED: consistent naming
-                                  paymentAmount: extractNumericValue(request.final_agreed_price), // FIXED: numeric amount
-                                  finalPrice: request.final_agreed_price,
+                                  quoteId: request.id,                  // FIXED: PaymentCheckout expects 'quoteId'
+                                  quoteData: request,                   // FIXED: PaymentCheckout expects 'quoteData'
+                                  finalPrice: request.final_agreed_price, // FIXED: PaymentCheckout expects 'finalPrice'
                                   paymentRequired: true
                                 }
                               })}
