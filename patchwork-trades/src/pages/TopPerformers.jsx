@@ -81,10 +81,10 @@ const TopPerformers = () => {
         tradesmanMetrics[tradesmanId].jobs.push(job);
       });
 
-      // Convert to array and sort by a combination of jobs completed and quality metrics
+      // Convert to array and sort by a combination of jobs completed and quality metrics  
       const sortedPerformers = Object.values(tradesmanMetrics)
         .sort((a, b) => {
-          // Sort primarily by job count, then by total value
+          // Sort primarily by job count, then by total value (but don't show earnings to customers)
           if (b.job_count !== a.job_count) {
             return b.job_count - a.job_count;
           }
@@ -306,12 +306,14 @@ const TopPerformers = () => {
                       </div>
                     </div>
                     
-                    {/* Performance Stats */}
+                    {/* Performance Stats & Action */}
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-green-600 mb-1">
-                        {performer.job_count} jobs
+                      <div className="mb-3">
+                        <div className="text-lg font-bold text-green-600 mb-1">
+                          {performer.job_count} jobs completed
+                        </div>
+                        <p className="text-sm text-gray-500">This Week</p>
                       </div>
-                      <p className="text-sm text-gray-500 mb-2">This Week</p>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
