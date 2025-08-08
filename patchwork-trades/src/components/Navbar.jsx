@@ -221,14 +221,7 @@ const Navbar = () => {
                 <>
                   {userType !== 'tradesman' && (
                     <Link to="/browse" className="hover:text-blue-200 transition-colors">
-                      Browse
-                    </Link>
-                  )}
-                  
-                  {/* How It Works Links - User Type Specific */}
-                  {userType === 'customer' && (
-                    <Link to="/customer-how-it-works" className="hover:text-blue-200 transition-colors">
-                      How It Works
+                      Browse Tradesmen
                     </Link>
                   )}
                   
@@ -269,6 +262,9 @@ const Navbar = () => {
                       <div className="absolute top-full left-0 bg-blue-700 rounded-md shadow-lg py-2 w-48 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                         <Link to="/customer-dashboard" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
                           Dashboard Home
+                        </Link>
+                        <Link to="/customer-how-it-works" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
+                          How It Works
                         </Link>
                         <Link to="/top-performers" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
                           Top Performers
@@ -370,16 +366,6 @@ const Navbar = () => {
                   </Link>
                 )}
                 
-                {userType === 'customer' && (
-                  <Link 
-                    to="/customer-how-it-works" 
-                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
-                    onClick={closeMenu}
-                  >
-                    How It Works
-                  </Link>
-                )}
-                
                 {/* Quote Requests with Mobile Notification */}
                 <Link 
                   to="/quote-requests" 
@@ -454,6 +440,13 @@ const Navbar = () => {
                           onClick={closeMenu}
                         >
                           Dashboard Home
+                        </Link>
+                        <Link 
+                          to="/customer-how-it-works" 
+                          className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
+                          onClick={closeMenu}
+                        >
+                          How It Works
                         </Link>
                         <Link 
                           to="/top-performers" 
