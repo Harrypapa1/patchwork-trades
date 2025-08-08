@@ -30,6 +30,7 @@ const AdminDashboard = () => {
   const [recentJobs, setRecentJobs] = useState([]);
   const [users, setUsers] = useState([]);
   const [disputedJobs, setDisputedJobs] = useState([]);
+  const [dismissedQuotes, setDismissedQuotes] = useState([]); // 🆕 NEW: Track dismissed quotes
 
   // Password-based admin access
   const [isAdmin, setIsAdmin] = useState(false);
@@ -164,6 +165,21 @@ const AdminDashboard = () => {
     });
     unsubscribes.push(disputesUnsubscribe);
 
+    // 6. 🆕 NEW: Dismissed Quotes - Track customer and tradesman dismissals
+    const dismissedQuery = query(
+      collection(db, 'quote_requests'),
+      where('status', 'in', ['dismissed_by_customer', 'rejected'])
+    );
+    
+    const dismissedUnsubscribe = onSnapshot(dismissedQuery, (snapshot) => {
+      const dismissed = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setDismissedQuotes(dismissed);
+    });
+    unsubscribes.push(dismissedUnsubscribe);
+
     return () => {
       unsubscribes.forEach(unsubscribe => unsubscribe());
     };
@@ -187,6 +203,21 @@ const AdminDashboard = () => {
       dispute_resolution: resolution,
       resolved_by: currentUser.uid
     });
+  };
+
+  // 🆕 NEW: Restore dismissed quote (admin can reactivate)
+  const restoreDismissedQuote = async (quoteId) => {
+    if (window.confirm('Restore this dismissed quote? It will become active again for both parties.')) {
+      await updateDoc(doc(db, 'quote_requests', quoteId), {
+        status: 'pending',
+        dismissed_by_customer: false,
+        dismissed_by_tradesman: false,
+        restored_by_admin: true,
+        restored_at: new Date().toISOString(),
+        restored_by: currentUser.uid,
+        updated_at: new Date().toISOString()
+      });
+    }
   };
 
   const formatTime = (timestamp) => {
@@ -294,7 +325,8 @@ const AdminDashboard = () => {
           { id: 'live', label: '🔴 Live Activity' },
           { id: 'jobs', label: 'Jobs' },
           { id: 'users', label: 'Users' },
-          { id: 'disputes', label: 'Disputes' }
+          { id: 'disputes', label: 'Disputes' },
+          { id: 'dismissed', label: '🗑️ Dismissed Quotes' } // 🆕 NEW TAB
         ].map(tab => (
           <button
             key={tab.id}
@@ -664,6 +696,126 @@ const AdminDashboard = () => {
                 <div className="text-6xl text-gray-300 mb-4">✅</div>
                 <p className="text-gray-500">No active disputes</p>
                 <p className="text-sm text-gray-400">All jobs are running smoothly</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Dismissed Quotes Tab */}
+      {activeView === 'dismissed' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Dismissed Quote Requests</h3>
+            <p className="text-gray-600 text-sm">Track quotes that were dismissed by customers or rejected by tradesmen</p>
+          </div>
+          
+          <div className="p-6">
+            {dismissedQuotes.length > 0 ? (
+              <div className="space-y-6">
+                {dismissedQuotes.map(quote => (
+                  <div key={quote.id} className={`border rounded-lg p-6 ${
+                    quote.status === 'dismissed_by_customer' ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200'
+                  }`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="font-medium text-gray-900">{quote.job_title}</h4>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            quote.status === 'dismissed_by_customer' 
+                              ? 'bg-orange-100 text-orange-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {quote.status === 'dismissed_by_customer' ? 'Customer Dismissed' : 'Tradesman Rejected'}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <p className="text-sm text-gray-600">Customer: {quote.customer_name}</p>
+                            <p className="text-sm text-gray-600">Email: {quote.customer_email}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Tradesman: {quote.tradesman_name}</p>
+                            <p className="text-sm text-gray-600">Email: {quote.tradesman_email}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <p className="text-sm text-gray-600">Submitted:</p>
+                            <p className="text-sm font-medium">{new Date(quote.created_at).toLocaleDateString('en-GB')}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Dismissed/Rejected:</p>
+                            <p className="text-sm font-medium">{new Date(quote.dismissed_at || quote.rejected_at).toLocaleDateString('en-GB')}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Budget Expected:</p>
+                            <p className="text-sm font-medium">{quote.budget_expectation || 'Not specified'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-white p-3 rounded border">
+                          <p className="text-sm font-medium text-gray-900 mb-1">Job Description:</p>
+                          <p className="text-sm text-gray-700">{quote.job_description}</p>
+                        </div>
+                        
+                        {quote.additional_notes && (
+                          <div className="bg-white p-3 rounded border mt-2">
+                            <p className="text-sm font-medium text-gray-900 mb-1">Additional Notes:</p>
+                            <p className="text-sm text-gray-700">{quote.additional_notes}</p>
+                          </div>
+                        )}
+                        
+                        {/* Show dismissal reason if available */}
+                        {quote.status === 'dismissed_by_customer' && (
+                          <div className="bg-orange-100 p-3 rounded border border-orange-200 mt-2">
+                            <p className="text-sm font-medium text-orange-900 mb-1">Dismissal Details:</p>
+                            <p className="text-sm text-orange-800">
+                              Customer dismissed this quote request. It was removed from both customer and tradesman views.
+                            </p>
+                          </div>
+                        )}
+                        
+                        {quote.status === 'rejected' && (
+                          <div className="bg-red-100 p-3 rounded border border-red-200 mt-2">
+                            <p className="text-sm font-medium text-red-900 mb-1">Rejection Details:</p>
+                            <p className="text-sm text-red-800">
+                              Tradesman rejected this quote request and customer was notified.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Admin Actions */}
+                      <div className="ml-6 space-y-2">
+                        <button
+                          onClick={() => restoreDismissedQuote(quote.id)}
+                          className="block w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700"
+                        >
+                          Restore Quote
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Permanently delete this quote? This action cannot be undone.')) {
+                              deleteDoc(doc(db, 'quote_requests', quote.id));
+                            }
+                          }}
+                          className="block w-full px-4 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700"
+                        >
+                          Delete Permanently
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-6xl text-gray-300 mb-4">📝</div>
+                <p className="text-gray-500">No dismissed quote requests</p>
+                <p className="text-sm text-gray-400">Dismissed and rejected quotes will appear here</p>
               </div>
             )}
           </div>
