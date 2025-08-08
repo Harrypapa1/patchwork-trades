@@ -886,6 +886,17 @@ const ActiveJobs = () => {
   const handleCancelJob = useCallback(async (jobId) => {
     try {
       const job = activeJobs.find(j => j.id === jobId);
+      
+      // 🔍 DEBUG: Log the data
+      console.log('=== CANCEL JOB DEBUG ===');
+      console.log('Job ID:', jobId);
+      console.log('Current User UID:', currentUser.uid);
+      console.log('Full job object:', job);
+      console.log('Job customer_id:', job?.customer_id);
+      console.log('Job tradesman_id:', job?.tradesman_id);
+      console.log('User type:', userType);
+      console.log('========================');
+      
       if (!job) return;
 
       let confirmMessage;
@@ -1242,6 +1253,7 @@ Are you sure you want to cancel?`;
             <div className="bg-white rounded-lg shadow-md p-6 text-center">
               <p className="text-gray-500">No cancelled jobs.</p>
             </div>
+          </div>
           ) : (
             <div className="space-y-6">
               {getCancelledJobs().map((job) => (
