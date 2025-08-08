@@ -31,8 +31,6 @@ const stripeKey = getStripeKey();
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
-  const stripe = useStripe();
-  const elements = useElements();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [clientSecret, setClientSecret] = useState('');
@@ -99,12 +97,46 @@ const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
     }
   }, [amount, quoteData, onError]);
 
+  if (!clientSecret) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span className="ml-3 text-gray-600">Setting up payment...</span>
+      </div>
+    );
+  }
+
+  return (
+    <Elements
+      stripe={stripePromise}
+      options={{
+        clientSecret: clientSecret,
+        appearance: {
+          theme: 'stripe',
+        },
+      }}
+    >
+      <PaymentForm 
+        amount={amount}
+        onSuccess={onSuccess}
+        onError={onError}
+      />
+    </Elements>
+  );
+};
+
+const PaymentForm = ({ amount, onSuccess, onError }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setIsLoading(true);
     setError(null);
 
-    if (!stripe || !elements || !clientSecret) {
+    if (!stripe || !elements) {
       setError('Payment system not ready.');
       setIsLoading(false);
       return;
@@ -113,7 +145,6 @@ const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
     try {
       const { error: paymentError, paymentIntent } = await stripe.confirmPayment({
         elements,
-        clientSecret,
         confirmParams: {
           return_url: window.location.origin + '/payment-success',
         },
@@ -135,84 +166,65 @@ const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
     }
   };
 
-  if (!clientSecret) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Setting up payment...</span>
-      </div>
-    );
-  }
-
   return (
-    <Elements
-      stripe={stripePromise}
-      options={{
-        clientSecret: clientSecret,
-        appearance: {
-          theme: 'stripe',
-        },
-      }}
-    >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Payment Element */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Payment Details
-          </label>
-          <div className="border border-gray-300 rounded-lg p-4 bg-white">
-            <PaymentElement
-              options={{
-                layout: 'tabs',
-              }}
-            />
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Payment Element */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Payment Details
+        </label>
+        <div className="border border-gray-300 rounded-lg p-4 bg-white">
+          <PaymentElement
+            options={{
+              layout: 'tabs',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex">
+            <span className="text-red-400 mr-2">⚠️</span>
+            <span className="text-red-700 text-sm">{error}</span>
           </div>
         </div>
+      )}
 
-        {/* Error message */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex">
-              <span className="text-red-400 mr-2">⚠️</span>
-              <span className="text-red-700 text-sm">{error}</span>
-            </div>
+      {/* Payment button */}
+      <button
+        type="submit"
+        disabled={!stripe || isLoading}
+        className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-colors ${
+          isLoading || !stripe
+            ? 'bg-gray-400 cursor-not-allowed'
+            : 'bg-green-600 hover:bg-green-700 active:bg-green-800'
+        }`}
+      >
+        {isLoading ? (
+          <div className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+            Processing Payment...
           </div>
+        ) : (
+          `💳 Pay £${amount} Securely`
         )}
+      </button>
 
-        {/* Payment button */}
-        <button
-          type="submit"
-          disabled={!stripe || isLoading}
-          className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-colors ${
-            isLoading || !stripe
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-700 active:bg-green-800'
-          }`}
-        >
-          {isLoading ? (
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-              Processing Payment...
-            </div>
-          ) : (
-            `💳 Pay £${amount} Securely`
-          )}
-        </button>
-
-        {/* Security badges */}
-        <div className="flex items-center justify-center space-x-4 text-xs text-gray-500">
-          <span className="flex items-center">
-            🔒 SSL Encrypted
-          </span>
-          <span className="flex items-center">
-            🛡️ Stripe Secure
-          </span>
-          <span className="flex items-center">
-            ✅ PCI Compliant
-          </span>
-        </div>
-      </form>
-    </Elements>
+      {/* Security badges */}
+      <div className="flex items-center justify-center space-x-4 text-xs text-gray-500">
+        <span className="flex items-center">
+          🔒 SSL Encrypted
+        </span>
+        <span className="flex items-center">
+          🛡️ Stripe Secure
+        </span>
+        <span className="flex items-center">
+          ✅ PCI Compliant
+        </span>
+      </div>
+    </form>
   );
 };
 
