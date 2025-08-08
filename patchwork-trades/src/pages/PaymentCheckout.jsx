@@ -8,8 +8,27 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 
-console.log('Stripe key:', process.env.VITE_STRIPE_PUBLISHABLE_KEY);
-const stripePromise = loadStripe(process.env.VITE_STRIPE_PUBLISHABLE_KEY);
+// 🔧 FIXED: Better error handling for missing Stripe key
+const getStripeKey = () => {
+  const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+  console.log('Stripe key from env:', key ? 'Found' : 'Missing');
+  
+  if (!key) {
+    console.error('❌ VITE_STRIPE_PUBLISHABLE_KEY is missing from environment variables');
+    return null;
+  }
+  
+  if (!key.startsWith('pk_')) {
+    console.error('❌ Invalid Stripe publishable key format. Should start with pk_');
+    return null;
+  }
+  
+  return key;
+};
+
+// 🔧 FIXED: Only initialize Stripe if key is valid
+const stripeKey = getStripeKey();
+const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
   const stripe = useStripe();
@@ -196,6 +215,28 @@ const PaymentCheckout = () => {
     console.error('Payment failed:', error);
     // Could show error message or redirect
   };
+
+  // 🔧 FIXED: Check for Stripe key before rendering
+  if (!stripeKey) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h2 className="text-xl font-semibold text-red-900 mb-2">Payment System Configuration Error</h2>
+          <p className="text-red-700 mb-4">Stripe payment system is not properly configured. Please contact support.</p>
+          <ul className="text-red-600 text-sm mb-4">
+            <li>• Missing or invalid Stripe publishable key</li>
+            <li>• Environment variable VITE_STRIPE_PUBLISHABLE_KEY not set</li>
+          </ul>
+          <button
+            onClick={() => navigate('/quote-requests')}
+            className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
+          >
+            Back to Quote Requests
+          </button>
+        </div>
+      </div>
+    );
+  }
   
   if (!quoteData || !amount) {
     return (
