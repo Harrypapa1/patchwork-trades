@@ -72,11 +72,21 @@ const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
         });
 
         const data = await response.json();
+        console.log('💰 Response from create-payment-intent:', data);
+        
+        if (!response.ok) {
+          throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
         
         if (data.error) {
           throw new Error(data.error);
         }
 
+        if (!data.clientSecret) {
+          throw new Error('No clientSecret received from payment function');
+        }
+
+        console.log('✅ Client secret received:', data.clientSecret.slice(0, 20) + '...');
         setClientSecret(data.clientSecret);
       } catch (err) {
         setError(err.message);
