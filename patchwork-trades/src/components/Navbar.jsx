@@ -16,13 +16,12 @@ const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
-  const [isCustomerDashboardOpen, setIsCustomerDashboardOpen] = useState(false); // New state for customer dropdown
+  const [isCustomerDashboardOpen, setIsCustomerDashboardOpen] = useState(false);
   
   // Notification counts
   const [notifications, setNotifications] = useState({
     quoteRequests: 0,
-    activeJobs: 0,
-    messages: 0
+    activeJobs: 0
   });
 
   // Check if mobile screen
@@ -54,7 +53,7 @@ const Navbar = () => {
   // Enhanced notification listeners
   useEffect(() => {
     if (!currentUser) {
-      setNotifications({ quoteRequests: 0, activeJobs: 0, messages: 0 });
+      setNotifications({ quoteRequests: 0, activeJobs: 0 });
       return;
     }
 
@@ -137,42 +136,6 @@ const Navbar = () => {
         );
         unsubscribes.push(jobsUnsubscribe);
       }
-
-      // 3. Messages Listener - Look for unread comments
-      const commentsQuery = query(
-        collection(db, 'booking_comments'),
-        where(userType === 'customer' ? 'tradesman_id' : 'customer_id', '==', currentUser.uid)
-      );
-
-      const messagesUnsubscribe = onSnapshot(
-        commentsQuery,
-        (snapshot) => {
-          // Count recent comments (last 24 hours) from other party
-          const recentMessages = snapshot.docs.filter(doc => {
-            const data = doc.data();
-            const timestamp = data.timestamp;
-            if (!timestamp) return false;
-            
-            const messageTime = new Date(timestamp);
-            const now = new Date();
-            const dayAgo = new Date(now - 24 * 60 * 60 * 1000);
-            
-            // Only count messages from the other party (not system or self)
-            const isFromOtherParty = data.user_id !== currentUser.uid && data.user_type !== 'system';
-            
-            return messageTime > dayAgo && isFromOtherParty;
-          });
-
-          setNotifications(prev => ({
-            ...prev,
-            messages: recentMessages.length
-          }));
-        },
-        (error) => {
-          console.error('Error listening to messages:', error);
-        }
-      );
-      unsubscribes.push(messagesUnsubscribe);
 
     } catch (error) {
       console.error('Error setting up notification listeners:', error);
@@ -287,19 +250,13 @@ const Navbar = () => {
                     <NotificationBadge count={notifications.activeJobs} type="success" />
                   </Link>
 
-                  {/* Messages with Notification */}
-                  <Link to="/messages" className="hover:text-blue-200 transition-colors relative">
-                    Messages
-                    <NotificationBadge count={notifications.messages} type="default" />
-                  </Link>
-
                   {userType === 'tradesman' && (
                     <Link to="/manage-availability" className="hover:text-blue-200 transition-colors">
                       Manage Availability
                     </Link>
                   )}
                   
-                  {/* UPDATED: Customer Dashboard with Dropdown */}
+                  {/* Customer Dashboard with Dropdown */}
                   {userType === 'customer' && (
                     <div className="relative group">
                       <Link to="/customer-dashboard" className="hover:text-blue-200 transition-colors flex items-center">
@@ -311,13 +268,13 @@ const Navbar = () => {
                           Dashboard Home
                         </Link>
                         <Link to="/top-performers" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
-                          ⭐ Top Performers
+                          Top Performers
                         </Link>
                       </div>
                     </div>
                   )}
                   
-                  {/* UPDATED: Tradesman Dashboard with Top Earners added */}
+                  {/* Tradesman Dashboard with Top Earners */}
                   {userType === 'tradesman' && (
                     <div className="relative group">
                       <Link to="/tradesman-dashboard" className="hover:text-blue-200 transition-colors flex items-center">
@@ -332,7 +289,7 @@ const Navbar = () => {
                           How It Works
                         </Link>
                         <Link to="/top-earners" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
-                          🏆 Top Earners
+                          Top Earners
                         </Link>
                         <Link to="/earnings-overview" className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors">
                           Earnings Overview
@@ -364,10 +321,10 @@ const Navbar = () => {
                   {isMenuOpen ? '✕' : '☰'}
                 </span>
                 {/* Total notifications indicator for mobile menu button */}
-                {(notifications.quoteRequests + notifications.activeJobs + notifications.messages) > 0 && (
+                {(notifications.quoteRequests + notifications.activeJobs) > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                    {notifications.quoteRequests + notifications.activeJobs + notifications.messages > 9 ? '9+' : 
-                     notifications.quoteRequests + notifications.activeJobs + notifications.messages}
+                    {notifications.quoteRequests + notifications.activeJobs > 9 ? '9+' : 
+                     notifications.quoteRequests + notifications.activeJobs}
                   </span>
                 )}
               </button>
@@ -457,20 +414,6 @@ const Navbar = () => {
                   )}
                 </Link>
 
-                {/* Messages with Mobile Notification */}
-                <Link 
-                  to="/messages" 
-                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
-                  onClick={closeMenu}
-                >
-                  Messages
-                  {notifications.messages > 0 && (
-                    <span className="absolute top-2 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
-                      {notifications.messages}
-                    </span>
-                  )}
-                </Link>
-
                 {userType === 'tradesman' && (
                   <Link 
                     to="/manage-availability" 
@@ -481,7 +424,7 @@ const Navbar = () => {
                   </Link>
                 )}
                 
-                {/* UPDATED: Customer Dashboard Mobile with Dropdown */}
+                {/* Customer Dashboard Mobile with Dropdown */}
                 {userType === 'customer' && (
                   <div>
                     <button
@@ -508,14 +451,14 @@ const Navbar = () => {
                           className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
                           onClick={closeMenu}
                         >
-                          ⭐ Top Performers
+                          Top Performers
                         </Link>
                       </div>
                     )}
                   </div>
                 )}
                 
-                {/* UPDATED: Tradesman Dashboard Mobile with Top Earners */}
+                {/* Tradesman Dashboard Mobile with Top Earners */}
                 {userType === 'tradesman' && (
                   <div>
                     <button
@@ -549,7 +492,7 @@ const Navbar = () => {
                           className="block px-4 py-2 text-white hover:bg-blue-600 transition-colors text-sm"
                           onClick={closeMenu}
                         >
-                          🏆 Top Earners
+                          Top Earners
                         </Link>
                         <Link 
                           to="/earnings-overview" 
