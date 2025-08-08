@@ -145,64 +145,74 @@ const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Payment Element */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Payment Details
-        </label>
-        <div className="border border-gray-300 rounded-lg p-4 bg-white">
-          <PaymentElement
-            options={{
-              layout: 'tabs',
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Error message */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex">
-            <span className="text-red-400 mr-2">⚠️</span>
-            <span className="text-red-700 text-sm">{error}</span>
+    <Elements
+      stripe={stripePromise}
+      options={{
+        clientSecret: clientSecret,
+        appearance: {
+          theme: 'stripe',
+        },
+      }}
+    >
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Payment Element */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Payment Details
+          </label>
+          <div className="border border-gray-300 rounded-lg p-4 bg-white">
+            <PaymentElement
+              options={{
+                layout: 'tabs',
+              }}
+            />
           </div>
         </div>
-      )}
 
-      {/* Payment button */}
-      <button
-        type="submit"
-        disabled={!stripe || isLoading}
-        className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-colors ${
-          isLoading || !stripe
-            ? 'bg-gray-400 cursor-not-allowed'
-            : 'bg-green-600 hover:bg-green-700 active:bg-green-800'
-        }`}
-      >
-        {isLoading ? (
-          <div className="flex items-center justify-center">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-            Processing Payment...
+        {/* Error message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <span className="text-red-400 mr-2">⚠️</span>
+              <span className="text-red-700 text-sm">{error}</span>
+            </div>
           </div>
-        ) : (
-          `💳 Pay £${amount} Securely`
         )}
-      </button>
 
-      {/* Security badges */}
-      <div className="flex items-center justify-center space-x-4 text-xs text-gray-500">
-        <span className="flex items-center">
-          🔒 SSL Encrypted
-        </span>
-        <span className="flex items-center">
-          🛡️ Stripe Secure
-        </span>
-        <span className="flex items-center">
-          ✅ PCI Compliant
-        </span>
-      </div>
-    </form>
+        {/* Payment button */}
+        <button
+          type="submit"
+          disabled={!stripe || isLoading}
+          className={`w-full py-3 px-4 rounded-lg font-semibold text-white transition-colors ${
+            isLoading || !stripe
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-green-600 hover:bg-green-700 active:bg-green-800'
+          }`}
+        >
+          {isLoading ? (
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+              Processing Payment...
+            </div>
+          ) : (
+            `💳 Pay £${amount} Securely`
+          )}
+        </button>
+
+        {/* Security badges */}
+        <div className="flex items-center justify-center space-x-4 text-xs text-gray-500">
+          <span className="flex items-center">
+            🔒 SSL Encrypted
+          </span>
+          <span className="flex items-center">
+            🛡️ Stripe Secure
+          </span>
+          <span className="flex items-center">
+            ✅ PCI Compliant
+          </span>
+        </div>
+      </form>
+    </Elements>
   );
 };
 
@@ -303,21 +313,12 @@ const PaymentCheckout = () => {
 
       {/* Payment Form */}
       <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6">
-        <Elements
-          stripe={stripePromise}
-          options={{
-            appearance: {
-              theme: 'stripe',
-            },
-          }}
-        >
-          <CheckoutForm
-            amount={amount}
-            quoteData={quoteData}
-            onSuccess={handlePaymentSuccess}
-            onError={handlePaymentError}
-          />
-        </Elements>
+        <CheckoutForm
+          amount={amount}
+          quoteData={quoteData}
+          onSuccess={handlePaymentSuccess}
+          onError={handlePaymentError}
+        />
       </div>
 
       {/* Trust indicators */}
