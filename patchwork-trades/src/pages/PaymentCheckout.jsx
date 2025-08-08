@@ -41,21 +41,34 @@ const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
     // Create payment intent on component mount
     const createPaymentIntent = async () => {
       try {
+        // 🔧 DEBUG: Log the data being sent
+        console.log('🔍 Payment data being sent:', {
+          amount,
+          quoteData,
+          quoteId: quoteData.id,
+          customerId: quoteData.customer_id,
+          tradesmanId: quoteData.tradesman_id
+        });
+
+        const paymentData = {
+          amount,
+          currency: 'gbp',
+          quoteId: quoteData.id,
+          customerId: quoteData.customer_id,
+          tradesmanId: quoteData.tradesman_id,
+          tradesmanName: quoteData.tradesman_name,
+          customerName: quoteData.customer_name,
+          tradesmanEmail: quoteData.tradesman_email,
+          customerEmail: quoteData.customer_email,
+          jobDescription: quoteData.job_title || quoteData.job_description,
+        };
+
+        console.log('💳 Sending payment request:', paymentData);
+
         const response = await fetch('/.netlify/functions/create-payment-intent', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount,
-            currency: 'gbp',
-            quoteId: quoteData.id,
-            customerId: quoteData.customer_id,
-            tradesmanId: quoteData.tradesman_id,
-            tradesmanName: quoteData.tradesman_name,
-            customerName: quoteData.customer_name,
-            tradesmanEmail: quoteData.tradesman_email,
-            customerEmail: quoteData.customer_email,
-            jobDescription: quoteData.job_title || quoteData.job_description,
-          }),
+          body: JSON.stringify(paymentData),
         });
 
         const data = await response.json();
