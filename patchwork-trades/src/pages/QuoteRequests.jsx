@@ -19,6 +19,7 @@ import { db } from '../config/firebase';
 // Connects to 'quote_requests' collection - no more race conditions!
 // 💳 UPDATED WITH PAYMENT-FIRST FLOW - FIXED NAVIGATION DATA
 // ✅ FIXED - Hide completed quotes that moved to active jobs
+// 🆕 NEW - Customer dismissal functionality added
 const QuoteRequests = () => {
   const { currentUser, userType } = useAuth();
   const navigate = useNavigate();
@@ -76,7 +77,7 @@ const QuoteRequests = () => {
     };
   }, [currentUser, userType]);
 
-  // 🎯 CONNECT TO NEW quote_requests COLLECTION - FIXED: Hide completed quotes
+  // 🎯 CONNECT TO NEW quote_requests COLLECTION - FIXED: Hide completed quotes + customer dismissals
   const fetchQuoteRequests = async () => {
     try {
       let quotesQuery;
@@ -107,6 +108,7 @@ const QuoteRequests = () => {
         if (status === 'completed' || 
             status === 'moved_to_active_jobs' || 
             status === 'rejected' || 
+            status === 'dismissed_by_customer' || // 🆕 NEW: Hide customer dismissals from both sides
             request.archived) {
           return false;
         }
@@ -352,6 +354,42 @@ const QuoteRequests = () => {
       fetchQuoteRequests();
 
       alert('Quote request dismissed from your list.');
+
+    } catch (error) {
+      console.error('Error dismissing quote:', error);
+      alert('Error dismissing quote. Please try again.');
+    }
+  };
+
+  // 🆕 NEW: Handle customer dismissal (removes from both sides, tracks in admin)
+  const handleCustomerDismissQuote = async (quoteRequestId) => {
+    try {
+      const quote = quoteRequests.find(q => q.id === quoteRequestId);
+      if (!quote) return;
+
+      // Update quote to be dismissed by customer (removes from both customer and tradesman view)
+      await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
+        dismissed_by_customer: true,
+        status: 'dismissed_by_customer',
+        dismissed_at: new Date().toISOString(),
+        dismissed_by: currentUser.uid,
+        updated_at: new Date().toISOString()
+      });
+
+      // Add system comment for admin tracking
+      await addDoc(collection(db, 'booking_comments'), {
+        quote_request_id: quoteRequestId,
+        user_id: currentUser.uid,
+        user_type: 'system',
+        user_name: 'System',
+        comment: `Quote request dismissed by customer - removed from both sides (admin tracking)`,
+        timestamp: new Date().toISOString()
+      });
+
+      // Refresh the list to remove the dismissed quote
+      fetchQuoteRequests();
+
+      alert('Quote request dismissed. This job has been removed from both your list and the tradesman\'s list.');
 
     } catch (error) {
       console.error('Error dismissing quote:', error);
@@ -929,7 +967,7 @@ const QuoteRequests = () => {
                       {request.has_customer_counter && (
                         <>
                           <h3 className="font-medium text-gray-900 mb-3">Counter-Offer Sent</h3>
-                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
                             <p className="text-orange-800">
                               ✅ You've sent a counter-offer: <strong>{request.customer_counter_quote}</strong>
                             </p>
@@ -941,6 +979,20 @@ const QuoteRequests = () => {
                             <p className="text-orange-600 text-sm mt-1">
                               Waiting for <strong>{request.tradesman_name}</strong> to respond...
                             </p>
+                          </div>
+                          
+                          {/* 🆕 NEW: Customer dismissal option */}
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => {
+                                if (confirm('Dismiss this quote request? This will remove it from both your list and the tradesman\'s list. This action cannot be undone.')) {
+                                  handleCustomerDismissQuote(request.id);
+                                }
+                              }}
+                              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                            >
+                              Dismiss Quote Request
+                            </button>
                           </div>
                         </>
                       )}
@@ -984,6 +1036,17 @@ const QuoteRequests = () => {
                               >
                                 Reject Quote
                               </button>
+                              {/* 🆕 NEW: Customer dismissal option */}
+                              <button
+                                onClick={() => {
+                                  if (confirm('Dismiss this quote request? This will remove it from both your list and the tradesman\'s list. This action cannot be undone.')) {
+                                    handleCustomerDismissQuote(request.id);
+                                  }
+                                }}
+                                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                              >
+                                Dismiss Quote Request
+                              </button>
                             </div>
                           </div>
                         </>
@@ -993,10 +1056,24 @@ const QuoteRequests = () => {
                       {!request.has_custom_quote && !request.has_customer_counter && (
                         <>
                           <h3 className="font-medium text-gray-900 mb-3">Request Status</h3>
-                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
                             <p className="text-yellow-800">
                               ⏳ Waiting for <strong>{request.tradesman_name}</strong> to respond to your quote request...
                             </p>
+                          </div>
+                          
+                          {/* 🆕 NEW: Customer dismissal option */}
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => {
+                                if (confirm('Dismiss this quote request? This will remove it from both your list and the tradesman\'s list. This action cannot be undone.')) {
+                                  handleCustomerDismissQuote(request.id);
+                                }
+                              }}
+                              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+                            >
+                              Dismiss Quote Request
+                            </button>
                           </div>
                         </>
                       )}
