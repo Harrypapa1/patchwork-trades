@@ -771,10 +771,16 @@ const AdminDashboard = () => {
                         {/* Show dismissal reason if available */}
                         {quote.status === 'dismissed_by_customer' && (
                           <div className="bg-orange-100 p-3 rounded border border-orange-200 mt-2">
-                            <p className="text-sm font-medium text-orange-900 mb-1">Dismissal Details:</p>
-                            <p className="text-sm text-orange-800">
+                            <p className="text-sm font-medium text-orange-900 mb-1">Customer Dismissal Details:</p>
+                            <p className="text-sm text-orange-800 mb-2">
                               Customer dismissed this quote request. It was removed from both customer and tradesman views.
                             </p>
+                            {quote.dismissal_reason && (
+                              <div className="bg-orange-50 p-2 rounded border border-orange-300">
+                                <p className="text-sm font-medium text-orange-900">Reason provided:</p>
+                                <p className="text-sm text-orange-800 italic">"{quote.dismissal_reason}"</p>
+                              </div>
+                            )}
                           </div>
                         )}
                         
