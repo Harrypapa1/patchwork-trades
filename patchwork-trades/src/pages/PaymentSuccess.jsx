@@ -20,11 +20,20 @@ const PaymentSuccess = () => {
   // FIXED: Handle both old and new data structures
   const locationState = location.state || {};
   
-  // Try both naming conventions to be safe
+  // Try both naming conventions to be safe - FIXED: Add more debugging
   const jobId = locationState.jobId || locationState.quoteId;
   const job = locationState.job || locationState.quoteData;  
   const paymentAmount = locationState.paymentAmount || extractNumericValue(locationState.finalPrice);
   const paymentIntent = locationState.paymentIntent;
+
+  // 🔧 DEBUG: Log received data
+  console.log('💳 PaymentSuccess received data:', {
+    locationState,
+    jobId,
+    job,
+    paymentAmount,
+    paymentIntent
+  });
 
   // Helper function to extract numeric value from price string
   const extractNumericValue = (priceString) => {
@@ -43,7 +52,7 @@ const PaymentSuccess = () => {
         console.log('📊 Job data received:', job);
         console.log('💰 Payment amount:', paymentAmount);
         
-        // STEP 1: Create new job in active_jobs collection with clean data structure
+        // 🔧 FIXED: Add job.id to the data structure
         const activeJobData = {
           // Core job info
           job_title: job.job_title,
@@ -54,20 +63,21 @@ const PaymentSuccess = () => {
           tradesman_name: job.tradesman_name,
           customer_email: job.customer_email,
           tradesman_email: job.tradesman_email,
-          customer_photo: job.customer_photo,
-          tradesman_photo: job.tradesman_photo,
+          customer_photo: job.customer_photo || null,
+          tradesman_photo: job.tradesman_photo || null,
           
           // Job details
           job_images: job.job_images || [],
           additional_notes: job.additional_notes || '',
           urgency: job.urgency || 'normal',
-          selected_time_slot: job.selected_time_slot,
-          preferred_dates_list: job.preferred_dates_list,
-          budget_expectation: job.budget_expectation,
-          tradesman_hourly_rate: job.tradesman_hourly_rate,
+          selected_time_slot: job.selected_time_slot || null,
+          preferred_dates_list: job.preferred_dates_list || [],
+          budget_expectation: job.budget_expectation || '',
+          tradesman_hourly_rate: job.tradesman_hourly_rate || 0,
           
           // Payment and status info
           quote_id: jobId,
+          original_quote_id: job.id || jobId, // 🔧 FIXED: Ensure we have the original ID
           final_price: `£${paymentAmount}`,
           agreed_price: paymentAmount,
           platform_fee: 0,
@@ -83,30 +93,42 @@ const PaymentSuccess = () => {
         };
 
         console.log('📋 Creating active job with data:', activeJobData);
+        
+        // 🔧 FIXED: Better error handling for job creation
         const activeJobRef = await addDoc(collection(db, 'active_jobs'), activeJobData);
         console.log('✅ Active job created with ID:', activeJobRef.id);
 
         // STEP 2: Update quote request status to completed/paid
-        await updateDoc(doc(db, 'quote_requests', jobId), {
-          status: 'completed',
-          active_job_id: activeJobRef.id,
-          payment_completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-        console.log('✅ Quote request updated to completed status');
+        try {
+          await updateDoc(doc(db, 'quote_requests', jobId), {
+            status: 'completed',
+            active_job_id: activeJobRef.id,
+            payment_completed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+          console.log('✅ Quote request updated to completed status');
+        } catch (updateError) {
+          console.error('❌ Error updating quote request:', updateError);
+          // Continue anyway - job was created successfully
+        }
 
         // STEP 3: Add system comment to the new active job
-        await addDoc(collection(db, 'booking_comments'), {
-          active_job_id: activeJobRef.id,
-          quote_request_id: jobId,
-          booking_id: null,
-          user_id: currentUser.uid,
-          user_type: 'system',
-          user_name: 'System',
-          comment: `Payment completed successfully! Job moved to Active Jobs. Amount: £${paymentAmount}`,
-          timestamp: new Date().toISOString()
-        });
-        console.log('✅ System comment added to active job');
+        try {
+          await addDoc(collection(db, 'booking_comments'), {
+            active_job_id: activeJobRef.id,
+            quote_request_id: jobId,
+            booking_id: null, // Legacy field
+            user_id: currentUser?.uid || 'system',
+            user_type: 'system',
+            user_name: 'System',
+            comment: `Payment completed successfully! Job moved to Active Jobs. Amount: £${paymentAmount}`,
+            timestamp: new Date().toISOString()
+          });
+          console.log('✅ System comment added to active job');
+        } catch (commentError) {
+          console.error('❌ Error adding system comment:', commentError);
+          // Continue anyway - job was created successfully
+        }
 
         // STEP 4: Send email notification to tradesman
         try {
@@ -127,7 +149,16 @@ const PaymentSuccess = () => {
         
       } catch (error) {
         console.error('❌ Error processing payment completion:', error);
-        alert('Payment successful, but there was an error setting up your job. Please contact support.');
+        console.error('Error details:', error.message, error.stack);
+        
+        // 🔧 FIXED: More specific error handling
+        if (error.code === 'permission-denied') {
+          alert('Payment successful, but there was a permission error setting up your job. Please contact support.');
+        } else if (error.code === 'not-found') {
+          alert('Payment successful, but we couldn\'t find the quote request. Please contact support.');
+        } else {
+          alert('Payment successful, but there was an error setting up your job. Please contact support.');
+        }
       } finally {
         setProcessing(false);
       }
@@ -150,7 +181,7 @@ const PaymentSuccess = () => {
 
     // Process payment completion
     processPaymentCompletion();
-  }, [job, jobId, jobCreated, paymentAmount, paymentIntent, currentUser.uid]);
+  }, [job, jobId, jobCreated, paymentAmount, paymentIntent, currentUser?.uid]);
 
   // Email notification helper function
   const sendEmailNotification = async (emailData) => {
@@ -185,18 +216,28 @@ const PaymentSuccess = () => {
     });
   };
 
-  if (!job) {
+  // 🔧 FIXED: Better error handling for missing job data
+  if (!job || !jobId) {
+    console.error('❌ Missing job data:', { job, jobId, locationState });
     return (
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment Information Not Found</h2>
-          <p className="text-gray-600 mb-4">We couldn't find the payment details.</p>
-          <button
-            onClick={() => navigate('/active-jobs')}
-            className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700"
-          >
-            View Active Jobs
-          </button>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment Completed</h2>
+          <p className="text-gray-600 mb-4">Your payment was successful, but we're having trouble loading the job details.</p>
+          <div className="space-y-3">
+            <button
+              onClick={() => navigate('/active-jobs')}
+              className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 block mx-auto"
+            >
+              View Active Jobs
+            </button>
+            <button
+              onClick={() => navigate('/quote-requests')}
+              className="bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700 block mx-auto"
+            >
+              Back to Quote Requests
+            </button>
+          </div>
         </div>
       </div>
     );
