@@ -1,35 +1,54 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import { 
+  doc, 
+  getDoc, 
   collection, 
   query, 
   where, 
-  getDocs, 
-  addDoc, 
-  updateDoc,
-  deleteDoc,
-  doc
+  getDocs,
+  addDoc 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
-const ManageAvailability = () => {
+const BookingRequest = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [availability, setAvailability] = useState([]);
-  const [bookedSlots, setBookedSlots] = useState([]);
+  const location = useLocation();
+  const { tradesmanId: urlTradesmanId } = useParams();
+  
+  // Get tradesman ID from URL params or location state
+  const tradesmanId = urlTradesmanId || location.state?.tradesmanId;
+
+  const [tradesman, setTradesman] = useState(null);
+  const [customerProfile, setCustomerProfile] = useState(null);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [isMobileView, setIsMobileView] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
   const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
 
   // Time slot definitions
-  const TIME_SLOTS = [
-    { id: 'morning', label: 'Morning', time: '9am-1pm', start: '09:00', end: '13:00' },
-    { id: 'afternoon', label: 'Afternoon', time: '1pm-5pm', start: '13:00', end: '17:00' },
-    { id: 'evening', label: 'Evening', time: '5pm-8pm', start: '17:00', end: '20:00' }
-  ];
+  const TIME_SLOTS = {
+    'morning': { label: 'Morning', time: '9am-1pm', start: '09:00', end: '13:00' },
+    'afternoon': { label: 'Afternoon', time: '1pm-5pm', start: '13:00', end: '17:00' },
+    'evening': { label: 'Evening', time: '5pm-8pm', start: '17:00', end: '20:00' }
+  };
+
+  // Form state
+  const [formData, setFormData] = useState({
+    jobTitle: '',
+    jobDescription: '',
+    urgency: 'normal',
+    selectedTimeSlot: '',
+    budgetExpectation: '',
+    additionalNotes: '',
+    jobImages: []
+  });
 
   // Detect mobile viewport
   useEffect(() => {
@@ -44,144 +63,91 @@ const ManageAvailability = () => {
   }, []);
 
   useEffect(() => {
-    fetchAvailability();
-    fetchBookedSlots();
-  }, [currentDate, currentUser]);
-
-  const fetchAvailability = async () => {
-    if (!currentUser) return;
+    if (!tradesmanId) {
+      navigate('/browse');
+      return;
+    }
     
-    setLoading(true);
+    fetchTradesmanDetails();
+    fetchCustomerProfile();
+  }, [tradesmanId, currentUser]);
+
+  const fetchTradesmanDetails = async () => {
     try {
-      const q = query(
+      // Get tradesman profile
+      const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', tradesmanId));
+      if (tradesmanDoc.exists()) {
+        setTradesman({ id: tradesmanDoc.id, ...tradesmanDoc.data() });
+      }
+
+      // Get availability
+      const availabilityQuery = query(
         collection(db, 'availability'),
-        where('tradesman_id', '==', currentUser.uid)
+        where('tradesman_id', '==', tradesmanId)
       );
-      const querySnapshot = await getDocs(q);
-      const availabilityData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setAvailability(availabilityData);
+      const availabilitySnapshot = await getDocs(availabilityQuery);
+      
+      // Process availability data to extract individual time slots
+      const timeSlots = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      availabilitySnapshot.docs.forEach(doc => {
+        const availabilityData = doc.data();
+        const date = availabilityData.date;
+        const slots = availabilityData.available_slots || [];
+        
+        // Only include future dates
+        const slotDate = new Date(date);
+        if (slotDate >= today) {
+          slots.forEach(slot => {
+            if (!slot.is_booked) {
+              timeSlots.push({
+                id: `${date}-${slot.slot_id}`,
+                date: date,
+                slot_id: slot.slot_id,
+                start_time: slot.start_time,
+                end_time: slot.end_time,
+                display_date: new Date(date).toLocaleDateString('en-GB', { 
+                  weekday: 'short',
+                  day: 'numeric', 
+                  month: 'short',
+                  year: 'numeric'
+                }),
+                display_time: TIME_SLOTS[slot.slot_id]?.time || `${slot.start_time}-${slot.end_time}`,
+                label: TIME_SLOTS[slot.slot_id]?.label || slot.slot_id
+              });
+            }
+          });
+        }
+      });
+
+      // Sort by date then by time
+      timeSlots.sort((a, b) => {
+        const dateCompare = new Date(a.date) - new Date(b.date);
+        if (dateCompare !== 0) return dateCompare;
+        return a.start_time.localeCompare(b.start_time);
+      });
+      
+      setAvailableTimeSlots(timeSlots);
+      
     } catch (error) {
-      console.error('Error fetching availability:', error);
+      console.error('Error fetching tradesman details:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchBookedSlots = async () => {
+  const fetchCustomerProfile = async () => {
     if (!currentUser) return;
     
     try {
-      // Fetch from active_jobs to see what's booked
-      const q = query(
-        collection(db, 'active_jobs'),
-        where('tradesman_id', '==', currentUser.uid),
-        where('status', 'in', ['accepted', 'in_progress'])
-      );
-      const querySnapshot = await getDocs(q);
-      const bookedData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setBookedSlots(bookedData);
+      const customerDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      if (customerDoc.exists()) {
+        setCustomerProfile(customerDoc.data());
+      }
     } catch (error) {
-      console.error('Error fetching booked slots:', error);
-    }
-  };
-
-  const toggleTimeSlot = async (dateStr, slotId) => {
-    if (!currentUser) return;
-
-    // Check if this specific slot is booked
-    const isBooked = bookedSlots.some(booking => 
-      booking.agreed_date === dateStr && booking.time_slot === slotId
-    );
-    
-    if (isBooked) {
-      // If booked, navigate to job details
-      const booking = bookedSlots.find(b => 
-        b.agreed_date === dateStr && b.time_slot === slotId
-      );
-      if (booking) {
-        navigate('/active-jobs');
-      }
-      return;
-    }
-
-    // Find existing availability document for this date
-    let availabilityDoc = availability.find(item => item.date === dateStr);
-    
-    if (availabilityDoc) {
-      // Update existing document
-      const currentSlots = availabilityDoc.available_slots || [];
-      const slotIndex = currentSlots.findIndex(slot => slot.slot_id === slotId);
-      
-      let updatedSlots;
-      if (slotIndex >= 0) {
-        // Remove slot
-        updatedSlots = currentSlots.filter(slot => slot.slot_id !== slotId);
-      } else {
-        // Add slot
-        const slotInfo = TIME_SLOTS.find(s => s.id === slotId);
-        updatedSlots = [...currentSlots, {
-          slot_id: slotId,
-          start_time: slotInfo.start,
-          end_time: slotInfo.end,
-          is_booked: false,
-          booking_id: null
-        }];
-      }
-
-      if (updatedSlots.length === 0) {
-        // Remove document if no slots left
-        try {
-          await deleteDoc(doc(db, 'availability', availabilityDoc.id));
-          setAvailability(prev => prev.filter(item => item.id !== availabilityDoc.id));
-        } catch (error) {
-          console.error('Error removing availability:', error);
-        }
-      } else {
-        // Update document
-        try {
-          await updateDoc(doc(db, 'availability', availabilityDoc.id), {
-            available_slots: updatedSlots,
-            updated_at: new Date().toISOString()
-          });
-          
-          setAvailability(prev => prev.map(item => 
-            item.id === availabilityDoc.id 
-              ? { ...item, available_slots: updatedSlots }
-              : item
-          ));
-        } catch (error) {
-          console.error('Error updating availability:', error);
-        }
-      }
-    } else {
-      // Create new availability document
-      const slotInfo = TIME_SLOTS.find(s => s.id === slotId);
-      const newAvailability = {
-        tradesman_id: currentUser.uid,
-        date: dateStr,
-        available_slots: [{
-          slot_id: slotId,
-          start_time: slotInfo.start,
-          end_time: slotInfo.end,
-          is_booked: false,
-          booking_id: null
-        }],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      
-      try {
-        const docRef = await addDoc(collection(db, 'availability'), newAvailability);
-        setAvailability(prev => [...prev, { id: docRef.id, ...newAvailability }]);
-      } catch (error) {
-        console.error('Error adding availability:', error);
-      }
+      console.error('Error fetching customer profile:', error);
     }
   };
 
@@ -192,29 +158,11 @@ const ManageAvailability = () => {
 
   const getFirstDayOfMonth = (date) => {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-    return firstDay === 0 ? 6 : firstDay - 1;
+    return firstDay === 0 ? 6 : firstDay - 1; // Make Monday = 0
   };
 
   const formatDateString = (year, month, day) => {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  };
-
-  const getSlotStatus = (dateStr, slotId) => {
-    // Check if slot is booked
-    const isBooked = bookedSlots.some(booking => 
-      booking.agreed_date === dateStr && booking.time_slot === slotId
-    );
-    
-    if (isBooked) return 'booked';
-
-    // Check if slot is available
-    const availabilityDoc = availability.find(item => item.date === dateStr);
-    if (availabilityDoc && availabilityDoc.available_slots) {
-      const hasSlot = availabilityDoc.available_slots.some(slot => slot.slot_id === slotId);
-      return hasSlot ? 'available' : 'unavailable';
-    }
-    
-    return 'unavailable';
   };
 
   const isDateInPast = (year, month, day) => {
@@ -229,6 +177,31 @@ const ManageAvailability = () => {
       newDate.setMonth(prev.getMonth() + direction);
       return newDate;
     });
+  };
+
+  const getSlotsForDate = (dateStr) => {
+    return availableTimeSlots.filter(slot => slot.date === dateStr);
+  };
+
+  const getSlotStatus = (dateStr, slotId) => {
+    const slotsForDate = getSlotsForDate(dateStr);
+    const hasSlot = slotsForDate.find(slot => slot.slot_id === slotId);
+    return hasSlot ? 'available' : 'unavailable';
+  };
+
+  const handleTimeSlotSelection = (slotId) => {
+    if (formData.selectedTimeSlot === slotId) {
+      // Deselect if already selected
+      setFormData(prev => ({
+        ...prev,
+        selectedTimeSlot: ''
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        selectedTimeSlot: slotId
+      }));
+    }
   };
 
   // Mobile calendar rendering
@@ -249,50 +222,39 @@ const ManageAvailability = () => {
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDateString(year, month, day);
       const isPast = isDateInPast(year, month, day);
+      const slotsForDate = getSlotsForDate(dateStr);
       
       let className = "aspect-square p-2 rounded-lg border-2 transition-all duration-200 touch-manipulation cursor-pointer ";
       
       if (isPast) {
         className += "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200";
+      } else if (slotsForDate.length > 0) {
+        className += "bg-white border-blue-300 hover:border-blue-500 active:scale-95";
       } else {
-        className += "bg-white border-gray-200 hover:border-blue-300 active:scale-95";
+        className += "bg-gray-50 border-gray-200 cursor-not-allowed";
       }
-
-      // Count available and booked slots
-      const availableSlots = [];
-      const bookedSlots_day = [];
-      
-      TIME_SLOTS.forEach(slot => {
-        const status = getSlotStatus(dateStr, slot.id);
-        if (status === 'available') availableSlots.push(slot.id);
-        if (status === 'booked') bookedSlots_day.push(slot.id);
-      });
 
       days.push(
         <button
           key={day}
           className={className}
           onClick={() => {
-            if (isPast) return;
+            if (isPast || slotsForDate.length === 0) return;
             setSelectedDate(dateStr);
             setShowTimeSlotModal(true);
           }}
-          style={{ minHeight: '60px' }} // Ensure minimum touch target
-          disabled={isPast}
+          style={{ minHeight: '60px' }}
+          disabled={isPast || slotsForDate.length === 0}
         >
           <div className="flex flex-col items-center justify-center h-full">
             <div className="font-bold text-lg mb-1">{day}</div>
             <div className="flex gap-1">
-              {bookedSlots_day.length > 0 && (
-                <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-              )}
-              {availableSlots.length > 0 && (
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              {slotsForDate.length > 0 && (
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
               )}
             </div>
             <div className="text-xs text-gray-600 mt-1">
-              {availableSlots.length + bookedSlots_day.length > 0 ? 
-                `${availableSlots.length + bookedSlots_day.length}` : ''}
+              {slotsForDate.length > 0 ? `${slotsForDate.length}` : ''}
             </div>
           </div>
         </button>
@@ -302,46 +264,47 @@ const ManageAvailability = () => {
     return days;
   };
 
-  // Desktop time slots rendering (original)
+  // Desktop time slots rendering
   const renderTimeSlots = (dateStr, isPast) => {
+    const slotsForDate = getSlotsForDate(dateStr);
+    
     return (
       <div className="space-y-1 mt-1">
-        {TIME_SLOTS.map(slot => {
-          const status = getSlotStatus(dateStr, slot.id);
+        {Object.keys(TIME_SLOTS).map(slotId => {
+          const availableSlot = slotsForDate.find(slot => slot.slot_id === slotId);
+          const slotInfo = TIME_SLOTS[slotId];
+          const isSelected = formData.selectedTimeSlot === availableSlot?.id;
           
           let className = "w-full text-xs py-1 px-1 rounded transition-colors cursor-pointer ";
           
           if (isPast) {
             className += "bg-gray-100 text-gray-400 cursor-not-allowed";
-          } else {
-            switch (status) {
-              case 'available':
-                className += "bg-green-100 text-green-800 hover:bg-green-200 border border-green-300";
-                break;
-              case 'booked':
-                className += "bg-red-100 text-red-800 hover:bg-red-200 border border-red-300";
-                break;
-              default:
-                className += "bg-white text-gray-600 hover:bg-blue-50 border border-gray-200";
+          } else if (availableSlot) {
+            if (isSelected) {
+              className += "bg-blue-100 text-blue-800 border border-blue-500";
+            } else {
+              className += "bg-green-100 text-green-800 hover:bg-green-200 border border-green-300";
             }
+          } else {
+            className += "bg-white text-gray-400 border border-gray-200 cursor-not-allowed";
           }
 
           return (
             <button
-              key={slot.id}
+              key={slotId}
+              type="button"
               className={className}
               onClick={() => {
-                if (isPast) return;
-                toggleTimeSlot(dateStr, slot.id);
+                if (isPast || !availableSlot) return;
+                handleTimeSlotSelection(availableSlot.id);
               }}
-              disabled={isPast}
+              disabled={isPast || !availableSlot}
             >
-              <div className="font-medium">{slot.time}</div>
-              {status === 'available' && !isPast && (
-                <div className="text-xs">Available</div>
-              )}
-              {status === 'booked' && (
-                <div className="text-xs">Job Booked</div>
+              <div className="font-medium">{slotInfo.time}</div>
+              {availableSlot && !isPast && (
+                <div className="text-xs">
+                  {isSelected ? 'Selected' : 'Available'}
+                </div>
               )}
             </button>
           );
@@ -350,7 +313,7 @@ const ManageAvailability = () => {
     );
   };
 
-  // Desktop calendar rendering (original)
+  // Desktop calendar rendering
   const renderDesktopCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -384,7 +347,7 @@ const ManageAvailability = () => {
       if (isPast) {
         className += "bg-gray-50 border-gray-200";
       } else {
-        className += "bg-white border-gray-200 hover:border-blue-300";
+        className += "bg-white border-gray-200";
       }
 
       days.push(
@@ -408,6 +371,8 @@ const ManageAvailability = () => {
       month: 'long' 
     });
 
+    const slotsForDate = getSlotsForDate(selectedDate);
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
         <div className="bg-white rounded-t-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
@@ -424,52 +389,39 @@ const ManageAvailability = () => {
           </div>
           
           <div className="p-4 space-y-3">
-            {TIME_SLOTS.map(slot => {
-              const status = getSlotStatus(selectedDate, slot.id);
+            {Object.keys(TIME_SLOTS).map(slotId => {
+              const availableSlot = slotsForDate.find(slot => slot.slot_id === slotId);
+              const slotInfo = TIME_SLOTS[slotId];
+              const isSelected = formData.selectedTimeSlot === availableSlot?.id;
+              
+              if (!availableSlot) return null; // Don't show unavailable slots on mobile
               
               let buttonClass = "w-full p-4 rounded-lg text-left transition-colors border-2 ";
-              let statusText = "";
               
-              switch (status) {
-                case 'available':
-                  buttonClass += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200";
-                  statusText = "Available - Tap to remove";
-                  break;
-                case 'booked':
-                  buttonClass += "bg-red-100 text-red-800 border-red-300 hover:bg-red-200";
-                  statusText = "Job Booked - Tap to view";
-                  break;
-                default:
-                  buttonClass += "bg-white text-gray-800 border-gray-300 hover:bg-gray-50";
-                  statusText = "Not Available - Tap to add";
+              if (isSelected) {
+                buttonClass += "bg-blue-100 text-blue-800 border-blue-500";
+              } else {
+                buttonClass += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200";
               }
 
               return (
                 <button
-                  key={slot.id}
+                  key={slotId}
                   className={buttonClass}
                   onClick={() => {
-                    toggleTimeSlot(selectedDate, slot.id);
-                    // Close modal if it was a booking view
-                    if (status === 'booked') {
-                      setShowTimeSlotModal(false);
-                    }
+                    handleTimeSlotSelection(availableSlot.id);
+                    setShowTimeSlotModal(false);
                   }}
-                  style={{ minHeight: '60px' }} // Large touch target
+                  style={{ minHeight: '60px' }}
                 >
                   <div className="flex justify-between items-center">
                     <div>
-                      <div className="font-semibold text-lg">{slot.label}</div>
-                      <div className="text-sm opacity-75">{slot.time}</div>
+                      <div className="font-semibold text-lg">{slotInfo.label}</div>
+                      <div className="text-sm opacity-75">{slotInfo.time}</div>
                     </div>
                     <div className="text-sm font-medium">
-                      {status === 'available' && '✓'}
-                      {status === 'booked' && '📅'}
-                      {status === 'unavailable' && '+'}
+                      {isSelected ? '✓ Selected' : 'Select'}
                     </div>
-                  </div>
-                  <div className="text-xs mt-1 opacity-75">
-                    {statusText}
                   </div>
                 </button>
               );
@@ -483,204 +435,613 @@ const ManageAvailability = () => {
     );
   };
 
-  // Calculate stats
-  const totalAvailableSlots = availability.reduce((total, day) => 
-    total + (day.available_slots?.length || 0), 0
-  );
-  
-  const totalBookedSlots = bookedSlots.filter(booking => 
-    booking.status === 'accepted' || booking.status === 'in_progress'
-  ).length;
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Image compression function
+  const compressImage = (file, maxWidth = 400, quality = 0.6) => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
+        canvas.width = img.width * ratio;
+        canvas.height = img.height * ratio;
+        
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(resolve, 'image/jpeg', quality);
+      };
+      
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  // Convert file to base64
+  const fileToBase64 = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle image upload
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    
+    if (files.length === 0) return;
+    
+    if (formData.jobImages.length + files.length > 3) {
+      alert('Maximum 3 images allowed (to keep file sizes manageable)');
+      return;
+    }
+    
+    setUploadingImages(true);
+    
+    try {
+      const newImages = [];
+      
+      for (const file of files) {
+        if (file.size > 2 * 1024 * 1024) {
+          alert(`${file.name} is too large. Please choose images under 2MB.`);
+          continue;
+        }
+        
+        const compressedFile = await compressImage(file, 400, 0.5);
+        const base64 = await fileToBase64(compressedFile);
+        
+        if (base64.length > 150000) {
+          alert(`${file.name} is still too large after compression. Try a smaller/simpler image.`);
+          continue;
+        }
+        
+        newImages.push({
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+          image: base64,
+          filename: file.name,
+          uploadedAt: new Date().toISOString()
+        });
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        jobImages: [...prev.jobImages, ...newImages]
+      }));
+      
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      alert('Error uploading images. Please try again.');
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  // Delete image
+  const deleteImage = (imageId) => {
+    setFormData(prev => ({
+      ...prev,
+      jobImages: prev.jobImages.filter(img => img.id !== imageId)
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.jobTitle.trim() || !formData.jobDescription.trim()) {
+      alert('Please fill in the job title and description.');
+      return;
+    }
+
+    if (!formData.selectedTimeSlot) {
+      alert('Please select a time slot.');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Find the selected time slot details
+      const selectedSlot = availableTimeSlots.find(slot => slot.id === formData.selectedTimeSlot);
+      
+      // Create quote request
+      const quoteRequestData = {
+        // Customer information
+        customer_id: currentUser.uid,
+        customer_name: customerProfile?.name || currentUser.email,
+        customer_email: currentUser.email,
+        customer_photo: customerProfile?.profilePhoto || null,
+        
+        // Tradesman information
+        tradesman_id: tradesmanId,
+        tradesman_name: tradesman.name,
+        tradesman_email: tradesman.email || tradesman.contactEmail,
+        tradesman_photo: tradesman.profilePhoto || null,
+        tradesman_hourly_rate: tradesman.hourlyRate,
+        
+        // Job details
+        job_title: formData.jobTitle,
+        job_description: formData.jobDescription,
+        job_images: formData.jobImages,
+        additional_notes: formData.additionalNotes,
+        urgency: formData.urgency,
+        budget_expectation: formData.budgetExpectation,
+        
+        // Save selected time slot details
+        selected_time_slot: {
+          id: selectedSlot.id,
+          date: selectedSlot.date,
+          slot_id: selectedSlot.slot_id,
+          start_time: selectedSlot.start_time,
+          end_time: selectedSlot.end_time,
+          display_date: selectedSlot.display_date,
+          display_time: selectedSlot.display_time,
+          label: selectedSlot.label
+        },
+        
+        // Quote status
+        status: 'pending',
+        has_custom_quote: false,
+        custom_quote: '',
+        quote_reasoning: '',
+        has_customer_counter: false,
+        customer_counter_quote: '',
+        customer_reasoning: '',
+        
+        // Timestamps
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      };
+
+      console.log('Creating quote request:', quoteRequestData);
+      const quoteRef = await addDoc(collection(db, 'quote_requests'), quoteRequestData);
+
+      // Send message
+      console.log('Sending message for quote request:', quoteRef.id);
+      await addDoc(collection(db, 'messages'), {
+        booking_id: quoteRef.id,
+        quote_request_id: quoteRef.id,
+        sender_id: currentUser.uid,
+        sender_name: customerProfile?.name || currentUser.email,
+        receiver_id: tradesmanId,
+        receiver_name: tradesman.name,
+        message: `Hi ${tradesman.name},
+
+I'd like to request a quote for: ${formData.jobTitle}
+
+Job Description:
+${formData.jobDescription}
+
+${formData.budgetExpectation ? `Budget Expectation: ${formData.budgetExpectation}` : ''}
+${formData.additionalNotes ? `Additional Notes: ${formData.additionalNotes}` : ''}
+
+Urgency: ${formData.urgency}
+
+I'd like to book this time slot: ${selectedSlot.display_date} - ${selectedSlot.label} (${selectedSlot.display_time})
+
+${formData.jobImages.length > 0 ? `I've attached ${formData.jobImages.length} photo${formData.jobImages.length > 1 ? 's' : ''} to help show what needs to be done.` : ''}
+
+Please let me know if you're interested and if you need any additional information.
+
+Thanks!`,
+        timestamp: new Date().toISOString(),
+        read: false,
+        attached_images: formData.jobImages
+      });
+
+      // Navigate to quote requests
+      navigate('/quote-requests', {
+        state: { 
+          success: 'Quote request sent successfully! The tradesman will respond shortly.'
+        }
+      });
+
+    } catch (error) {
+      console.error('Detailed error:', error);
+      console.error('Error code:', error.code);
+      console.error('Error message:', error.message);
+      alert(`Error sending request: ${error.message}. Check console for details.`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (loading) {
-    return <div className="text-center py-8">Loading calendar...</div>;
+    return <div className="text-center py-8">Loading...</div>;
   }
 
-  // Mobile Layout
-  if (isMobileView) {
+  if (!tradesman) {
     return (
-      <div className="max-w-md mx-auto bg-gray-50 min-h-screen">
-        {/* Header */}
-        <div className="bg-white shadow-sm p-4">
-          <h1 className="text-2xl font-bold text-center mb-4">Manage Availability</h1>
-          
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-green-700">{totalAvailableSlots}</div>
-              <div className="text-xs text-green-600">Available</div>
-            </div>
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-              <div className="text-xl font-bold text-red-700">{totalBookedSlots}</div>
-              <div className="text-xs text-red-600">Booked</div>
-            </div>
-          </div>
-          
-          {/* Month display */}
-          <div className="text-center">
-            <h2 className="text-xl font-bold">
-              {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-            </h2>
-          </div>
-        </div>
-
-        {/* Instructions */}
-        <div className="bg-blue-50 border-l-4 border-blue-400 p-4 m-4">
-          <p className="text-blue-800 text-sm">
-            <strong>Tap any date</strong> to manage your time slots for that day
-          </p>
-        </div>
-
-        {/* Calendar */}
-        <div className="p-4">
-          {/* Day headers */}
-          <div className="grid grid-cols-7 gap-1 mb-2">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-              <div key={day} className="text-center font-medium text-gray-600 text-sm py-2">
-                {day}
-              </div>
-            ))}
-          </div>
-          
-          {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            {renderMobileCalendar()}
-          </div>
-          
-          {/* Legend */}
-          <div className="bg-white rounded-lg p-3 space-y-2 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-              <span>Available time slots</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-              <span>Booked jobs</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Navigation - THUMB FRIENDLY */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg">
-          <div className="max-w-md mx-auto flex">
-            <button
-              onClick={() => navigateMonth(-1)}
-              className="flex-1 py-4 px-6 text-blue-600 font-medium hover:bg-blue-50 transition-colors"
-              style={{ minHeight: '56px' }}
-            >
-              ← Previous
-            </button>
-            <button
-              onClick={() => navigateMonth(1)}
-              className="flex-1 py-4 px-6 text-blue-600 font-medium hover:bg-blue-50 transition-colors border-l"
-              style={{ minHeight: '56px' }}
-            >
-              Next →
-            </button>
-          </div>
-        </div>
-
-        {/* Time Slot Modal */}
-        {renderTimeSlotModal()}
-
-        {/* Bottom padding */}
-        <div className="h-16"></div>
+      <div className="text-center py-8">
+        <p className="text-red-500">Tradesman not found.</p>
+        <button 
+          onClick={() => navigate('/browse')}
+          className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Back to Browse
+        </button>
       </div>
     );
   }
 
-  // Desktop Layout (Original)
   return (
-    <div className="max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Manage Your Availability</h1>
-      
-      {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold text-blue-800 mb-2">How to use the time slot calendar:</h3>
-        <ul className="text-blue-700 text-sm space-y-1">
-          <li>• <strong>Click time slots</strong> to toggle your availability</li>
-          <li>• <strong>Morning:</strong> 9am-1pm (4 hours)</li>
-          <li>• <strong>Afternoon:</strong> 1pm-5pm (4 hours)</li>
-          <li>• <strong>Evening:</strong> 5pm-8pm (3 hours)</li>
-          <li>• <strong>Green slots</strong> = Available for booking</li>
-          <li>• <strong>Red slots</strong> = Booked by customers (click to view job)</li>
-          <li>• <strong>White slots</strong> = Not available</li>
-        </ul>
+    <div className="max-w-4xl mx-auto">
+      <div className="mb-6">
+        <button 
+          onClick={() => navigate('/browse')}
+          className="text-blue-600 hover:text-blue-800 mb-4"
+        >
+          ← Back to Browse
+        </button>
+        <h1 className="text-3xl font-bold">Request Quote</h1>
       </div>
 
-      {/* Calendar Header */}
+      {/* Tradesman Summary */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Requesting Quote From:</h2>
+        <div className="flex items-center">
+          {tradesman.profilePhoto ? (
+            <img 
+              src={tradesman.profilePhoto} 
+              alt={tradesman.name} 
+              className="w-16 h-16 rounded-full object-cover border-2 border-gray-300 mr-4"
+            />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mr-4">
+              No Photo
+            </div>
+          )}
+          <div>
+            <h3 className="text-lg font-semibold">{tradesman.name}</h3>
+            <p className="text-gray-600">{tradesman.tradeType}</p>
+            <p className="text-gray-600">{tradesman.areaCovered}</p>
+            <p className="text-blue-600 font-medium">
+              {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Booking Request Form */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex justify-between items-center mb-6">
-          <button
-            onClick={() => navigateMonth(-1)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-          >
-            ← Previous
-          </button>
-          
-          <h2 className="text-2xl font-bold">
-            {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-          </h2>
-          
-          <button
-            onClick={() => navigateMonth(1)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-          >
-            Next →
-          </button>
-        </div>
+        <h2 className="text-xl font-semibold mb-6">Job Details</h2>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Job Title */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Job Title *
+            </label>
+            <input
+              type="text"
+              name="jobTitle"
+              value={formData.jobTitle}
+              onChange={handleInputChange}
+              placeholder="e.g. Fix leaking kitchen tap, Install new socket..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
 
-        {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-2">
-          {renderDesktopCalendar()}
-        </div>
+          {/* Job Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Detailed Description *
+            </label>
+            <textarea
+              name="jobDescription"
+              value={formData.jobDescription}
+              onChange={handleInputChange}
+              rows="4"
+              placeholder="Please describe the job in detail. Include any specific requirements, materials needed, access information, etc."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+            />
+          </div>
 
-        {/* Legend */}
-        <div className="mt-6 flex flex-wrap gap-4 justify-center text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
-            <span>Available Slot</span>
+          {/* Job Images */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Job Photos (Optional - but recommended)
+            </label>
+            <div className="mb-4">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                disabled={uploadingImages || formData.jobImages.length >= 3}
+                className="hidden"
+                id="job-images-upload"
+              />
+              <label 
+                htmlFor="job-images-upload"
+                className={`inline-block px-4 py-2 rounded cursor-pointer transition-colors ${
+                  uploadingImages || formData.jobImages.length >= 3
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-blue-500 text-white hover:bg-blue-600'
+                }`}
+              >
+                {uploadingImages ? 'Uploading...' : 'Add Photos'}
+              </label>
+              <p className="text-sm text-gray-500 mt-1">
+                Max 3 photos, up to 2MB each. Images automatically compressed for faster sending!
+              </p>
+            </div>
+
+            {/* Image Gallery */}
+            {formData.jobImages.length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                {formData.jobImages.map((image) => (
+                  <div key={image.id} className="relative group">
+                    <img 
+                      src={image.image} 
+                      alt="Job photo" 
+                      className="w-full h-32 object-cover rounded border"
+                    />
+                    <button
+                      onClick={() => deleteImage(image.id)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      type="button"
+                    >
+                      ×
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 rounded-b">
+                      {image.filename}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded"></div>
-            <span>Booked Slot (click to view)</span>
+
+          {/* Urgency */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Urgency
+            </label>
+            <select
+              name="urgency"
+              value={formData.urgency}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="low">Low - Can wait a few weeks</option>
+              <option value="normal">Normal - Within next week or two</option>
+              <option value="high">High - This week if possible</option>
+              <option value="urgent">Urgent - ASAP/Emergency</option>
+            </select>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
-            <span>Not Available</span>
+
+          {/* Calendar-based Time Slot Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Time Slot * {formData.selectedTimeSlot && <span className="text-green-600 font-medium">✓ Selected</span>}
+            </label>
+            
+            {availableTimeSlots.length === 0 ? (
+              <div className="text-center py-8 bg-gray-50 rounded-lg border">
+                <p className="text-gray-500 mb-2">No time slots currently available</p>
+                <p className="text-gray-400 text-sm">The tradesman hasn't set any available time slots, or all their slots are booked</p>
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-lg p-4">
+                {isMobileView ? (
+                  // Mobile Calendar View
+                  <div>
+                    {/* Instructions */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                      <p className="text-blue-800 text-sm">
+                        <strong>Tap any date</strong> with a blue dot to see available time slots
+                      </p>
+                    </div>
+
+                    {/* Month navigation */}
+                    <div className="flex justify-between items-center mb-4">
+                      <button
+                        type="button"
+                        onClick={() => navigateMonth(-1)}
+                        className="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 text-sm"
+                      >
+                        ← Prev
+                      </button>
+                      
+                      <h3 className="text-lg font-semibold">
+                        {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                      </h3>
+                      
+                      <button
+                        type="button"
+                        onClick={() => navigateMonth(1)}
+                        className="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 text-sm"
+                      >
+                        Next →
+                      </button>
+                    </div>
+
+                    {/* Day headers */}
+                    <div className="grid grid-cols-7 gap-1 mb-2">
+                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                        <div key={day} className="text-center font-medium text-gray-600 text-sm py-2">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Calendar grid */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {renderMobileCalendar()}
+                    </div>
+                    
+                    {/* Legend */}
+                    <div className="mt-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                        <span>Available time slots</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  // Desktop Calendar View
+                  <div>
+                    {/* Instructions */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <h4 className="font-semibold text-blue-800 mb-2">Select your preferred time slot:</h4>
+                      <ul className="text-blue-700 text-sm space-y-1">
+                        <li>• <strong>Green slots</strong> = Available for booking</li>
+                        <li>• <strong>Blue slots</strong> = Your selected slot</li>
+                        <li>• <strong>Gray slots</strong> = Not available</li>
+                        <li>• Click any green time slot to select it</li>
+                      </ul>
+                    </div>
+
+                    {/* Calendar Header */}
+                    <div className="flex justify-between items-center mb-4">
+                      <button
+                        type="button"
+                        onClick={() => navigateMonth(-1)}
+                        className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+                      >
+                        ← Previous
+                      </button>
+                      
+                      <h3 className="text-xl font-bold">
+                        {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                      </h3>
+                      
+                      <button
+                        type="button"
+                        onClick={() => navigateMonth(1)}
+                        className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+                      >
+                        Next →
+                      </button>
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {renderDesktopCalendar()}
+                    </div>
+
+                    {/* Legend */}
+                    <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
+                        <span>Available Slot</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-blue-100 border-2 border-blue-500 rounded"></div>
+                        <span>Selected Slot</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
+                        <span>Not Available</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-gray-100 border-2 border-gray-200 rounded"></div>
+                        <span>Past Date</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 bg-gray-100 border-2 border-gray-200 rounded"></div>
-            <span>Past Date</span>
+
+          {/* Selected Time Slot Display */}
+          {formData.selectedTimeSlot && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h4 className="font-semibold text-green-800 mb-2">Selected Time Slot:</h4>
+              {(() => {
+                const selectedSlot = availableTimeSlots.find(slot => slot.id === formData.selectedTimeSlot);
+                return selectedSlot ? (
+                  <div className="text-green-700">
+                    <p><strong>{selectedSlot.display_date}</strong></p>
+                    <p>{selectedSlot.label} ({selectedSlot.display_time})</p>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          )}
+
+          {/* Budget Expectation */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Budget Expectation (Optional)
+            </label>
+            <input
+              type="text"
+              name="budgetExpectation"
+              value={formData.budgetExpectation}
+              onChange={handleInputChange}
+              placeholder="e.g. £200-300, or 'flexible'"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
-        </div>
+
+          {/* Additional Notes */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Additional Notes (Optional)
+            </label>
+            <textarea
+              name="additionalNotes"
+              value={formData.additionalNotes}
+              onChange={handleInputChange}
+              rows="3"
+              placeholder="Any other information that might be helpful..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Submit Button */}
+          <div className="flex gap-4">
+            <button
+              type="submit"
+              disabled={submitting || availableTimeSlots.length === 0}
+              className={`flex-1 py-3 px-6 rounded-md font-medium ${
+                submitting || availableTimeSlots.length === 0
+                  ? 'bg-gray-400 text-white cursor-not-allowed'
+                  : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
+            >
+              {submitting ? 'Sending Request...' : 'Send Quote Request'}
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => navigate('/browse')}
+              className="px-6 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
 
-      {/* Quick Stats */}
-      <div className="mt-6 grid md:grid-cols-3 gap-4">
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-green-700">
-            {totalAvailableSlots}
-          </div>
-          <div className="text-green-600">Available Time Slots</div>
-        </div>
-        
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-red-700">
-            {totalBookedSlots}
-          </div>
-          <div className="text-red-600">Booked Time Slots</div>
-        </div>
-        
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-          <div className="text-2xl font-bold text-blue-700">
-            {totalAvailableSlots + totalBookedSlots}
-          </div>
-          <div className="text-blue-600">Total Time Slots</div>
-        </div>
+      {/* Time Slot Modal for Mobile */}
+      {renderTimeSlotModal()}
+
+      {/* Help Text */}
+      <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 className="font-medium text-blue-900 mb-2">What happens next?</h3>
+        <ul className="text-sm text-blue-800 space-y-1">
+          <li>• Your request (with photos if added) will be sent to {tradesman.name}</li>
+          <li>• You'll be taken to the Quote Requests page to track progress</li>
+          <li>• The tradesman can ask questions and discuss the job with you</li>
+          <li>• They can accept at their standard rate (£{tradesman.hourlyRate}/hour) or propose a custom quote</li>
+          <li>• Once you both agree, you'll proceed to payment and booking confirmation</li>
+        </ul>
       </div>
     </div>
   );
 };
 
-export default ManageAvailability;
+export default BookingRequest;
