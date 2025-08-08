@@ -362,7 +362,7 @@ const QuoteRequests = () => {
   };
 
   // 🆕 NEW: Handle customer dismissal (removes from both sides, tracks in admin)
-  const handleCustomerDismissQuote = async (quoteRequestId) => {
+  const handleCustomerDismissQuote = async (quoteRequestId, dismissalReason = '') => {
     try {
       const quote = quoteRequests.find(q => q.id === quoteRequestId);
       if (!quote) return;
@@ -371,6 +371,7 @@ const QuoteRequests = () => {
       await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
         dismissed_by_customer: true,
         status: 'dismissed_by_customer',
+        dismissal_reason: dismissalReason || 'No reason provided',
         dismissed_at: new Date().toISOString(),
         dismissed_by: currentUser.uid,
         updated_at: new Date().toISOString()
@@ -382,7 +383,7 @@ const QuoteRequests = () => {
         user_id: currentUser.uid,
         user_type: 'system',
         user_name: 'System',
-        comment: `Quote request dismissed by customer - removed from both sides (admin tracking)`,
+        comment: `Quote request dismissed by customer - removed from both sides (admin tracking)${dismissalReason ? `\nReason: ${dismissalReason}` : ''}`,
         timestamp: new Date().toISOString()
       });
 
@@ -819,19 +820,34 @@ const QuoteRequests = () => {
                             <p className="text-red-700 text-sm mb-3">
                               Complete payment to confirm this job and move it to your Active Jobs.
                             </p>
-                            <button
-                              onClick={() => navigate('/payment-checkout', { 
-                                state: { 
-                                  quoteId: request.id,                  // FIXED: PaymentCheckout expects 'quoteId'
-                                  quoteData: request,                   // FIXED: PaymentCheckout expects 'quoteData'
-                                  finalPrice: request.final_agreed_price, // FIXED: PaymentCheckout expects 'finalPrice'
-                                  paymentRequired: true
-                                }
-                              })}
-                              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium"
-                            >
-                              💳 Complete Payment ({request.final_agreed_price})
-                            </button>
+                            <div className="flex gap-3">
+                              <button
+                                onClick={() => navigate('/payment-checkout', { 
+                                  state: { 
+                                    quoteId: request.id,                  // FIXED: PaymentCheckout expects 'quoteId'
+                                    quoteData: request,                   // FIXED: PaymentCheckout expects 'quoteData'
+                                    finalPrice: request.final_agreed_price, // FIXED: PaymentCheckout expects 'finalPrice'
+                                    paymentRequired: true
+                                  }
+                                })}
+                                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium"
+                              >
+                                💳 Complete Payment ({request.final_agreed_price})
+                              </button>
+                              
+                              {/* 🆕 NEW: Allow dismissal even at payment stage */}
+                              <button
+                                onClick={() => {
+                                  const reason = prompt('Please provide a reason for dismissing this quote (optional):');
+                                  if (reason !== null) { // User didn't cancel
+                                    handleCustomerDismissQuote(request.id, reason);
+                                  }
+                                }}
+                                className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+                              >
+                                Dismiss Quote
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <p className="text-red-700 text-sm">
@@ -985,8 +1001,9 @@ const QuoteRequests = () => {
                           <div className="flex gap-3">
                             <button
                               onClick={() => {
-                                if (confirm('Dismiss this quote request? This will remove it from both your list and the tradesman\'s list. This action cannot be undone.')) {
-                                  handleCustomerDismissQuote(request.id);
+                                const reason = prompt('Please provide a reason for dismissing this quote (optional):');
+                                if (reason !== null) { // User didn't cancel
+                                  handleCustomerDismissQuote(request.id, reason);
                                 }
                               }}
                               className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
@@ -1039,8 +1056,9 @@ const QuoteRequests = () => {
                               {/* 🆕 NEW: Customer dismissal option */}
                               <button
                                 onClick={() => {
-                                  if (confirm('Dismiss this quote request? This will remove it from both your list and the tradesman\'s list. This action cannot be undone.')) {
-                                    handleCustomerDismissQuote(request.id);
+                                  const reason = prompt('Please provide a reason for dismissing this quote (optional):');
+                                  if (reason !== null) { // User didn't cancel
+                                    handleCustomerDismissQuote(request.id, reason);
                                   }
                                 }}
                                 className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
@@ -1066,8 +1084,9 @@ const QuoteRequests = () => {
                           <div className="flex gap-3">
                             <button
                               onClick={() => {
-                                if (confirm('Dismiss this quote request? This will remove it from both your list and the tradesman\'s list. This action cannot be undone.')) {
-                                  handleCustomerDismissQuote(request.id);
+                                const reason = prompt('Please provide a reason for dismissing this quote (optional):');
+                                if (reason !== null) { // User didn't cancel
+                                  handleCustomerDismissQuote(request.id, reason);
                                 }
                               }}
                               className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
