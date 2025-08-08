@@ -51,7 +51,7 @@ const CheckoutForm = ({ amount, quoteData, onSuccess, onError }) => {
         const paymentData = {
           amount,
           currency: 'gbp',
-          quoteId: quoteData.id,
+          quoteId: quoteData.id || jobId, // 🔧 FIXED: Use jobId as fallback
           customerId: quoteData.customer_id,
           tradesmanId: quoteData.tradesman_id,
           tradesmanName: quoteData.tradesman_name,
