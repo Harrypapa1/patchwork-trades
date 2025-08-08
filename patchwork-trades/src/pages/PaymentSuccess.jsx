@@ -43,18 +43,36 @@ const PaymentSuccess = () => {
         console.log('📊 Job data received:', job);
         console.log('💰 Payment amount:', paymentAmount);
         
-        // STEP 1: Create new job in active_jobs collection
+        // STEP 1: Create new job in active_jobs collection with clean data structure
         const activeJobData = {
-          // Copy all quote data to active job (excluding quote-specific fields)
-          ...job,
+          // Core job info
+          job_title: job.job_title,
+          job_description: job.job_description,
+          customer_id: job.customer_id,
+          tradesman_id: job.tradesman_id,
+          customer_name: job.customer_name,
+          tradesman_name: job.tradesman_name,
+          customer_email: job.customer_email,
+          tradesman_email: job.tradesman_email,
+          customer_photo: job.customer_photo,
+          tradesman_photo: job.tradesman_photo,
           
-          // Payment and status info - ACCURATE FIGURES FOR ADMIN TRACKING
+          // Job details
+          job_images: job.job_images || [],
+          additional_notes: job.additional_notes || '',
+          urgency: job.urgency || 'normal',
+          selected_time_slot: job.selected_time_slot,
+          preferred_dates_list: job.preferred_dates_list,
+          budget_expectation: job.budget_expectation,
+          tradesman_hourly_rate: job.tradesman_hourly_rate,
+          
+          // Payment and status info
           quote_id: jobId,
-          final_price: `£${paymentAmount}`,           // Keep as string for display
-          agreed_price: paymentAmount,                // Job value as number for admin dashboard
-          platform_fee: 0,                          // Currently 0% but could be: parseFloat((paymentAmount * 0.05).toFixed(2))
-          platform_commission_rate: 0,              // Track commission rate (currently 0%)
-          theoretical_commission: parseFloat((paymentAmount * 0.05).toFixed(2)), // What commission WOULD be at 5%
+          final_price: `£${paymentAmount}`,
+          agreed_price: paymentAmount,
+          platform_fee: 0,
+          platform_commission_rate: 0,
+          theoretical_commission: parseFloat((paymentAmount * 0.05).toFixed(2)),
           payment_intent_id: paymentIntent?.id || null,
           status: 'accepted',
           
@@ -63,15 +81,6 @@ const PaymentSuccess = () => {
           updated_at: new Date().toISOString(),
           payment_completed_at: new Date().toISOString()
         };
-
-        // Remove quote-specific fields that don't belong in active jobs
-        delete activeJobData.has_custom_quote;
-        delete activeJobData.custom_quote;
-        delete activeJobData.has_customer_counter;
-        delete activeJobData.customer_counter_quote;
-        delete activeJobData.customer_reasoning;
-        delete activeJobData.payment_required;
-        delete activeJobData.final_agreed_price;
 
         console.log('📋 Creating active job with data:', activeJobData);
         const activeJobRef = await addDoc(collection(db, 'active_jobs'), activeJobData);
