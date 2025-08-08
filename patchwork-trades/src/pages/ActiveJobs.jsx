@@ -1253,7 +1253,6 @@ Are you sure you want to cancel?`;
             <div className="bg-white rounded-lg shadow-md p-6 text-center">
               <p className="text-gray-500">No cancelled jobs.</p>
             </div>
-          </div>
           ) : (
             <div className="space-y-6">
               {getCancelledJobs().map((job) => (
