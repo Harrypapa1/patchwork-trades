@@ -28,6 +28,9 @@ const BookingRequest = () => {
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [isMobileView, setIsMobileView] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
 
   // Time slot definitions
   const TIME_SLOTS = {
@@ -36,16 +39,28 @@ const BookingRequest = () => {
     'evening': { label: 'Evening', time: '5pm-8pm', start: '17:00', end: '20:00' }
   };
 
-  // Form state - UPDATED for single time slot selection
+  // Form state
   const [formData, setFormData] = useState({
     jobTitle: '',
     jobDescription: '',
     urgency: 'normal',
-    selectedTimeSlot: '', // CHANGED: single selection instead of array
+    selectedTimeSlot: '',
     budgetExpectation: '',
     additionalNotes: '',
     jobImages: []
   });
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobileView(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     if (!tradesmanId) {
@@ -65,7 +80,7 @@ const BookingRequest = () => {
         setTradesman({ id: tradesmanDoc.id, ...tradesmanDoc.data() });
       }
 
-      // Get availability - UPDATED for time slots
+      // Get availability
       const availabilityQuery = query(
         collection(db, 'availability'),
         where('tradesman_id', '==', tradesmanId)
@@ -164,9 +179,94 @@ const BookingRequest = () => {
     });
   };
 
+  const getSlotsForDate = (dateStr) => {
+    return availableTimeSlots.filter(slot => slot.date === dateStr);
+  };
+
+  const getSlotStatus = (dateStr, slotId) => {
+    const slotsForDate = getSlotsForDate(dateStr);
+    const hasSlot = slotsForDate.find(slot => slot.slot_id === slotId);
+    return hasSlot ? 'available' : 'unavailable';
+  };
+
+  const handleTimeSlotSelection = (slotId) => {
+    if (formData.selectedTimeSlot === slotId) {
+      // Deselect if already selected
+      setFormData(prev => ({
+        ...prev,
+        selectedTimeSlot: ''
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        selectedTimeSlot: slotId
+      }));
+    }
+  };
+
+  // Mobile calendar rendering
+  const renderMobileCalendar = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(currentDate);
+    const firstDay = getFirstDayOfMonth(currentDate);
+    
+    const days = [];
+
+    // Empty cells for days before the first day of the month
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
+    }
+
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateString(year, month, day);
+      const isPast = isDateInPast(year, month, day);
+      const slotsForDate = getSlotsForDate(dateStr);
+      
+      let className = "aspect-square p-2 rounded-lg border-2 transition-all duration-200 touch-manipulation cursor-pointer ";
+      
+      if (isPast) {
+        className += "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200";
+      } else if (slotsForDate.length > 0) {
+        className += "bg-white border-blue-300 hover:border-blue-500 active:scale-95";
+      } else {
+        className += "bg-gray-50 border-gray-200 cursor-not-allowed";
+      }
+
+      days.push(
+        <button
+          key={day}
+          className={className}
+          onClick={() => {
+            if (isPast || slotsForDate.length === 0) return;
+            setSelectedDate(dateStr);
+            setShowTimeSlotModal(true);
+          }}
+          style={{ minHeight: '60px' }}
+          disabled={isPast || slotsForDate.length === 0}
+        >
+          <div className="flex flex-col items-center justify-center h-full">
+            <div className="font-bold text-lg mb-1">{day}</div>
+            <div className="flex gap-1">
+              {slotsForDate.length > 0 && (
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+              )}
+            </div>
+            <div className="text-xs text-gray-600 mt-1">
+              {slotsForDate.length > 0 ? `${slotsForDate.length}` : ''}
+            </div>
+          </div>
+        </button>
+      );
+    }
+
+    return days;
+  };
+
+  // Desktop time slots rendering
   const renderTimeSlots = (dateStr, isPast) => {
-    // Find available slots for this date
-    const slotsForDate = availableTimeSlots.filter(slot => slot.date === dateStr);
+    const slotsForDate = getSlotsForDate(dateStr);
     
     return (
       <div className="space-y-1 mt-1">
@@ -181,7 +281,7 @@ const BookingRequest = () => {
             className += "bg-gray-100 text-gray-400 cursor-not-allowed";
           } else if (availableSlot) {
             if (isSelected) {
-              className += "bg-blue-100 text-blue-800 border border-blue-300";
+              className += "bg-blue-100 text-blue-800 border border-blue-500";
             } else {
               className += "bg-green-100 text-green-800 hover:bg-green-200 border border-green-300";
             }
@@ -213,7 +313,8 @@ const BookingRequest = () => {
     );
   };
 
-  const renderBookingCalendar = () => {
+  // Desktop calendar rendering
+  const renderDesktopCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const daysInMonth = getDaysInMonth(currentDate);
@@ -260,6 +361,80 @@ const BookingRequest = () => {
     return days;
   };
 
+  // Time slot modal for mobile
+  const renderTimeSlotModal = () => {
+    if (!showTimeSlotModal || !selectedDate) return null;
+
+    const dateDisplay = new Date(selectedDate).toLocaleDateString('en-GB', { 
+      weekday: 'long', 
+      day: 'numeric', 
+      month: 'long' 
+    });
+
+    const slotsForDate = getSlotsForDate(selectedDate);
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50">
+        <div className="bg-white rounded-t-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+          <div className="p-4 border-b sticky top-0 bg-white">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">{dateDisplay}</h3>
+              <button
+                onClick={() => setShowTimeSlotModal(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          
+          <div className="p-4 space-y-3">
+            {Object.keys(TIME_SLOTS).map(slotId => {
+              const availableSlot = slotsForDate.find(slot => slot.slot_id === slotId);
+              const slotInfo = TIME_SLOTS[slotId];
+              const isSelected = formData.selectedTimeSlot === availableSlot?.id;
+              
+              if (!availableSlot) return null; // Don't show unavailable slots on mobile
+              
+              let buttonClass = "w-full p-4 rounded-lg text-left transition-colors border-2 ";
+              
+              if (isSelected) {
+                buttonClass += "bg-blue-100 text-blue-800 border-blue-500";
+              } else {
+                buttonClass += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200";
+              }
+
+              return (
+                <button
+                  key={slotId}
+                  className={buttonClass}
+                  onClick={() => {
+                    handleTimeSlotSelection(availableSlot.id);
+                    setShowTimeSlotModal(false);
+                  }}
+                  style={{ minHeight: '60px' }}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="font-semibold text-lg">{slotInfo.label}</div>
+                      <div className="text-sm opacity-75">{slotInfo.time}</div>
+                    </div>
+                    <div className="text-sm font-medium">
+                      {isSelected ? '✓ Selected' : 'Select'}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          
+          {/* Bottom padding for safe area */}
+          <div className="h-4"></div>
+        </div>
+      </div>
+    );
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -268,15 +443,7 @@ const BookingRequest = () => {
     }));
   };
 
-  // UPDATED: Handle single time slot selection
-  const handleTimeSlotSelection = (slotId) => {
-    setFormData(prev => ({
-      ...prev,
-      selectedTimeSlot: slotId
-    }));
-  };
-
-  // Image compression function - MORE AGGRESSIVE
+  // Image compression function
   const compressImage = (file, maxWidth = 400, quality = 0.6) => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
@@ -284,12 +451,10 @@ const BookingRequest = () => {
       const img = new Image();
       
       img.onload = () => {
-        // More aggressive sizing
         const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
         canvas.width = img.width * ratio;
         canvas.height = img.height * ratio;
         
-        // Draw and compress more
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.toBlob(resolve, 'image/jpeg', quality);
       };
@@ -313,7 +478,6 @@ const BookingRequest = () => {
     
     if (files.length === 0) return;
     
-    // Check total images limit
     if (formData.jobImages.length + files.length > 3) {
       alert('Maximum 3 images allowed (to keep file sizes manageable)');
       return;
@@ -325,19 +489,14 @@ const BookingRequest = () => {
       const newImages = [];
       
       for (const file of files) {
-        // Check file size (max 2MB before compression)
         if (file.size > 2 * 1024 * 1024) {
           alert(`${file.name} is too large. Please choose images under 2MB.`);
           continue;
         }
         
-        // Compress the image aggressively
         const compressedFile = await compressImage(file, 400, 0.5);
-        
-        // Convert to base64
         const base64 = await fileToBase64(compressedFile);
         
-        // Check final base64 size (should be under 100KB after compression)
         if (base64.length > 150000) {
           alert(`${file.name} is still too large after compression. Try a smaller/simpler image.`);
           continue;
@@ -380,7 +539,6 @@ const BookingRequest = () => {
       return;
     }
 
-    // UPDATED: Check for selected time slot
     if (!formData.selectedTimeSlot) {
       alert('Please select a time slot.');
       return;
@@ -392,7 +550,7 @@ const BookingRequest = () => {
       // Find the selected time slot details
       const selectedSlot = availableTimeSlots.find(slot => slot.id === formData.selectedTimeSlot);
       
-      // 🆕 NEW: Create quote request instead of booking
+      // Create quote request
       const quoteRequestData = {
         // Customer information
         customer_id: currentUser.uid,
@@ -415,7 +573,7 @@ const BookingRequest = () => {
         urgency: formData.urgency,
         budget_expectation: formData.budgetExpectation,
         
-        // UPDATED: Save selected time slot details instead of preferred dates
+        // Save selected time slot details
         selected_time_slot: {
           id: selectedSlot.id,
           date: selectedSlot.date,
@@ -439,17 +597,17 @@ const BookingRequest = () => {
         // Timestamps
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days from now
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
       };
 
       console.log('Creating quote request:', quoteRequestData);
-      const quoteRef = await addDoc(collection(db, 'quote_requests'), quoteRequestData); // 🆕 NEW COLLECTION
+      const quoteRef = await addDoc(collection(db, 'quote_requests'), quoteRequestData);
 
-      // Send message using existing message structure (updated for quote reference)
+      // Send message
       console.log('Sending message for quote request:', quoteRef.id);
       await addDoc(collection(db, 'messages'), {
-        booking_id: quoteRef.id, // Legacy field for backward compatibility
-        quote_request_id: quoteRef.id, // New field
+        booking_id: quoteRef.id,
+        quote_request_id: quoteRef.id,
         sender_id: currentUser.uid,
         sender_name: customerProfile?.name || currentUser.email,
         receiver_id: tradesmanId,
@@ -478,8 +636,8 @@ Thanks!`,
         attached_images: formData.jobImages
       });
 
-      // Navigate to quote requests instead of booking requests
-      navigate('/quote-requests', { // 🆕 NEW ROUTE
+      // Navigate to quote requests
+      navigate('/quote-requests', {
         state: { 
           success: 'Quote request sent successfully! The tradesman will respond shortly.'
         }
@@ -662,48 +820,156 @@ Thanks!`,
             </select>
           </div>
 
-          {/* UPDATED: Available Time Slots Selection */}
+          {/* Calendar-based Time Slot Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Time Slot *
+              Select Time Slot * {formData.selectedTimeSlot && <span className="text-green-600 font-medium">✓ Selected</span>}
             </label>
+            
             {availableTimeSlots.length === 0 ? (
               <div className="text-center py-8 bg-gray-50 rounded-lg border">
                 <p className="text-gray-500 mb-2">No time slots currently available</p>
                 <p className="text-gray-400 text-sm">The tradesman hasn't set any available time slots, or all their slots are booked</p>
               </div>
             ) : (
-              <div className="space-y-3 max-h-60 overflow-y-auto">
-                {availableTimeSlots.map(slot => (
-                  <label
-                    key={slot.id}
-                    className={`cursor-pointer flex items-center p-3 border rounded-md transition-colors ${
-                      formData.selectedTimeSlot === slot.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="selectedTimeSlot"
-                      value={slot.id}
-                      checked={formData.selectedTimeSlot === slot.id}
-                      onChange={() => handleTimeSlotSelection(slot.id)}
-                      className="mr-3"
-                    />
-                    <div>
-                      <div className="font-medium text-gray-900">
-                        {slot.display_date}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {slot.label} ({slot.display_time})
+              <div className="bg-gray-50 rounded-lg p-4">
+                {isMobileView ? (
+                  // Mobile Calendar View
+                  <div>
+                    {/* Instructions */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                      <p className="text-blue-800 text-sm">
+                        <strong>Tap any date</strong> with a blue dot to see available time slots
+                      </p>
+                    </div>
+
+                    {/* Month navigation */}
+                    <div className="flex justify-between items-center mb-4">
+                      <button
+                        type="button"
+                        onClick={() => navigateMonth(-1)}
+                        className="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 text-sm"
+                      >
+                        ← Prev
+                      </button>
+                      
+                      <h3 className="text-lg font-semibold">
+                        {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                      </h3>
+                      
+                      <button
+                        type="button"
+                        onClick={() => navigateMonth(1)}
+                        className="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 text-sm"
+                      >
+                        Next →
+                      </button>
+                    </div>
+
+                    {/* Day headers */}
+                    <div className="grid grid-cols-7 gap-1 mb-2">
+                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                        <div key={day} className="text-center font-medium text-gray-600 text-sm py-2">
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    {/* Calendar grid */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {renderMobileCalendar()}
+                    </div>
+                    
+                    {/* Legend */}
+                    <div className="mt-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                        <span>Available time slots</span>
                       </div>
                     </div>
-                  </label>
-                ))}
+                  </div>
+                ) : (
+                  // Desktop Calendar View
+                  <div>
+                    {/* Instructions */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                      <h4 className="font-semibold text-blue-800 mb-2">Select your preferred time slot:</h4>
+                      <ul className="text-blue-700 text-sm space-y-1">
+                        <li>• <strong>Green slots</strong> = Available for booking</li>
+                        <li>• <strong>Blue slots</strong> = Your selected slot</li>
+                        <li>• <strong>Gray slots</strong> = Not available</li>
+                        <li>• Click any green time slot to select it</li>
+                      </ul>
+                    </div>
+
+                    {/* Calendar Header */}
+                    <div className="flex justify-between items-center mb-4">
+                      <button
+                        type="button"
+                        onClick={() => navigateMonth(-1)}
+                        className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+                      >
+                        ← Previous
+                      </button>
+                      
+                      <h3 className="text-xl font-bold">
+                        {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                      </h3>
+                      
+                      <button
+                        type="button"
+                        onClick={() => navigateMonth(1)}
+                        className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
+                      >
+                        Next →
+                      </button>
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {renderDesktopCalendar()}
+                    </div>
+
+                    {/* Legend */}
+                    <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
+                        <span>Available Slot</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-blue-100 border-2 border-blue-500 rounded"></div>
+                        <span>Selected Slot</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
+                        <span>Not Available</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 bg-gray-100 border-2 border-gray-200 rounded"></div>
+                        <span>Past Date</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
+
+          {/* Selected Time Slot Display */}
+          {formData.selectedTimeSlot && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h4 className="font-semibold text-green-800 mb-2">Selected Time Slot:</h4>
+              {(() => {
+                const selectedSlot = availableTimeSlots.find(slot => slot.id === formData.selectedTimeSlot);
+                return selectedSlot ? (
+                  <div className="text-green-700">
+                    <p><strong>{selectedSlot.display_date}</strong></p>
+                    <p>{selectedSlot.label} ({selectedSlot.display_time})</p>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          )}
 
           {/* Budget Expectation */}
           <div>
@@ -759,6 +1025,9 @@ Thanks!`,
           </div>
         </form>
       </div>
+
+      {/* Time Slot Modal for Mobile */}
+      {renderTimeSlotModal()}
 
       {/* Help Text */}
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
