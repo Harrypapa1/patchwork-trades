@@ -169,18 +169,20 @@ const Navbar = () => {
     e.stopPropagation();
   };
 
+  // Clear notifications when clicking nav links
+  const clearNotifications = (type) => {
+    setNotifications(prev => ({
+      ...prev,
+      [type]: 0
+    }));
+  };
+
   // Notification badge component
-  const NotificationBadge = ({ count, type = 'default' }) => {
+  const NotificationBadge = ({ count }) => {
     if (count === 0) return null;
     
-    const badgeColors = {
-      default: 'bg-red-500 text-white',
-      warning: 'bg-yellow-500 text-black',
-      success: 'bg-green-500 text-white'
-    };
-    
     return (
-      <span className={`absolute -top-2 -right-2 ${badgeColors[type]} text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center z-10`}>
+      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center z-10">
         {count > 99 ? '99+' : count}
       </span>
     );
@@ -234,9 +236,10 @@ const Navbar = () => {
                   <Link 
                     to="/quote-requests" 
                     className="hover:text-blue-200 transition-colors relative"
+                    onClick={() => clearNotifications('quoteRequests')}
                   >
                     Quote Requests
-                    <NotificationBadge count={notifications.quoteRequests} type="warning" />
+                    <NotificationBadge count={notifications.quoteRequests} />
                   </Link>
 
                   {/* Weekly Jobs */}
@@ -245,9 +248,9 @@ const Navbar = () => {
                   </Link>
 
                   {/* Active Jobs with Notification */}
-                  <Link to="/active-jobs" className="hover:text-blue-200 transition-colors relative">
+                  <Link to="/active-jobs" className="hover:text-blue-200 transition-colors relative" onClick={() => clearNotifications('activeJobs')}>
                     Active Jobs
-                    <NotificationBadge count={notifications.activeJobs} type="success" />
+                    <NotificationBadge count={notifications.activeJobs} />
                   </Link>
 
                   {userType === 'tradesman' && (
@@ -381,11 +384,14 @@ const Navbar = () => {
                 <Link 
                   to="/quote-requests" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
-                  onClick={closeMenu}
+                  onClick={() => {
+                    clearNotifications('quoteRequests');
+                    closeMenu();
+                  }}
                 >
                   Quote Requests
                   {notifications.quoteRequests > 0 && (
-                    <span className="absolute top-2 right-3 bg-yellow-500 text-black text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
+                    <span className="absolute top-2 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
                       {notifications.quoteRequests}
                     </span>
                   )}
@@ -404,11 +410,14 @@ const Navbar = () => {
                 <Link 
                   to="/active-jobs" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
-                  onClick={closeMenu}
+                  onClick={() => {
+                    clearNotifications('activeJobs');
+                    closeMenu();
+                  }}
                 >
                   Active Jobs
                   {notifications.activeJobs > 0 && (
-                    <span className="absolute top-2 right-3 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
+                    <span className="absolute top-2 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center">
                       {notifications.activeJobs}
                     </span>
                   )}
