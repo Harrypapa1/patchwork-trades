@@ -824,6 +824,40 @@ const ActiveJobs = () => {
 
       await updateDoc(doc(db, 'active_jobs', jobId), updateData);
       
+      // 🆕 NEW: Create completed_jobs entry when job is marked as completed
+      if (newStatus === 'completed') {
+        const job = activeJobs.find(j => j.id === jobId);
+        if (job) {
+          const completedJobData = {
+            job_id: jobId,
+            tradesman_id: job.tradesman_id,
+            tradesman_name: job.tradesman_name,
+            tradesman_trade_type: job.tradesman_trade_type || job.job_category || 'Tradesman',
+            tradesman_area: job.tradesman_area || job.area_covered || 'London',
+            customer_id: job.customer_id,
+            customer_name: job.customer_name,
+            job_title: job.job_title,
+            job_description: job.job_description,
+            final_price: job.final_price || job.customer_counter_quote || job.agreed_price || '£0',
+            completed_at: new Date().toISOString(),
+            created_at: job.created_at,
+            agreed_date: job.agreed_date,
+            payment_intent_id: job.payment_intent_id,
+            // Add any other fields needed for top earners calculations
+            area_covered: job.tradesman_area || job.area_covered || 'London',
+            trade_type: job.tradesman_trade_type || job.job_category || 'Tradesman'
+          };
+          
+          try {
+            await addDoc(collection(db, 'completed_jobs'), completedJobData);
+            console.log('✅ Completed job entry created successfully');
+          } catch (error) {
+            console.error('❌ Error creating completed_jobs entry:', error);
+            // Don't fail the whole operation if this fails
+          }
+        }
+      }
+      
       // Add system comment for status changes
       let statusMessage = '';
       if (newStatus === 'pending_approval') {
@@ -1252,30 +1286,6 @@ Are you sure you want to cancel?`;
           {getCancelledJobs().length === 0 ? (
             <div className="bg-white rounded-lg shadow-md p-6 text-center">
               <p className="text-gray-500">No cancelled jobs.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {getCancelledJobs().map((job) => (
-                <JobCard 
-                  key={job.id} 
-                  job={job}
-                  userType={userType}
-                  isExpanded={expandedJobs[job.id]}
-                  onToggleExpand={handleToggleExpand}
-                  comments={comments[job.id] || []}
-                  newComments={newComments}
-                  setNewComments={setNewComments}
-                  submittingComment={submittingComment}
-                  onSubmitComment={handleSubmitComment}
-                  onUpdateJobStatus={handleUpdateJobStatus}
-                  onCancelJob={handleCancelJob}
-                  onOpenReviewModal={handleOpenReviewModal}
-                  onHireAgain={handleHireAgain}
-                  getFinalPrice={getFinalPrice}
-                  getStatusColor={getStatusColor}
-                  formatDate={formatDate}
-                />
-              ))}
             </div>
           )}
         </div>
