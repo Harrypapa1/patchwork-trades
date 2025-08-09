@@ -28,16 +28,15 @@ const TopEarners = () => {
 
       console.log('🔴 Setting up real-time Top Earners listener...');
 
-      // Set up real-time listener for completed jobs this week
-      const jobsQuery = query(
-        collection(db, 'active_jobs'),
-        where('status', '==', 'completed'),
+      // 🆕 NEW: Query completed_jobs collection instead of filtering active_jobs
+      const completedJobsQuery = query(
+        collection(db, 'completed_jobs'),
         where('completed_at', '>=', weekRange.start),
         where('completed_at', '<=', weekRange.end)
       );
 
       unsubscribe = onSnapshot(
-        jobsQuery,
+        completedJobsQuery,
         async (snapshot) => {
           console.log('📊 Top Earners data updated - processing changes...');
           
@@ -53,7 +52,7 @@ const TopEarners = () => {
               tradesmanEarnings[tradesmanId] = {
                 tradesman_id: tradesmanId,
                 tradesman_name: job.tradesman_name,
-                trade_type: job.tradesman_trade_type || job.job_category || 'Tradesman',
+                trade_type: job.tradesman_trade_type || job.trade_type || 'Tradesman',
                 area: job.tradesman_area || job.area_covered || 'London',
                 total_earnings: 0,
                 job_count: 0,
@@ -61,7 +60,7 @@ const TopEarners = () => {
               };
             }
 
-            const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || job.agreed_price || '0');
+            const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || '0');
             tradesmanEarnings[tradesmanId].total_earnings += jobEarnings;
             tradesmanEarnings[tradesmanId].job_count += 1;
             tradesmanEarnings[tradesmanId].jobs.push(job);
@@ -150,7 +149,7 @@ const TopEarners = () => {
     const userJobs = allJobs.filter(job => job.tradesman_id === currentUser.uid);
     
     const totalEarnings = userJobs.reduce((sum, job) => {
-      const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || job.customer_counter_quote?.replace(/£|,/g, '') || job.agreed_price || '0');
+      const jobEarnings = parseFloat(job.final_price?.replace(/£|,/g, '') || '0');
       return sum + jobEarnings;
     }, 0);
 
