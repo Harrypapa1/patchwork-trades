@@ -1287,6 +1287,30 @@ Are you sure you want to cancel?`;
             <div className="bg-white rounded-lg shadow-md p-6 text-center">
               <p className="text-gray-500">No cancelled jobs.</p>
             </div>
+          ) : (
+            <div className="space-y-6">
+              {getCancelledJobs().map((job) => (
+                <JobCard 
+                  key={job.id} 
+                  job={job}
+                  userType={userType}
+                  isExpanded={expandedJobs[job.id]}
+                  onToggleExpand={handleToggleExpand}
+                  comments={comments[job.id] || []}
+                  newComments={newComments}
+                  setNewComments={setNewComments}
+                  submittingComment={submittingComment}
+                  onSubmitComment={handleSubmitComment}
+                  onUpdateJobStatus={handleUpdateJobStatus}
+                  onCancelJob={handleCancelJob}
+                  onOpenReviewModal={handleOpenReviewModal}
+                  onHireAgain={handleHireAgain}
+                  getFinalPrice={getFinalPrice}
+                  getStatusColor={getStatusColor}
+                  formatDate={formatDate}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
