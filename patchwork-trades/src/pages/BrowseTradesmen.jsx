@@ -762,7 +762,8 @@ const BrowseTradesmen = () => {
           )}
         </div>
       ) : (
-        <div className={`grid gap-6 ${isMobileView ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+                    <div className={`grid gap-6 ${isMobileView ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+              {filteredTradesmen.map(tradesman => {
           {filteredTradesmen.map(tradesman => {
             const isExpanded = expandedCard === tradesman.id;
             const details = detailedData[tradesman.id] || { portfolio_images: [], reviews: [] };
@@ -914,12 +915,12 @@ const BrowseTradesmen = () => {
                 </div>
               </div>
             );
-          })}
+              })}
+            </div>
+          )}
+          
+          {isMobileView && <div className="h-20"></div>}
         </div>
-      )}
-      
-      {isMobileView && hasSearched && <div className="h-20"></div>}
-      </div>
       )}
     </div>
   );
