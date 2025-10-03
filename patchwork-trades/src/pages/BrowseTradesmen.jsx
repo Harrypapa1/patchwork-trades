@@ -29,6 +29,11 @@ const BrowseTradesmen = () => {
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchTimeout, setSearchTimeout] = useState(null);
+  
+  // New filter states
+  const [insuranceFilter, setInsuranceFilter] = useState('any');
+  const [minRatingFilter, setMinRatingFilter] = useState('any');
+  const [sortByPrice, setSortByPrice] = useState('default');
 
   const TIME_SLOTS = {
     'morning': { label: 'Morning', time: '9am-1pm' },
@@ -67,7 +72,7 @@ const BrowseTradesmen = () => {
 
   useEffect(() => {
     filterTradesmen();
-  }, [tradesmen, searchQuery, selectedDates]);
+  }, [tradesmen, searchQuery, selectedDates, insuranceFilter, minRatingFilter, sortByPrice]);
 
   useEffect(() => {
     // Cleanup timeout on unmount
@@ -205,6 +210,7 @@ const BrowseTradesmen = () => {
   const filterTradesmen = () => {
     let filtered = tradesmen;
 
+    // Search query filter
     if (searchQuery.trim()) {
       const matchedTrades = matchTradesByKeywords(searchQuery);
       
@@ -225,11 +231,55 @@ const BrowseTradesmen = () => {
       }
     }
 
+    // Date filter
     if (selectedDates.length > 0) {
       filtered = filtered.filter(tradesman => {
         return selectedDates.some(selectedDate => {
           return tradesman.availableTimeSlots.some(slot => slot.date === selectedDate);
         });
+      });
+    }
+
+    // Insurance filter
+    if (insuranceFilter !== 'any') {
+      filtered = filtered.filter(tradesman => {
+        if (insuranceFilter === 'fully-insured') {
+          return tradesman.insuranceStatus === 'Fully Insured';
+        } else if (insuranceFilter === 'public-liability') {
+          return tradesman.insuranceStatus === 'Public Liability Only';
+        } else if (insuranceFilter === 'not-insured') {
+          return tradesman.insuranceStatus === 'Not Insured' || !tradesman.insuranceStatus;
+        }
+        return true;
+      });
+    }
+
+    // Minimum rating filter
+    if (minRatingFilter !== 'any') {
+      const minRating = parseFloat(minRatingFilter);
+      filtered = filtered.filter(tradesman => {
+        // Only include tradesmen with reviews who meet the minimum rating
+        return tradesman.review_count > 0 && tradesman.average_rating >= minRating;
+      });
+    }
+
+    // Sort by price
+    if (sortByPrice !== 'default') {
+      filtered = [...filtered].sort((a, b) => {
+        const aRate = a.hourlyRate;
+        const bRate = b.hourlyRate;
+        
+        // Put tradesmen without rates at the end
+        if (!aRate && !bRate) return 0;
+        if (!aRate) return 1;
+        if (!bRate) return -1;
+        
+        if (sortByPrice === 'low-to-high') {
+          return aRate - bRate;
+        } else if (sortByPrice === 'high-to-low') {
+          return bRate - aRate;
+        }
+        return 0;
       });
     }
 
@@ -266,6 +316,9 @@ const BrowseTradesmen = () => {
     setHasSearched(false);
     setShowDateFilter(false);
     setSelectedDates([]);
+    setInsuranceFilter('any');
+    setMinRatingFilter('any');
+    setSortByPrice('default');
   };
 
   const toggleDate = (dateStr) => {
@@ -281,6 +334,18 @@ const BrowseTradesmen = () => {
     setSelectedDates([]);
     setHasSearched(false);
     setShowDateFilter(false);
+    setInsuranceFilter('any');
+    setMinRatingFilter('any');
+    setSortByPrice('default');
+  };
+
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (selectedDates.length > 0) count++;
+    if (insuranceFilter !== 'any') count++;
+    if (minRatingFilter !== 'any') count++;
+    if (sortByPrice !== 'default') count++;
+    return count;
   };
 
   const getDaysInMonth = (date) => {
@@ -632,18 +697,16 @@ const BrowseTradesmen = () => {
           </div>
 
           <div className="mb-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-              <div>
-                <p className="text-lg font-medium text-gray-900">
-                  {filteredTradesmen.length} {filteredTradesmen.length === 1 ? 'tradesperson' : 'tradespeople'} found
-                </p>
-                {searchQuery && (
-                  <p className="text-sm text-gray-600">
-                    for "{searchQuery}"
-                  </p>
-                )}
-              </div>
-              
+            <div className="mb-4">
+              <p className="text-lg font-medium text-gray-900">
+                {filteredTradesmen.length} {filteredTradesmen.length === 1 ? 'tradesperson' : 'tradespeople'} found
+                {searchQuery && ` for "${searchQuery}"`}
+              </p>
+            </div>
+            
+            {/* Horizontal Filter Bar */}
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              {/* Date Filter Button */}
               <button
                 onClick={() => setShowDateFilter(!showDateFilter)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -657,8 +720,129 @@ const BrowseTradesmen = () => {
                   </span>
                 )}
               </button>
+
+              {/* Insurance Filter */}
+              <div className="relative">
+                <select
+                  value={insuranceFilter}
+                  onChange={(e) => setInsuranceFilter(e.target.value)}
+                  className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
+                  style={{ minHeight: '44px' }}
+                >
+                  <option value="any">🛡️ Any Insurance</option>
+                  <option value="fully-insured">Fully Insured</option>
+                  <option value="public-liability">Public Liability</option>
+                  <option value="not-insured">Not Insured</option>
+                </select>
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Rating Filter */}
+              <div className="relative">
+                <select
+                  value={minRatingFilter}
+                  onChange={(e) => setMinRatingFilter(e.target.value)}
+                  className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
+                  style={{ minHeight: '44px' }}
+                >
+                  <option value="any">⭐ Any Rating</option>
+                  <option value="4">4+ Stars</option>
+                  <option value="3">3+ Stars</option>
+                  <option value="2">2+ Stars</option>
+                </select>
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Sort by Price */}
+              <div className="relative">
+                <select
+                  value={sortByPrice}
+                  onChange={(e) => setSortByPrice(e.target.value)}
+                  className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
+                  style={{ minHeight: '44px' }}
+                >
+                  <option value="default">💰 Sort by Price</option>
+                  <option value="low-to-high">Price: Low to High</option>
+                  <option value="high-to-low">Price: High to Low</option>
+                </select>
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Clear all filters button */}
+              {getActiveFilterCount() > 0 && (
+                <button
+                  onClick={clearAllFilters}
+                  className="px-4 py-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  Clear all filters ({getActiveFilterCount()})
+                </button>
+              )}
             </div>
 
+            {/* Active Filter Badges */}
+            {getActiveFilterCount() > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {selectedDates.length > 0 && (
+                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                    📅 {selectedDates.length} date{selectedDates.length > 1 ? 's' : ''}
+                    <button
+                      onClick={() => setSelectedDates([])}
+                      className="text-blue-600 hover:text-blue-800 font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+                {insuranceFilter !== 'any' && (
+                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                    🛡️ {insuranceFilter === 'fully-insured' ? 'Fully Insured' : 
+                        insuranceFilter === 'public-liability' ? 'Public Liability' : 'Not Insured'}
+                    <button
+                      onClick={() => setInsuranceFilter('any')}
+                      className="text-blue-600 hover:text-blue-800 font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+                {minRatingFilter !== 'any' && (
+                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                    ⭐ {minRatingFilter}+ Stars
+                    <button
+                      onClick={() => setMinRatingFilter('any')}
+                      className="text-blue-600 hover:text-blue-800 font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+                {sortByPrice !== 'default' && (
+                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                    💰 {sortByPrice === 'low-to-high' ? 'Low to High' : 'High to Low'}
+                    <button
+                      onClick={() => setSortByPrice('default')}
+                      className="text-blue-600 hover:text-blue-800 font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Date Filter Calendar */}
             {showDateFilter && (
               <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border border-gray-200">
                 <div className="flex justify-between items-center mb-4">
@@ -736,29 +920,20 @@ const BrowseTradesmen = () => {
                 )}
               </div>
             )}
-
-            {(searchQuery || selectedDates.length > 0) && (
-              <button
-                onClick={clearAllFilters}
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium mb-4"
-              >
-                Clear all filters
-              </button>
-            )}
           </div>
 
           {filteredTradesmen.length === 0 ? (
             <div className="text-center py-16 bg-gray-50 rounded-lg">
               <div>
                 <p className="text-xl text-gray-600 mb-4">
-                  No tradespeople found matching your search
+                  No tradespeople found matching your filters
                 </p>
-                <p className="text-gray-500 mb-6">Try different keywords or clear your filters</p>
+                <p className="text-gray-500 mb-6">Try adjusting your filters or clearing them</p>
                 <button
                   onClick={clearAllFilters}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 >
-                  Show all tradespeople
+                  Clear all filters
                 </button>
               </div>
             </div>
