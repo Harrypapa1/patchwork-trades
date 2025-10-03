@@ -225,6 +225,13 @@ const Navbar = () => {
                     </Link>
                   )}
                   
+                  {/* MOVED TO FIRST: Manage Availability - Tradesman Only */}
+                  {userType === 'tradesman' && (
+                    <Link to="/manage-availability" className="hover:text-blue-200 transition-colors">
+                      Manage Availability
+                    </Link>
+                  )}
+                  
                   {/* Quote Requests with Notification */}
                   <Link 
                     to="/quote-requests" 
@@ -245,12 +252,6 @@ const Navbar = () => {
                     Active Jobs
                     <NotificationBadge count={notifications.activeJobs} />
                   </Link>
-
-                  {userType === 'tradesman' && (
-                    <Link to="/manage-availability" className="hover:text-blue-200 transition-colors">
-                      Manage Availability
-                    </Link>
-                  )}
                   
                   {/* Customer Dashboard with Dropdown */}
                   {userType === 'customer' && (
@@ -366,6 +367,17 @@ const Navbar = () => {
                   </Link>
                 )}
                 
+                {/* MOVED TO FIRST: Manage Availability - Tradesman Only */}
+                {userType === 'tradesman' && (
+                  <Link 
+                    to="/manage-availability" 
+                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
+                    onClick={closeMenu}
+                  >
+                    Manage Availability
+                  </Link>
+                )}
+                
                 {/* Quote Requests with Mobile Notification */}
                 <Link 
                   to="/quote-requests" 
@@ -408,16 +420,6 @@ const Navbar = () => {
                     </span>
                   )}
                 </Link>
-
-                {userType === 'tradesman' && (
-                  <Link 
-                    to="/manage-availability" 
-                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
-                    onClick={closeMenu}
-                  >
-                    Manage Availability
-                  </Link>
-                )}
                 
                 {/* Customer Dashboard Mobile with Dropdown */}
                 {userType === 'customer' && (
