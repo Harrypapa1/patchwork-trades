@@ -245,6 +245,12 @@ const BrowseTradesmen = () => {
       clearTimeout(searchTimeout);
     }
     
+    // If query is empty, immediately return to hero view
+    if (query.trim().length === 0) {
+      setHasSearched(false);
+      return;
+    }
+    
     // Set new timeout - wait 1 second after user stops typing
     const newTimeout = setTimeout(() => {
       if (query.trim().length > 0) {
