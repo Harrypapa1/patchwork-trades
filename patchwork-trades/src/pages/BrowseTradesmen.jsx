@@ -538,32 +538,81 @@ const BrowseTradesmen = () => {
   }
 
   return (
-    <div className={`${isMobileView ? 'max-w-full px-4' : 'max-w-7xl mx-auto px-6'} py-8`}>
-      {/* Hero Search Section */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold mb-3 text-gray-900">Find a Tradesperson</h1>
-        <p className="text-gray-600 mb-6">Search by describing what you need done</p>
-        
-        {/* Search Bar */}
-        <div className="relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={handleSearch}
-            placeholder="e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."
-            className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none shadow-sm"
-            style={{ minHeight: '56px' }}
-          />
-          {searchQuery && (
-            <button
-              onClick={clearSearch}
-              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl"
-            >
-              ×
-            </button>
-          )}
+    <div className="min-h-screen">
+      {/* Centered Hero Search Section - Google Style */}
+      {!hasSearched ? (
+        <div className="flex flex-col items-center justify-center min-h-[70vh] px-4">
+          <h1 className="text-5xl md:text-6xl font-bold mb-6 text-gray-900 text-center">
+            Find a Tradesperson
+          </h1>
+          <p className="text-xl text-gray-600 mb-8 text-center max-w-2xl">
+            Search by describing what you need done
+          </p>
+          
+          {/* Search Bar */}
+          <div className="relative w-full max-w-2xl">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={handleSearch}
+              placeholder="e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."
+              className="w-full px-6 py-5 text-lg border-2 border-gray-300 rounded-full focus:border-blue-500 focus:outline-none shadow-lg hover:shadow-xl transition-shadow"
+              style={{ minHeight: '64px' }}
+              autoFocus
+            />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-6 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          
+          {/* Optional: Popular searches */}
+          <div className="mt-8 text-center">
+            <p className="text-sm text-gray-500 mb-3">Popular searches:</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {['Plumber', 'Electrician', 'Painter', 'Gardener', 'Carpenter'].map(trade => (
+                <button
+                  key={trade}
+                  onClick={() => {
+                    setSearchQuery(trade.toLowerCase());
+                    setHasSearched(true);
+                  }}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700 transition-colors"
+                >
+                  {trade}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      ) : (
+        /* Results View - After Search */
+        <div className={`${isMobileView ? 'max-w-full px-4' : 'max-w-7xl mx-auto px-6'} py-8`}>
+          {/* Compact Search Bar at Top */}
+          <div className="mb-8">
+            <div className="relative max-w-3xl">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={handleSearch}
+                placeholder="e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."
+                className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-full focus:border-blue-500 focus:outline-none shadow-sm"
+                style={{ minHeight: '56px' }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={clearSearch}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
 
       {/* Results Count & Date Filter Toggle */}
       {hasSearched && (
@@ -691,7 +740,9 @@ const BrowseTradesmen = () => {
       )}
 
       {/* Results */}
-      {filteredTradesmen.length === 0 ? (
+      {hasSearched && (
+        <>
+          {filteredTradesmen.length === 0 ? (
         <div className="text-center py-16 bg-gray-50 rounded-lg">
           {hasSearched ? (
             <div>
@@ -867,7 +918,9 @@ const BrowseTradesmen = () => {
         </div>
       )}
       
-      {isMobileView && <div className="h-20"></div>}
+      {isMobileView && hasSearched && <div className="h-20"></div>}
+        </div>
+      )}
     </div>
   );
 };
