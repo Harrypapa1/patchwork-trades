@@ -12,14 +12,33 @@ import {
 import { db } from '../config/firebase';
 
 const TopEarners = () => {
-  const { currentUser, userType } = useAuth();
+  const { currentUser, userType, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [topEarners, setTopEarners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUserStats, setCurrentUserStats] = useState(null);
   const [weekRange, setWeekRange] = useState({ start: '', end: '' });
 
+  // 🔒 AUTHENTICATION CHECK - Redirect if not logged in
   useEffect(() => {
+    if (!authLoading && !currentUser) {
+      console.log('🚫 No authenticated user, redirecting to login...');
+      navigate('/login');
+    }
+  }, [currentUser, authLoading, navigate]);
+
+  useEffect(() => {
+    // Don't set up listener until we know auth state
+    if (authLoading) {
+      console.log('⏳ Waiting for auth to initialize...');
+      return;
+    }
+
+    if (!currentUser) {
+      console.log('❌ No user found after auth loaded');
+      return;
+    }
+
     let unsubscribe = null;
     
     const setupRealTimeListener = () => {
@@ -116,9 +135,7 @@ const TopEarners = () => {
       );
     };
 
-    if (currentUser) {
-      setupRealTimeListener();
-    }
+    setupRealTimeListener();
 
     // Cleanup function
     return () => {
@@ -127,7 +144,7 @@ const TopEarners = () => {
         unsubscribe();
       }
     };
-  }, [currentUser, userType]);
+  }, [currentUser, userType, authLoading]);
 
   const getCurrentWeekRange = () => {
     const now = new Date();
@@ -197,12 +214,15 @@ const TopEarners = () => {
     return stars;
   };
 
-  if (loading) {
+  // Show loading while auth is initializing
+  if (authLoading || loading) {
     return (
       <div className="max-w-6xl mx-auto p-4">
         <div className="text-center py-8">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-2 text-gray-600">Loading real-time top earners...</p>
+          <p className="mt-2 text-gray-600">
+            {authLoading ? 'Checking authentication...' : 'Loading real-time top earners...'}
+          </p>
         </div>
       </div>
     );
@@ -426,7 +446,7 @@ const TopEarners = () => {
         </button>
         <button
           onClick={() => navigate('/manage-availability')}
-          className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+          className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:purple-700 transition-colors font-medium"
         >
           📅 Manage Availability
         </button>
