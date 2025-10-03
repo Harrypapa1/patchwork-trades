@@ -392,16 +392,16 @@ const TopPerformers = () => {
       {/* Customer Benefits Section */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
         <h3 className="text-lg font-semibold text-blue-800 mb-4">🛡️ Your Protection When Booking</h3>
-        <div className="grid grid-cols-1 md:grid-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="text-center">
             <div className="text-3xl mb-2">💳</div>
             <h4 className="font-semibold text-blue-800 mb-1">Secure Payments</h4>
             <p className="text-blue-700 text-sm">Your payment is protected until job completion</p>
           </div>
           <div className="text-center">
-            <div className="text-3xl mb-2">📋</div>
-            <h4 className="font-semibold text-blue-800 mb-1">Quality Guarantee</h4>
-            <p className="text-blue-700 text-sm">All work comes with our satisfaction guarantee</p>
+            <div className="text-3xl mb-2">✅</div>
+            <h4 className="font-semibold text-blue-800 mb-1">Verified Tradesmen</h4>
+            <p className="text-blue-700 text-sm">All profiles are verified and rated by real customers</p>
           </div>
           <div className="text-center">
             <div className="text-3xl mb-2">🆘</div>
