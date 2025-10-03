@@ -28,6 +28,7 @@ const BrowseTradesmen = () => {
   const [selectedDates, setSelectedDates] = useState([]);
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
   const TIME_SLOTS = {
     'morning': { label: 'Morning', time: '9am-1pm' },
@@ -67,6 +68,15 @@ const BrowseTradesmen = () => {
   useEffect(() => {
     filterTradesmen();
   }, [tradesmen, searchQuery, selectedDates]);
+
+  useEffect(() => {
+    // Cleanup timeout on unmount
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchTimeout]);
 
   const fetchTradesmen = async () => {
     try {
@@ -229,9 +239,20 @@ const BrowseTradesmen = () => {
   const handleSearch = (e) => {
     const query = e.target.value;
     setSearchQuery(query);
-    if (query.trim() && !hasSearched) {
-      setHasSearched(true);
+    
+    // Clear existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
     }
+    
+    // Set new timeout - wait 1 second after user stops typing
+    const newTimeout = setTimeout(() => {
+      if (query.trim().length > 0) {
+        setHasSearched(true);
+      }
+    }, 1000);
+    
+    setSearchTimeout(newTimeout);
   };
 
   const clearSearch = () => {
@@ -571,6 +592,7 @@ const BrowseTradesmen = () => {
                   onClick={() => {
                     setSearchQuery(trade.toLowerCase());
                     setHasSearched(true);
+                    filterTradesmen();
                   }}
                   className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700 transition-colors"
                 >
