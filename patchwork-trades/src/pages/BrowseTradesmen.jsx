@@ -23,21 +23,18 @@ const BrowseTradesmen = () => {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   
-  // Search and filters
   const [searchQuery, setSearchQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedDates, setSelectedDates] = useState([]);
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // Time slot definitions
   const TIME_SLOTS = {
     'morning': { label: 'Morning', time: '9am-1pm' },
     'afternoon': { label: 'Afternoon', time: '1pm-5pm' },
     'evening': { label: 'Evening', time: '5pm-8pm' }
   };
 
-  // Enhanced keyword matching
   const TRADE_KEYWORDS = {
     'Electrician': ['electric', 'electrician', 'wire', 'wiring', 'light', 'lighting', 'socket', 'fuse', 'rewire', 'power', 'electrical'],
     'Plumber': ['plumb', 'plumber', 'tap', 'leak', 'pipe', 'drain', 'toilet', 'sink', 'bathroom', 'boiler', 'heating', 'water'],
@@ -198,7 +195,6 @@ const BrowseTradesmen = () => {
   const filterTradesmen = () => {
     let filtered = tradesmen;
 
-    // Search filter
     if (searchQuery.trim()) {
       const matchedTrades = matchTradesByKeywords(searchQuery);
       
@@ -219,7 +215,6 @@ const BrowseTradesmen = () => {
       }
     }
 
-    // Date filter
     if (selectedDates.length > 0) {
       filtered = filtered.filter(tradesman => {
         return selectedDates.some(selectedDate => {
@@ -261,7 +256,6 @@ const BrowseTradesmen = () => {
     setShowDateFilter(false);
   };
 
-  // Calendar helper functions
   const getDaysInMonth = (date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
@@ -539,7 +533,6 @@ const BrowseTradesmen = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Centered Hero Search Section - Google Style */}
       {!hasSearched ? (
         <div className="flex flex-col items-center justify-center min-h-[70vh] px-4">
           <h1 className="text-5xl md:text-6xl font-bold mb-6 text-gray-900 text-center">
@@ -549,7 +542,6 @@ const BrowseTradesmen = () => {
             Search by describing what you need done
           </p>
           
-          {/* Search Bar */}
           <div className="relative w-full max-w-2xl">
             <input
               type="text"
@@ -570,7 +562,6 @@ const BrowseTradesmen = () => {
             )}
           </div>
           
-          {/* Optional: Popular searches */}
           <div className="mt-8 text-center">
             <p className="text-sm text-gray-500 mb-3">Popular searches:</p>
             <div className="flex flex-wrap justify-center gap-2">
@@ -590,9 +581,7 @@ const BrowseTradesmen = () => {
           </div>
         </div>
       ) : (
-        /* Results View - After Search */
         <div className={`${isMobileView ? 'max-w-full px-4' : 'max-w-7xl mx-auto px-6'} py-8`}>
-          {/* Compact Search Bar at Top */}
           <div className="mb-8">
             <div className="relative max-w-3xl">
               <input
@@ -614,307 +603,287 @@ const BrowseTradesmen = () => {
             </div>
           </div>
 
-      {/* Results Count & Date Filter Toggle */}
-      {hasSearched && (
-        <div className="mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-            <div>
-              <p className="text-lg font-medium text-gray-900">
-                {filteredTradesmen.length} {filteredTradesmen.length === 1 ? 'tradesperson' : 'tradespeople'} found
-              </p>
-              {searchQuery && (
-                <p className="text-sm text-gray-600">
-                  for "{searchQuery}"
+          <div className="mb-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+              <div>
+                <p className="text-lg font-medium text-gray-900">
+                  {filteredTradesmen.length} {filteredTradesmen.length === 1 ? 'tradesperson' : 'tradespeople'} found
                 </p>
-              )}
-            </div>
-            
-            <button
-              onClick={() => setShowDateFilter(!showDateFilter)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-              style={{ minHeight: '44px' }}
-            >
-              <span>📅</span>
-              <span>{showDateFilter ? 'Hide' : 'Filter by'} dates</span>
-              {selectedDates.length > 0 && (
-                <span className="bg-blue-800 px-2 py-1 rounded-full text-xs">
-                  {selectedDates.length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* Date Filter Panel */}
-          {showDateFilter && (
-            <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border border-gray-200">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold">Select dates you need work done</h3>
-                {selectedDates.length > 0 && (
-                  <button
-                    onClick={() => setSelectedDates([])}
-                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                  >
-                    Clear dates
-                  </button>
+                {searchQuery && (
+                  <p className="text-sm text-gray-600">
+                    for "{searchQuery}"
+                  </p>
                 )}
               </div>
-
-              {/* Calendar Navigation */}
-              <div className="flex justify-between items-center mb-4">
-                <button
-                  onClick={() => navigateMonth(-1)}
-                  className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  ← Prev
-                </button>
-                
-                <h4 className="text-lg font-medium">
-                  {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-                </h4>
-                
-                <button
-                  onClick={() => navigateMonth(1)}
-                  className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Next →
-                </button>
-              </div>
-
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-1 mb-4">
-                {renderCalendar()}
-              </div>
-
-              {/* Legend */}
-              <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-green-50 border-2 border-green-300 rounded"></div>
-                  <span>Available</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 bg-blue-500 border-2 border-blue-600 rounded"></div>
-                  <span>Selected</span>
-                </div>
-              </div>
-
-              {/* Selected Dates Display */}
-              {selectedDates.length > 0 && (
-                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm font-medium text-blue-900 mb-2">
-                    Selected dates ({selectedDates.length}):
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedDates.map(dateStr => (
-                      <span 
-                        key={dateStr} 
-                        className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2"
-                      >
-                        {new Date(dateStr).toLocaleDateString('en-GB', { 
-                          day: 'numeric', 
-                          month: 'short'
-                        })}
-                        <button
-                          onClick={() => toggleDate(dateStr)}
-                          className="text-blue-600 hover:text-blue-800 font-bold"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Clear All Filters */}
-          {(searchQuery || selectedDates.length > 0) && (
-            <button
-              onClick={clearAllFilters}
-              className="text-blue-600 hover:text-blue-800 text-sm font-medium mb-4"
-            >
-              Clear all filters
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Results */}
-      {hasSearched && (
-        <>
-          {filteredTradesmen.length === 0 ? (
-        <div className="text-center py-16 bg-gray-50 rounded-lg">
-          {hasSearched ? (
-            <div>
-              <p className="text-xl text-gray-600 mb-4">
-                No tradespeople found matching your search
-              </p>
-              <p className="text-gray-500 mb-6">Try different keywords or clear your filters</p>
+              
               <button
-                onClick={clearAllFilters}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                onClick={() => setShowDateFilter(!showDateFilter)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                style={{ minHeight: '44px' }}
               >
-                Show all tradespeople
+                <span>📅</span>
+                <span>{showDateFilter ? 'Hide' : 'Filter by'} dates</span>
+                {selectedDates.length > 0 && (
+                  <span className="bg-blue-800 px-2 py-1 rounded-full text-xs">
+                    {selectedDates.length}
+                  </span>
+                )}
               </button>
             </div>
-          ) : (
-            <p className="text-gray-500">Start by searching for what you need done</p>
-          )}
-        </div>
-      ) : (
-                    <div className={`grid gap-6 ${isMobileView ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
-              {filteredTradesmen.map(tradesman => {
-          {filteredTradesmen.map(tradesman => {
-            const isExpanded = expandedCard === tradesman.id;
-            const details = detailedData[tradesman.id] || { portfolio_images: [], reviews: [] };
-            
-            return (
-              <div key={tradesman.id} className="relative">
-                {isExpanded && (
-                  <div 
-                    className="fixed inset-0 bg-black bg-opacity-50 z-10"
-                    onClick={() => setExpandedCard(null)}
-                  ></div>
-                )}
-                
-                <div className={`bg-white rounded-lg shadow-md transition-all duration-300 ${
-                  isExpanded ? 'relative z-20 transform scale-105 shadow-2xl ring-4 ring-blue-500' : ''
-                }`}>
-                  <div 
-                    className="p-6 cursor-pointer"
-                    onClick={(e) => {
-                      if (!e.target.closest('button')) {
-                        toggleExpanded(tradesman.id);
-                      }
-                    }}
+
+            {showDateFilter && (
+              <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border border-gray-200">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold">Select dates you need work done</h3>
+                  {selectedDates.length > 0 && (
+                    <button
+                      onClick={() => setSelectedDates([])}
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      Clear dates
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex justify-between items-center mb-4">
+                  <button
+                    onClick={() => navigateMonth(-1)}
+                    className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                   >
-                    {/* Profile Header */}
-                    <div className="flex items-center mb-4">
-                      {tradesman.profilePhoto ? (
-                        <LazyImage 
-                          src={tradesman.profilePhoto} 
-                          alt={tradesman.name} 
-                          className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-3"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mr-3 text-xs">
-                          No Photo
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <h3 className="text-xl font-semibold">{tradesman.name}</h3>
-                        <p className="text-gray-600">{tradesman.tradeType}</p>
-                      </div>
-                      
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleExpanded(tradesman.id);
-                        }}
-                        className="text-blue-600 hover:text-blue-800 ml-2 p-2 rounded-full hover:bg-blue-50"
-                        style={{ minHeight: '44px', minWidth: '44px' }}
-                      >
-                        {isExpanded ? '−' : '+'}
-                      </button>
-                    </div>
+                    ← Prev
+                  </button>
+                  
+                  <h4 className="text-lg font-medium">
+                    {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                  </h4>
+                  
+                  <button
+                    onClick={() => navigateMonth(1)}
+                    className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    Next →
+                  </button>
+                </div>
 
-                    {/* Stats Row */}
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-4 text-sm">
-                        <div className="flex items-center space-x-1">
-                          <span className="text-green-600 font-medium">
-                            {tradesman.completed_jobs_count} jobs
-                          </span>
-                        </div>
-                        
-                        {tradesman.average_rating > 0 && (
-                          <div className="flex items-center space-x-1">
-                            <div className="flex">{renderStars(tradesman.average_rating)}</div>
-                            <span className="text-gray-600">
-                              ({tradesman.review_count})
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                <div className="grid grid-cols-7 gap-1 mb-4">
+                  {renderCalendar()}
+                </div>
 
-                    {/* Key Details */}
-                    <div className="mb-4 space-y-2">
-                      <p className="text-gray-600"><strong>Area:</strong> {tradesman.areaCovered}</p>
-                      
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <p className="text-blue-800 font-semibold">
-                          {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
-                        </p>
-                        {tradesman.yearsExperience && (
-                          <p className="text-blue-600 text-sm">{tradesman.yearsExperience} years experience</p>
-                        )}
-                      </div>
-
-                      {tradesman.insuranceStatus && (
-                        <div>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
-                            tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {tradesman.insuranceStatus}
-                          </span>
-                        </div>
-                      )}
-
-                      <p className="text-gray-600 text-sm">
-                        {isExpanded ? tradesman.bio : `${tradesman.bio?.slice(0, 100)}...`}
-                      </p>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="border-t pt-3 space-y-4">
-                        {tradesman.servicesOffered && (
-                          <div>
-                            <h4 className="font-medium mb-2 text-sm">Services Offered:</h4>
-                            <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                              {tradesman.servicesOffered}
-                            </p>
-                          </div>
-                        )}
-
-                        <div>
-                          <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
-                          {renderPortfolioGallery(details.portfolio_images, loadingDetails)}
-                        </div>
-
-                        <div>
-                          <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
-                          {renderReviews(details.reviews, loadingDetails)}
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="border-t pt-4 mt-4">
-                      <h4 className="font-medium mb-2">Available Time Slots:</h4>
-                      {renderAvailableTimeSlots(tradesman)}
-                      
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleBooking(tradesman.id);
-                        }}
-                        className={`w-full py-3 px-4 rounded font-medium transition-colors ${
-                          tradesman.availableTimeSlots.length > 0 
-                            ? 'bg-green-600 text-white hover:bg-green-700' 
-                            : 'bg-gray-400 text-white cursor-not-allowed'
-                        }`}
-                        style={{ minHeight: '48px' }}
-                        disabled={tradesman.availableTimeSlots.length === 0}
-                      >
-                        {tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available'}
-                      </button>
-                    </div>
+                <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-green-50 border-2 border-green-300 rounded"></div>
+                    <span>Available</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-blue-500 border-2 border-blue-600 rounded"></div>
+                    <span>Selected</span>
                   </div>
                 </div>
+
+                {selectedDates.length > 0 && (
+                  <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-blue-900 mb-2">
+                      Selected dates ({selectedDates.length}):
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedDates.map(dateStr => (
+                        <span 
+                          key={dateStr} 
+                          className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2"
+                        >
+                          {new Date(dateStr).toLocaleDateString('en-GB', { 
+                            day: 'numeric', 
+                            month: 'short'
+                          })}
+                          <button
+                            onClick={() => toggleDate(dateStr)}
+                            className="text-blue-600 hover:text-blue-800 font-bold"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            );
+            )}
+
+            {(searchQuery || selectedDates.length > 0) && (
+              <button
+                onClick={clearAllFilters}
+                className="text-blue-600 hover:text-blue-800 text-sm font-medium mb-4"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
+
+          {filteredTradesmen.length === 0 ? (
+            <div className="text-center py-16 bg-gray-50 rounded-lg">
+              <div>
+                <p className="text-xl text-gray-600 mb-4">
+                  No tradespeople found matching your search
+                </p>
+                <p className="text-gray-500 mb-6">Try different keywords or clear your filters</p>
+                <button
+                  onClick={clearAllFilters}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Show all tradespeople
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className={`grid gap-6 ${isMobileView ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+              {filteredTradesmen.map(tradesman => {
+                const isExpanded = expandedCard === tradesman.id;
+                const details = detailedData[tradesman.id] || { portfolio_images: [], reviews: [] };
+                
+                return (
+                  <div key={tradesman.id} className="relative">
+                    {isExpanded && (
+                      <div 
+                        className="fixed inset-0 bg-black bg-opacity-50 z-10"
+                        onClick={() => setExpandedCard(null)}
+                      ></div>
+                    )}
+                    
+                    <div className={`bg-white rounded-lg shadow-md transition-all duration-300 ${
+                      isExpanded ? 'relative z-20 transform scale-105 shadow-2xl ring-4 ring-blue-500' : ''
+                    }`}>
+                      <div 
+                        className="p-6 cursor-pointer"
+                        onClick={(e) => {
+                          if (!e.target.closest('button')) {
+                            toggleExpanded(tradesman.id);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center mb-4">
+                          {tradesman.profilePhoto ? (
+                            <LazyImage 
+                              src={tradesman.profilePhoto} 
+                              alt={tradesman.name} 
+                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-3"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mr-3 text-xs">
+                              No Photo
+                            </div>
+                          )}
+                          <div className="flex-1">
+                            <h3 className="text-xl font-semibold">{tradesman.name}</h3>
+                            <p className="text-gray-600">{tradesman.tradeType}</p>
+                          </div>
+                          
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExpanded(tradesman.id);
+                            }}
+                            className="text-blue-600 hover:text-blue-800 ml-2 p-2 rounded-full hover:bg-blue-50"
+                            style={{ minHeight: '44px', minWidth: '44px' }}
+                          >
+                            {isExpanded ? '−' : '+'}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center space-x-4 text-sm">
+                            <div className="flex items-center space-x-1">
+                              <span className="text-green-600 font-medium">
+                                {tradesman.completed_jobs_count} jobs
+                              </span>
+                            </div>
+                            
+                            {tradesman.average_rating > 0 && (
+                              <div className="flex items-center space-x-1">
+                                <div className="flex">{renderStars(tradesman.average_rating)}</div>
+                                <span className="text-gray-600">
+                                  ({tradesman.review_count})
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mb-4 space-y-2">
+                          <p className="text-gray-600"><strong>Area:</strong> {tradesman.areaCovered}</p>
+                          
+                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                            <p className="text-blue-800 font-semibold">
+                              {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
+                            </p>
+                            {tradesman.yearsExperience && (
+                              <p className="text-blue-600 text-sm">{tradesman.yearsExperience} years experience</p>
+                            )}
+                          </div>
+
+                          {tradesman.insuranceStatus && (
+                            <div>
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
+                                tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {tradesman.insuranceStatus}
+                              </span>
+                            </div>
+                          )}
+
+                          <p className="text-gray-600 text-sm">
+                            {isExpanded ? tradesman.bio : `${tradesman.bio?.slice(0, 100)}...`}
+                          </p>
+                        </div>
+
+                        {isExpanded && (
+                          <div className="border-t pt-3 space-y-4">
+                            {tradesman.servicesOffered && (
+                              <div>
+                                <h4 className="font-medium mb-2 text-sm">Services Offered:</h4>
+                                <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                                  {tradesman.servicesOffered}
+                                </p>
+                              </div>
+                            )}
+
+                            <div>
+                              <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
+                              {renderPortfolioGallery(details.portfolio_images, loadingDetails)}
+                            </div>
+
+                            <div>
+                              <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
+                              {renderReviews(details.reviews, loadingDetails)}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="border-t pt-4 mt-4">
+                          <h4 className="font-medium mb-2">Available Time Slots:</h4>
+                          {renderAvailableTimeSlots(tradesman)}
+                          
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBooking(tradesman.id);
+                            }}
+                            className={`w-full py-3 px-4 rounded font-medium transition-colors ${
+                              tradesman.availableTimeSlots.length > 0 
+                                ? 'bg-green-600 text-white hover:bg-green-700' 
+                                : 'bg-gray-400 text-white cursor-not-allowed'
+                            }`}
+                            style={{ minHeight: '48px' }}
+                            disabled={tradesman.availableTimeSlots.length === 0}
+                          >
+                            {tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
               })}
             </div>
           )}
