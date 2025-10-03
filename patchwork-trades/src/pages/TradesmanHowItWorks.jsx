@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const TradesmanHowItWorks = () => {
-  // Simulated auth state - in real app this would come from useAuth()
-  const [userType] = useState('tradesman'); // Change to 'customer' to test restriction
+  const navigate = useNavigate();
+  const [userType] = useState('tradesman');
   
   const handleNavigation = (path) => {
-    // In real app this would use navigate()
-    alert(`Would navigate to: ${path}`);
+    navigate(path);
   };
 
-  // Redirect if not a tradesman
   if (userType !== 'tradesman') {
     return (
       <div className="max-w-4xl mx-auto text-center py-12">
@@ -29,13 +28,11 @@ const TradesmanHowItWorks = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-4">
-      {/* Hero Section */}
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold mb-4">How to Grow Your Trade Business</h1>
         <p className="text-xl text-gray-600">Build your professional reputation and earn more through Patchwork Trades</p>
       </div>
 
-      {/* Quick Start CTA */}
       <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8 text-center">
         <h2 className="text-2xl font-semibold text-green-800 mb-3">Start earning today!</h2>
         <p className="text-green-600 mb-4">Set up your profile and availability to receive your first quote requests</p>
@@ -55,9 +52,7 @@ const TradesmanHowItWorks = () => {
         </div>
       </div>
 
-      {/* Steps Section */}
       <div className="space-y-8">
-        {/* Step 1 */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="bg-green-600 text-white p-6">
             <div className="flex items-center">
@@ -129,7 +124,6 @@ const TradesmanHowItWorks = () => {
           </div>
         </div>
 
-        {/* Step 2 */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="bg-blue-600 text-white p-6">
             <div className="flex items-center">
@@ -203,7 +197,6 @@ const TradesmanHowItWorks = () => {
           </div>
         </div>
 
-        {/* Step 3 */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="bg-purple-600 text-white p-6">
             <div className="flex items-center">
@@ -280,7 +273,6 @@ const TradesmanHowItWorks = () => {
           </div>
         </div>
 
-        {/* Step 4 */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <div className="bg-red-600 text-white p-6">
             <div className="flex items-center">
@@ -378,7 +370,6 @@ const TradesmanHowItWorks = () => {
         </div>
       </div>
 
-      {/* Business Growth Features */}
       <div className="bg-white rounded-lg shadow-md p-6 mt-8">
         <h2 className="text-2xl font-semibold mb-6 text-center">Grow Your Business</h2>
         
@@ -409,7 +400,6 @@ const TradesmanHowItWorks = () => {
         </div>
       </div>
 
-      {/* Earnings Potential */}
       <div className="bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg p-8 mt-8">
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold mb-4">Your Earning Potential</h2>
@@ -446,7 +436,6 @@ const TradesmanHowItWorks = () => {
         </div>
       </div>
 
-      {/* Success Tips */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mt-8">
         <h3 className="text-lg font-semibold mb-4 text-center">Success Tips from Top-Earning Tradesmen</h3>
         <div className="grid md:grid-cols-2 gap-6 text-sm">
