@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const CustomerHowItWorks = () => {
+  const navigate = useNavigate();
   // Simulated auth state - in real app this would come from useAuth()
   const [userType] = useState('customer'); // Change to 'tradesman' to test restriction
   
   const handleNavigation = (path) => {
-    // In real app this would use navigate()
-    alert(`Would navigate to: ${path}`);
+    navigate(path);
   };
 
   // Redirect if not a customer
