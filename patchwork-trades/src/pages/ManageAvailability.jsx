@@ -483,14 +483,23 @@ const ManageAvailability = () => {
     );
   };
 
-  // Calculate stats
-  const totalAvailableSlots = availability.reduce((total, day) => 
-    total + (day.available_slots?.length || 0), 0
-  );
+  // Calculate stats - only count future/current dates
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   
-  const totalBookedSlots = bookedSlots.filter(booking => 
-    booking.status === 'accepted' || booking.status === 'in_progress'
-  ).length;
+  const totalAvailableSlots = availability.reduce((total, day) => {
+    const dayDate = new Date(day.date);
+    if (dayDate >= today) {
+      return total + (day.available_slots?.length || 0);
+    }
+    return total;
+  }, 0);
+  
+  const totalBookedSlots = bookedSlots.filter(booking => {
+    const bookingDate = new Date(booking.agreed_date);
+    return (booking.status === 'accepted' || booking.status === 'in_progress') 
+      && bookingDate >= today;
+  }).length;
 
   if (loading) {
     return <div className="text-center py-8">Loading calendar...</div>;
