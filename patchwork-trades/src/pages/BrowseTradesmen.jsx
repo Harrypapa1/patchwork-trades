@@ -23,17 +23,12 @@ const BrowseTradesmen = () => {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   
-  // Filters
-  const [selectedTradeTypes, setSelectedTradeTypes] = useState([]);
+  // Search and filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
   const [selectedDates, setSelectedDates] = useState([]);
+  const [showDateFilter, setShowDateFilter] = useState(false);
   const [currentDate, setCurrentDate] = useState(new Date());
-  
-  // Trade types list
-  const TRADE_TYPES = [
-    'Electrician', 'Plumber', 'Carpenter', 'Painter', 'Gardener', 
-    'Cleaner', 'Handyman', 'Roofer', 'Builder', 'Tiler', 
-    'Locksmith', 'Decorator', 'Flooring Specialist'
-  ];
 
   // Time slot definitions
   const TIME_SLOTS = {
@@ -42,15 +37,29 @@ const BrowseTradesmen = () => {
     'evening': { label: 'Evening', time: '5pm-8pm' }
   };
 
-  // Detect mobile viewport
+  // Enhanced keyword matching
+  const TRADE_KEYWORDS = {
+    'Electrician': ['electric', 'electrician', 'wire', 'wiring', 'light', 'lighting', 'socket', 'fuse', 'rewire', 'power', 'electrical'],
+    'Plumber': ['plumb', 'plumber', 'tap', 'leak', 'pipe', 'drain', 'toilet', 'sink', 'bathroom', 'boiler', 'heating', 'water'],
+    'Tiler': ['tile', 'tiles', 'tiler', 'tiling', 'grout', 'bathroom', 'kitchen', 'floor', 'wall'],
+    'Carpenter': ['carpenter', 'wood', 'cabinet', 'door', 'shelf', 'shelving', 'deck', 'fence', 'carpentry'],
+    'Painter': ['paint', 'painter', 'painting', 'decorator', 'decorate', 'wall', 'ceiling', 'redecorate'],
+    'Gardener': ['garden', 'gardener', 'lawn', 'grass', 'hedge', 'tree', 'landscaping', 'outdoor'],
+    'Cleaner': ['clean', 'cleaner', 'cleaning', 'tidy', 'deep clean', 'domestic'],
+    'Handyman': ['handyman', 'odd jobs', 'fix', 'repair', 'general', 'maintenance'],
+    'Roofer': ['roof', 'roofer', 'roofing', 'gutter', 'tiles', 'slate', 'leak'],
+    'Builder': ['builder', 'building', 'extension', 'renovation', 'construction', 'brick', 'wall'],
+    'Locksmith': ['lock', 'locksmith', 'key', 'door', 'security', 'broken lock'],
+    'Decorator': ['decorator', 'decorate', 'wallpaper', 'paint', 'interior'],
+    'Flooring Specialist': ['floor', 'flooring', 'laminate', 'carpet', 'vinyl', 'wood floor']
+  };
+
   useEffect(() => {
     const checkMobile = () => {
       setIsMobileView(window.innerWidth < 768);
     };
-    
     checkMobile();
     window.addEventListener('resize', checkMobile);
-    
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
@@ -60,7 +69,7 @@ const BrowseTradesmen = () => {
 
   useEffect(() => {
     filterTradesmen();
-  }, [tradesmen, selectedTradeTypes, selectedDates]);
+  }, [tradesmen, searchQuery, selectedDates]);
 
   const fetchTradesmen = async () => {
     try {
@@ -70,14 +79,12 @@ const BrowseTradesmen = () => {
       for (const tradesmanDoc of tradesmenSnapshot.docs) {
         const tradesmanData = tradesmanDoc.data();
         
-        // Fetch availability with time slots for this tradesman
         const availabilityQuery = query(
           collection(db, 'availability'),
           where('tradesman_id', '==', tradesmanDoc.id)
         );
         const availabilitySnapshot = await getDocs(availabilityQuery);
         
-        // Process availability data to extract individual time slots
         const availableTimeSlots = [];
         
         availabilitySnapshot.docs.forEach(doc => {
@@ -85,7 +92,6 @@ const BrowseTradesmen = () => {
           const date = availabilityData.date;
           const slots = availabilityData.available_slots || [];
           
-          // Only include future dates
           const slotDate = new Date(date);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
@@ -105,7 +111,6 @@ const BrowseTradesmen = () => {
           }
         });
 
-        // Sort slots by date then by time
         availableTimeSlots.sort((a, b) => {
           const dateCompare = new Date(a.date) - new Date(b.date);
           if (dateCompare !== 0) return dateCompare;
@@ -124,7 +129,7 @@ const BrowseTradesmen = () => {
           insuranceStatus: tradesmanData.insuranceStatus,
           profilePhoto: tradesmanData.profilePhoto,
           servicesOffered: tradesmanData.servicesOffered,
-          availableTimeSlots, // New structure with time slots
+          availableTimeSlots,
           completed_jobs_count: tradesmanData.completed_jobs_count || 0,
           average_rating: tradesmanData.average_rating || 0,
           review_count: tradesmanData.reviews?.length || 0
@@ -132,6 +137,7 @@ const BrowseTradesmen = () => {
       }
       
       setTradesmen(tradesmenData);
+      setFilteredTradesmen(tradesmenData);
     } catch (error) {
       console.error('Error fetching tradesmen:', error);
     } finally {
@@ -172,19 +178,48 @@ const BrowseTradesmen = () => {
     return { portfolio_images: [], reviews: [] };
   };
 
+  const matchTradesByKeywords = (query) => {
+    const lowerQuery = query.toLowerCase();
+    const matchedTrades = [];
+    
+    Object.entries(TRADE_KEYWORDS).forEach(([trade, keywords]) => {
+      const score = keywords.reduce((acc, keyword) => {
+        return acc + (lowerQuery.includes(keyword) ? 1 : 0);
+      }, 0);
+      
+      if (score > 0) {
+        matchedTrades.push({ trade, score });
+      }
+    });
+    
+    return matchedTrades.sort((a, b) => b.score - a.score).map(m => m.trade);
+  };
+
   const filterTradesmen = () => {
     let filtered = tradesmen;
 
-    // Filter by selected trade types
-    if (selectedTradeTypes.length > 0) {
-      filtered = filtered.filter(tradesman =>
-        selectedTradeTypes.some(tradeType => 
-          tradesman.tradeType.toLowerCase().includes(tradeType.toLowerCase())
-        )
-      );
+    // Search filter
+    if (searchQuery.trim()) {
+      const matchedTrades = matchTradesByKeywords(searchQuery);
+      
+      if (matchedTrades.length > 0) {
+        filtered = filtered.filter(tradesman =>
+          matchedTrades.some(trade => 
+            tradesman.tradeType.toLowerCase().includes(trade.toLowerCase())
+          ) ||
+          tradesman.servicesOffered?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          tradesman.bio?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      } else {
+        filtered = filtered.filter(tradesman =>
+          tradesman.tradeType.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          tradesman.servicesOffered?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          tradesman.bio?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      }
     }
 
-    // Filter by selected dates - only show tradesmen with availability on those dates
+    // Date filter
     if (selectedDates.length > 0) {
       filtered = filtered.filter(tradesman => {
         return selectedDates.some(selectedDate => {
@@ -196,12 +231,19 @@ const BrowseTradesmen = () => {
     setFilteredTradesmen(filtered);
   };
 
-  const toggleTradeType = (tradeType) => {
-    setSelectedTradeTypes(prev => 
-      prev.includes(tradeType)
-        ? prev.filter(type => type !== tradeType)
-        : [...prev, tradeType]
-    );
+  const handleSearch = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+    if (query.trim() && !hasSearched) {
+      setHasSearched(true);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setHasSearched(false);
+    setShowDateFilter(false);
+    setSelectedDates([]);
   };
 
   const toggleDate = (dateStr) => {
@@ -212,9 +254,11 @@ const BrowseTradesmen = () => {
     );
   };
 
-  const clearFilters = () => {
-    setSelectedTradeTypes([]);
+  const clearAllFilters = () => {
+    setSearchQuery('');
     setSelectedDates([]);
+    setHasSearched(false);
+    setShowDateFilter(false);
   };
 
   // Calendar helper functions
@@ -224,7 +268,7 @@ const BrowseTradesmen = () => {
 
   const getFirstDayOfMonth = (date) => {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-    return firstDay === 0 ? 6 : firstDay - 1; // Make Monday = 0
+    return firstDay === 0 ? 6 : firstDay - 1;
   };
 
   const formatDateString = (year, month, day) => {
@@ -246,107 +290,46 @@ const BrowseTradesmen = () => {
   };
 
   const hasAvailabilityOnDate = (dateStr) => {
-    return tradesmen.some(tradesman => 
+    return filteredTradesmen.some(tradesman => 
       tradesman.availableTimeSlots.some(slot => slot.date === dateStr)
     );
   };
 
-  // Mobile date selection calendar
-  const renderMobileDateSelection = () => {
+  const renderCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const daysInMonth = getDaysInMonth(currentDate);
     const firstDay = getFirstDayOfMonth(currentDate);
     
     const days = [];
+    const dayNames = isMobileView ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    // Empty cells for days before the first day of the month
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
-    }
-
-    // Days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = formatDateString(year, month, day);
-      const isPast = isDateInPast(year, month, day);
-      const hasAvailability = hasAvailabilityOnDate(dateStr);
-      const isSelected = selectedDates.includes(dateStr);
-      
-      let className = "aspect-square p-2 rounded-lg border-2 transition-all duration-200 touch-manipulation ";
-      
-      if (isPast) {
-        className += "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200";
-      } else if (isSelected) {
-        className += "bg-blue-500 text-white border-blue-600 transform scale-105 shadow-lg cursor-pointer";
-      } else if (hasAvailability) {
-        className += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200 cursor-pointer active:scale-95";
-      } else {
-        className += "bg-white text-gray-400 border-gray-200 cursor-not-allowed";
-      }
-
-      days.push(
-        <button
-          key={day}
-          className={className}
-          onClick={() => {
-            if (isPast || !hasAvailability) return;
-            toggleDate(dateStr);
-          }}
-          style={{ minHeight: '60px' }} // Ensure minimum touch target
-          disabled={isPast || !hasAvailability}
-        >
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="font-bold text-lg">{day}</div>
-            {hasAvailability && !isPast && (
-              <div className="w-2 h-2 bg-green-500 rounded-full mt-1"></div>
-            )}
-          </div>
-        </button>
-      );
-    }
-
-    return days;
-  };
-
-  // Desktop calendar (original)
-  const renderAvailabilityCalendar = () => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    const daysInMonth = getDaysInMonth(currentDate);
-    const firstDay = getFirstDayOfMonth(currentDate);
-    
-    const days = [];
-    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    // Day headers
     dayNames.forEach(day => {
       days.push(
-        <div key={day} className="p-2 text-center font-semibold text-gray-600 text-sm">
+        <div key={day} className="p-2 text-center font-semibold text-gray-600 text-xs">
           {day}
         </div>
       );
     });
 
-    // Empty cells for days before the first day of the month
     for (let i = 0; i < firstDay; i++) {
       days.push(<div key={`empty-${i}`} className="p-2"></div>);
     }
 
-    // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDateString(year, month, day);
       const isPast = isDateInPast(year, month, day);
       const hasAvailability = hasAvailabilityOnDate(dateStr);
       const isSelected = selectedDates.includes(dateStr);
       
-      let className = "p-3 text-center cursor-pointer rounded-lg border-2 transition-colors ";
+      let className = "p-2 text-center cursor-pointer rounded-lg border-2 transition-all ";
       
       if (isPast) {
         className += "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200";
       } else if (isSelected) {
-        className += "bg-blue-100 text-blue-800 border-blue-300";
+        className += "bg-blue-500 text-white border-blue-600 font-bold";
       } else if (hasAvailability) {
-        className += "bg-green-100 text-green-800 border-green-300 hover:bg-green-200";
+        className += "bg-green-50 text-green-800 border-green-300 hover:bg-green-100";
       } else {
         className += "bg-white text-gray-400 border-gray-200 cursor-not-allowed";
       }
@@ -359,11 +342,12 @@ const BrowseTradesmen = () => {
             if (isPast || !hasAvailability) return;
             toggleDate(dateStr);
           }}
+          style={{ minHeight: isMobileView ? '40px' : '50px' }}
         >
           <div className="font-medium">{day}</div>
           {hasAvailability && !isPast && (
             <div className="text-xs mt-1">
-              {isSelected ? 'Selected' : 'Available'}
+              {isSelected ? '✓' : '•'}
             </div>
           )}
         </div>
@@ -371,194 +355,6 @@ const BrowseTradesmen = () => {
     }
 
     return days;
-  };
-
-  // Date selection section with mobile optimization
-  const renderDateSelectionSection = () => {
-    if (!isMobileView) {
-      // Desktop version (original)
-      return (
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Select Available Dates</h2>
-          
-          {/* Calendar Header */}
-          <div className="flex justify-between items-center mb-4">
-            <button
-              onClick={() => navigateMonth(-1)}
-              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-            >
-              ← Previous
-            </button>
-            
-            <h3 className="text-xl font-semibold">
-              {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-            </h3>
-            
-            <button
-              onClick={() => navigateMonth(1)}
-              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-            >
-              Next →
-            </button>
-          </div>
-
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            {renderAvailabilityCalendar()}
-          </div>
-
-          {/* Legend */}
-          <div className="flex flex-wrap gap-4 justify-center text-sm mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
-              <span>Has Availability</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-blue-100 border-2 border-blue-300 rounded"></div>
-              <span>Selected</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-white border-2 border-gray-200 rounded"></div>
-              <span>No Availability</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 bg-gray-100 border-2 border-gray-200 rounded"></div>
-              <span>Past Date</span>
-            </div>
-          </div>
-          
-          {/* Selected Dates Display */}
-          {selectedDates.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-blue-800 font-medium mb-2">Selected Dates:</p>
-              <div className="flex flex-wrap gap-2">
-                {selectedDates.map(dateStr => (
-                  <span key={dateStr} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                    {new Date(dateStr).toLocaleDateString('en-GB', { 
-                      day: 'numeric', 
-                      month: 'short',
-                      weekday: 'short'
-                    })}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Filter Summary */}
-          <div className="flex justify-between items-center mt-4">
-            <p className="text-sm text-gray-600">
-              Showing {filteredTradesmen.length} of {tradesmen.length} tradesmen
-            </p>
-            
-            {(selectedTradeTypes.length > 0 || selectedDates.length > 0) && (
-              <button
-                onClick={clearFilters}
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-              >
-                Clear all filters
-              </button>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // Mobile version
-    return (
-      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold text-center">Select Dates</h2>
-          <p className="text-sm text-gray-600 text-center mt-1">
-            Tap green dates when you need work done
-          </p>
-        </div>
-        
-        {/* Month display */}
-        <div className="p-4 text-center border-b">
-          <h3 className="text-xl font-bold">
-            {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-          </h3>
-        </div>
-
-        {/* Calendar */}
-        <div className="p-4">
-          {/* Day headers */}
-          <div className="grid grid-cols-7 gap-1 mb-2">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-              <div key={day} className="text-center font-medium text-gray-600 text-sm py-2">
-                {day}
-              </div>
-            ))}
-          </div>
-          
-          {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            {renderMobileDateSelection()}
-          </div>
-          
-          {/* Legend */}
-          <div className="flex justify-center gap-4 text-xs mb-4">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-green-100 border border-green-300 rounded"></div>
-              <span>Available</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-blue-500 rounded"></div>
-              <span>Selected</span>
-            </div>
-          </div>
-          
-          {/* Selected dates summary */}
-          {selectedDates.length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-blue-800 font-medium mb-2 text-sm">
-                Selected ({selectedDates.length}):
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {selectedDates.map(dateStr => (
-                  <span key={dateStr} className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-                    {new Date(dateStr).toLocaleDateString('en-GB', { 
-                      day: 'numeric', 
-                      month: 'short'
-                    })}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleDate(dateStr);
-                      }}
-                      className="ml-1 text-blue-600 hover:text-blue-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        
-        {/* Bottom Navigation - THUMB FRIENDLY */}
-        <div className="border-t bg-gray-50">
-          <div className="flex">
-            <button
-              onClick={() => navigateMonth(-1)}
-              className="flex-1 py-4 px-6 text-blue-600 font-medium hover:bg-gray-100 transition-colors"
-              style={{ minHeight: '56px' }}
-            >
-              ← Previous Month
-            </button>
-            <button
-              onClick={() => navigateMonth(1)}
-              className="flex-1 py-4 px-6 text-blue-600 font-medium hover:bg-gray-100 transition-colors border-l"
-              style={{ minHeight: '56px' }}
-            >
-              Next Month →
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   const handleBooking = (tradesmanId) => {
@@ -689,7 +485,6 @@ const BrowseTradesmen = () => {
       return <p className="text-gray-500 text-sm mb-3">No time slots available</p>;
     }
 
-    // Group slots by date for better display
     const slotsByDate = {};
     tradesman.availableTimeSlots.slice(0, 6).forEach(slot => {
       if (!slotsByDate[slot.date]) {
@@ -732,88 +527,187 @@ const BrowseTradesmen = () => {
   };
 
   if (loading) {
-    return <div className="text-center py-8">Loading tradesmen...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading tradespeople...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className={`${isMobileView ? 'max-w-full px-4' : 'max-w-6xl mx-auto'}`}>
-      <h1 className="text-3xl font-bold mb-6">Find Available Tradesmen</h1>
-      
-      {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold text-blue-800 mb-2">How to find tradesmen:</h3>
-        <ul className="text-blue-700 text-sm space-y-1">
-          <li>• <strong>Select trade types</strong> you need (can choose multiple)</li>
-          <li>• <strong>Click dates on the calendar</strong> when you need work done</li>
-          <li>• <strong>Green dates</strong> have tradesmen available</li>
-          <li>• Only tradesmen with availability on your selected dates will be shown</li>
-        </ul>
-      </div>
-      
-      {/* Trade Type Selection - Mobile Optimized */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Select Trade Types</h2>
+    <div className={`${isMobileView ? 'max-w-full px-4' : 'max-w-7xl mx-auto px-6'} py-8`}>
+      {/* Hero Search Section */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold mb-3 text-gray-900">Find a Tradesperson</h1>
+        <p className="text-gray-600 mb-6">Search by describing what you need done</p>
         
-        <div className={`flex flex-wrap gap-3 mb-4 ${isMobileView ? 'justify-center' : ''}`}>
-          {TRADE_TYPES.map(tradeType => (
+        {/* Search Bar */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={handleSearch}
+            placeholder="e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."
+            className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none shadow-sm"
+            style={{ minHeight: '56px' }}
+          />
+          {searchQuery && (
             <button
-              key={tradeType}
-              onClick={() => toggleTradeType(tradeType)}
-              className={`px-4 py-2 rounded-full border-2 transition-colors ${
-                selectedTradeTypes.includes(tradeType)
-                  ? 'bg-blue-100 border-blue-300 text-blue-800'
-                  : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
-              }`}
-              style={{ minHeight: '44px' }} // Mobile touch target
+              onClick={clearSearch}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl"
             >
-              {tradeType}
+              ×
             </button>
-          ))}
+          )}
         </div>
-        
-        {selectedTradeTypes.length > 0 && (
-          <div className="text-sm text-gray-600">
-            Selected: {selectedTradeTypes.join(', ')}
+      </div>
+
+      {/* Results Count & Date Filter Toggle */}
+      {hasSearched && (
+        <div className="mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <div>
+              <p className="text-lg font-medium text-gray-900">
+                {filteredTradesmen.length} {filteredTradesmen.length === 1 ? 'tradesperson' : 'tradespeople'} found
+              </p>
+              {searchQuery && (
+                <p className="text-sm text-gray-600">
+                  for "{searchQuery}"
+                </p>
+              )}
+            </div>
+            
+            <button
+              onClick={() => setShowDateFilter(!showDateFilter)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              style={{ minHeight: '44px' }}
+            >
+              <span>📅</span>
+              <span>{showDateFilter ? 'Hide' : 'Filter by'} dates</span>
+              {selectedDates.length > 0 && (
+                <span className="bg-blue-800 px-2 py-1 rounded-full text-xs">
+                  {selectedDates.length}
+                </span>
+              )}
+            </button>
           </div>
-        )}
-      </div>
 
-      {/* Date Selection Calendar - Mobile Optimized */}
-      {renderDateSelectionSection()}
+          {/* Date Filter Panel */}
+          {showDateFilter && (
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border border-gray-200">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Select dates you need work done</h3>
+                {selectedDates.length > 0 && (
+                  <button
+                    onClick={() => setSelectedDates([])}
+                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                  >
+                    Clear dates
+                  </button>
+                )}
+              </div>
 
-      {/* Filter Summary - Mobile Optimized */}
-      <div className="flex justify-between items-center mb-6">
-        <p className="text-sm text-gray-600">
-          Showing {filteredTradesmen.length} of {tradesmen.length} tradesmen
-        </p>
-        
-        {(selectedTradeTypes.length > 0 || selectedDates.length > 0) && (
-          <button
-            onClick={clearFilters}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-            style={{ minHeight: '44px' }} // Mobile touch target
-          >
-            Clear all filters
-          </button>
-        )}
-      </div>
+              {/* Calendar Navigation */}
+              <div className="flex justify-between items-center mb-4">
+                <button
+                  onClick={() => navigateMonth(-1)}
+                  className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  ← Prev
+                </button>
+                
+                <h4 className="text-lg font-medium">
+                  {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                </h4>
+                
+                <button
+                  onClick={() => navigateMonth(1)}
+                  className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Next →
+                </button>
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-1 mb-4">
+                {renderCalendar()}
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-green-50 border-2 border-green-300 rounded"></div>
+                  <span>Available</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-blue-500 border-2 border-blue-600 rounded"></div>
+                  <span>Selected</span>
+                </div>
+              </div>
+
+              {/* Selected Dates Display */}
+              {selectedDates.length > 0 && (
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm font-medium text-blue-900 mb-2">
+                    Selected dates ({selectedDates.length}):
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedDates.map(dateStr => (
+                      <span 
+                        key={dateStr} 
+                        className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2"
+                      >
+                        {new Date(dateStr).toLocaleDateString('en-GB', { 
+                          day: 'numeric', 
+                          month: 'short'
+                        })}
+                        <button
+                          onClick={() => toggleDate(dateStr)}
+                          className="text-blue-600 hover:text-blue-800 font-bold"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Clear All Filters */}
+          {(searchQuery || selectedDates.length > 0) && (
+            <button
+              onClick={clearAllFilters}
+              className="text-blue-600 hover:text-blue-800 text-sm font-medium mb-4"
+            >
+              Clear all filters
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Results */}
       {filteredTradesmen.length === 0 ? (
-        <div className="text-center py-8">
-          {tradesmen.length === 0 ? (
-            <p className="text-gray-500">No tradesmen available at the moment.</p>
-          ) : (
+        <div className="text-center py-16 bg-gray-50 rounded-lg">
+          {hasSearched ? (
             <div>
-              <p className="text-gray-500 mb-2">No tradesmen match your selected criteria.</p>
+              <p className="text-xl text-gray-600 mb-4">
+                No tradespeople found matching your search
+              </p>
+              <p className="text-gray-500 mb-6">Try different keywords or clear your filters</p>
               <button
-                onClick={clearFilters}
-                className="text-blue-600 hover:text-blue-800 font-medium"
-                style={{ minHeight: '44px' }} // Mobile touch target
+                onClick={clearAllFilters}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                Clear filters to see all tradesmen
+                Show all tradespeople
               </button>
             </div>
+          ) : (
+            <p className="text-gray-500">Start by searching for what you need done</p>
           )}
         </div>
       ) : (
@@ -824,7 +718,6 @@ const BrowseTradesmen = () => {
             
             return (
               <div key={tradesman.id} className="relative">
-                {/* Dark Overlay */}
                 {isExpanded && (
                   <div 
                     className="fixed inset-0 bg-black bg-opacity-50 z-10"
@@ -835,7 +728,6 @@ const BrowseTradesmen = () => {
                 <div className={`bg-white rounded-lg shadow-md transition-all duration-300 ${
                   isExpanded ? 'relative z-20 transform scale-105 shadow-2xl ring-4 ring-blue-500' : ''
                 }`}>
-                  {/* Basic Card View */}
                   <div 
                     className="p-6 cursor-pointer"
                     onClick={(e) => {
@@ -862,14 +754,13 @@ const BrowseTradesmen = () => {
                         <p className="text-gray-600">{tradesman.tradeType}</p>
                       </div>
                       
-                      {/* Expand/Collapse Button - Mobile Optimized */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleExpanded(tradesman.id);
                         }}
                         className="text-blue-600 hover:text-blue-800 ml-2 p-2 rounded-full hover:bg-blue-50"
-                        style={{ minHeight: '44px', minWidth: '44px' }} // Mobile touch target
+                        style={{ minHeight: '44px', minWidth: '44px' }}
                       >
                         {isExpanded ? '−' : '+'}
                       </button>
@@ -899,7 +790,6 @@ const BrowseTradesmen = () => {
                     <div className="mb-4 space-y-2">
                       <p className="text-gray-600"><strong>Area:</strong> {tradesman.areaCovered}</p>
                       
-                      {/* Hourly Rate */}
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                         <p className="text-blue-800 font-semibold">
                           {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
@@ -909,7 +799,6 @@ const BrowseTradesmen = () => {
                         )}
                       </div>
 
-                      {/* Insurance Badge */}
                       {tradesman.insuranceStatus && (
                         <div>
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -922,16 +811,13 @@ const BrowseTradesmen = () => {
                         </div>
                       )}
 
-                      {/* Bio Preview */}
                       <p className="text-gray-600 text-sm">
                         {isExpanded ? tradesman.bio : `${tradesman.bio?.slice(0, 100)}...`}
                       </p>
                     </div>
 
-                    {/* Expanded Content */}
                     {isExpanded && (
                       <div className="border-t pt-3 space-y-4">
-                        {/* Full Services */}
                         {tradesman.servicesOffered && (
                           <div>
                             <h4 className="font-medium mb-2 text-sm">Services Offered:</h4>
@@ -941,13 +827,11 @@ const BrowseTradesmen = () => {
                           </div>
                         )}
 
-                        {/* Portfolio Gallery */}
                         <div>
                           <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
                           {renderPortfolioGallery(details.portfolio_images, loadingDetails)}
                         </div>
 
-                        {/* Recent Reviews */}
                         <div>
                           <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
                           {renderReviews(details.reviews, loadingDetails)}
@@ -955,12 +839,10 @@ const BrowseTradesmen = () => {
                       </div>
                     )}
                     
-                    {/* Available Time Slots & Booking */}
                     <div className="border-t pt-4 mt-4">
                       <h4 className="font-medium mb-2">Available Time Slots:</h4>
                       {renderAvailableTimeSlots(tradesman)}
                       
-                      {/* Request Quote Button - Mobile Optimized */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -971,7 +853,7 @@ const BrowseTradesmen = () => {
                             ? 'bg-green-600 text-white hover:bg-green-700' 
                             : 'bg-gray-400 text-white cursor-not-allowed'
                         }`}
-                        style={{ minHeight: '48px' }} // Mobile touch target
+                        style={{ minHeight: '48px' }}
                         disabled={tradesman.availableTimeSlots.length === 0}
                       >
                         {tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available'}
@@ -985,7 +867,6 @@ const BrowseTradesmen = () => {
         </div>
       )}
       
-      {/* Bottom padding for mobile */}
       {isMobileView && <div className="h-20"></div>}
     </div>
   );
