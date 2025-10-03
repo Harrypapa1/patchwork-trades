@@ -15,6 +15,7 @@ const TradesmanOnboarding = () => {
   const [loading, setLoading] = useState(true);
   const [onboardingStep, setOnboardingStep] = useState(1);
   const [processing, setProcessing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   
   // Form state for Stripe Connect onboarding
   const [onboardingForm, setOnboardingForm] = useState({
@@ -53,7 +54,12 @@ const TradesmanOnboarding = () => {
           firstName: profileData.name?.split(' ')[0] || '',
           lastName: profileData.name?.split(' ').slice(1).join(' ') || '',
           businessName: profileData.name || '',
-          phone: profileData.phone || ''
+          phone: profileData.phone || '',
+          businessType: profileData.business_type || 'individual',
+          accountHolderName: profileData.account_holder_name || '',
+          sortCode: profileData.sort_code || '',
+          bankAccountNumber: profileData.bank_account_last_4 ? '****' + profileData.bank_account_last_4 : '',
+          taxNumber: profileData.tax_number || ''
         }));
 
         // Check if already onboarded
@@ -108,6 +114,9 @@ const TradesmanOnboarding = () => {
           payment_setup_completed_at: new Date().toISOString(),
           bank_account_last_4: onboardingForm.bankAccountNumber.slice(-4),
           business_type: onboardingForm.businessType,
+          account_holder_name: onboardingForm.accountHolderName,
+          sort_code: onboardingForm.sortCode,
+          tax_number: onboardingForm.taxNumber,
           updated_at: new Date().toISOString()
         });
         
@@ -121,6 +130,61 @@ const TradesmanOnboarding = () => {
     } finally {
       setProcessing(false);
     }
+  };
+
+  const handleEditDetails = () => {
+    setIsEditing(true);
+    // Clear the masked account number to allow entering a new one
+    setOnboardingForm(prev => ({
+      ...prev,
+      bankAccountNumber: ''
+    }));
+  };
+
+  const handleSaveEdits = async (e) => {
+    e.preventDefault();
+    setProcessing(true);
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Update bank details in Firestore
+      const updateData = {
+        account_holder_name: onboardingForm.accountHolderName,
+        sort_code: onboardingForm.sortCode,
+        tax_number: onboardingForm.taxNumber,
+        updated_at: new Date().toISOString()
+      };
+
+      // Only update account number if a new one was entered
+      if (onboardingForm.bankAccountNumber && !onboardingForm.bankAccountNumber.includes('*')) {
+        updateData.bank_account_last_4 = onboardingForm.bankAccountNumber.slice(-4);
+      }
+
+      await updateDoc(doc(db, 'tradesmen_profiles', currentUser.uid), updateData);
+      
+      // Refresh profile data
+      await fetchProfile();
+      setIsEditing(false);
+      alert('Bank details updated successfully!');
+    } catch (error) {
+      console.error('Error updating bank details:', error);
+      alert('There was an error updating your details. Please try again.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    // Restore the masked account number
+    setOnboardingForm(prev => ({
+      ...prev,
+      bankAccountNumber: profile?.bank_account_last_4 ? '****' + profile.bank_account_last_4 : '',
+      accountHolderName: profile?.account_holder_name || '',
+      sortCode: profile?.sort_code || '',
+      taxNumber: profile?.tax_number || ''
+    }));
   };
 
   if (loading) {
@@ -502,12 +566,14 @@ const TradesmanOnboarding = () => {
 
       {/* Step 4: Complete */}
       {onboardingStep === 4 && (
-        <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <div className="text-6xl text-green-500 mb-4">🎉</div>
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Payment Setup Complete!</h2>
-          <p className="text-lg text-gray-600 mb-6">
-            You're now ready to receive payments from completed jobs.
-          </p>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="text-center">
+            <div className="text-6xl text-green-500 mb-4">🎉</div>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">Payment Setup Complete!</h2>
+            <p className="text-lg text-gray-600 mb-6">
+              You're now ready to receive payments from completed jobs.
+            </p>
+          </div>
           
           <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
             <h3 className="font-semibold text-green-800 mb-3">What happens next:</h3>
@@ -529,6 +595,131 @@ const TradesmanOnboarding = () => {
                 All transactions are secure and protected
               </div>
             </div>
+          </div>
+
+          {/* Bank Details Display/Edit Section */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-gray-900">Your Bank Details</h3>
+              {!isEditing && (
+                <button
+                  onClick={handleEditDetails}
+                  className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+                >
+                  Edit Details
+                </button>
+              )}
+            </div>
+            
+            {!isEditing ? (
+              <div className="space-y-3 text-gray-700">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Account Holder:</span>
+                  <span className="font-medium">{profile?.account_holder_name || 'Not provided'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Sort Code:</span>
+                  <span className="font-medium">{profile?.sort_code || 'Not provided'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Account Number:</span>
+                  <span className="font-medium">
+                    {profile?.bank_account_last_4 ? `****${profile.bank_account_last_4}` : 'Not provided'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">NI Number:</span>
+                  <span className="font-medium">{profile?.tax_number || 'Not provided'}</span>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveEdits} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Account Holder Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="accountHolderName"
+                    value={onboardingForm.accountHolderName}
+                    onChange={handleInputChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Sort Code *
+                    </label>
+                    <input
+                      type="text"
+                      name="sortCode"
+                      value={onboardingForm.sortCode}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="12-34-56"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Account Number
+                    </label>
+                    <input
+                      type="text"
+                      name="bankAccountNumber"
+                      value={onboardingForm.bankAccountNumber}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter new account number"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Leave blank to keep existing account
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    National Insurance Number
+                  </label>
+                  <input
+                    type="text"
+                    name="taxNumber"
+                    value={onboardingForm.taxNumber}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="AB123456C"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelEdit}
+                    className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={processing}
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 font-medium"
+                  >
+                    {processing ? (
+                      <div className="flex items-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Saving...
+                      </div>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
