@@ -44,17 +44,35 @@ const TradesmanDashboard = () => {
     const profileUrl = `https://patchworktrades.com/tradesman/${currentUser.uid}`;
     
     if (navigator.share) {
-      // Use native sharing if available (mobile)
       navigator.share({
         title: `${profile.name} - ${profile.tradeType}`,
         text: `Check out my professional tradesman profile on Patchwork Trades`,
         url: profileUrl
       });
     } else {
-      // Copy to clipboard for desktop
       navigator.clipboard.writeText(profileUrl).then(() => {
         alert('Profile link copied to clipboard!');
       });
+    }
+  };
+
+  // NEW: Get coordinates from postcode
+  const getCoordinatesFromPostcode = async (postcode) => {
+    try {
+      const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
+      const response = await fetch(`https://api.postcodes.io/postcodes/${cleanPostcode}`);
+      const data = await response.json();
+      
+      if (data.status === 200) {
+        return {
+          latitude: data.result.latitude,
+          longitude: data.result.longitude
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching coordinates:', error);
+      return null;
     }
   };
 
@@ -63,8 +81,22 @@ const TradesmanDashboard = () => {
     e.preventDefault();
     
     try {
-      await updateDoc(doc(db, 'tradesmen_profiles', currentUser.uid), profileForm);
-      setProfile(profileForm);
+      // NEW: If postcode changed, get new coordinates
+      let updateData = { ...profileForm };
+      
+      if (profileForm.postcode && profileForm.postcode !== profile.postcode) {
+        const coords = await getCoordinatesFromPostcode(profileForm.postcode);
+        if (coords) {
+          updateData.latitude = coords.latitude;
+          updateData.longitude = coords.longitude;
+        } else {
+          alert('Invalid postcode. Please check and try again.');
+          return;
+        }
+      }
+
+      await updateDoc(doc(db, 'tradesmen_profiles', currentUser.uid), updateData);
+      setProfile(updateData);
       setEditingProfile(false);
       alert('Profile updated successfully!');
     } catch (error) {
@@ -81,12 +113,10 @@ const TradesmanDashboard = () => {
       const img = new Image();
       
       img.onload = () => {
-        // Calculate new dimensions
         const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
         canvas.width = img.width * ratio;
         canvas.height = img.height * ratio;
         
-        // Draw and compress
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.toBlob(resolve, 'image/jpeg', quality);
       };
@@ -109,7 +139,6 @@ const TradesmanDashboard = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       alert('Image too large. Please choose an image under 5MB.');
       return;
@@ -118,18 +147,13 @@ const TradesmanDashboard = () => {
     setUploadingImage(true);
 
     try {
-      // Compress the image
       const compressedFile = await compressImage(file, 400, 0.7);
-      
-      // Convert to base64
       const base64 = await fileToBase64(compressedFile);
 
-      // Update profile in Firestore
       await updateDoc(doc(db, 'tradesmen_profiles', currentUser.uid), {
         profilePhoto: base64
       });
 
-      // Update local state
       setProfile(prev => ({ ...prev, profilePhoto: base64 }));
       setProfileForm(prev => ({ ...prev, profilePhoto: base64 }));
       
@@ -147,7 +171,6 @@ const TradesmanDashboard = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       alert('Image too large. Please choose an image under 5MB.');
       return;
@@ -156,13 +179,9 @@ const TradesmanDashboard = () => {
     setUploadingImage(true);
 
     try {
-      // Compress the image
       const compressedFile = await compressImage(file, 800, 0.8);
-      
-      // Convert to base64
       const base64 = await fileToBase64(compressedFile);
 
-      // Add to portfolio array
       const currentPortfolio = profile?.portfolio || [];
       const updatedPortfolio = [...currentPortfolio, {
         id: Date.now().toString(),
@@ -170,12 +189,10 @@ const TradesmanDashboard = () => {
         uploadedAt: new Date().toISOString()
       }];
 
-      // Update profile in Firestore
       await updateDoc(doc(db, 'tradesmen_profiles', currentUser.uid), {
         portfolio: updatedPortfolio
       });
 
-      // Update local state
       setProfile(prev => ({ ...prev, portfolio: updatedPortfolio }));
       
       alert('Portfolio image added successfully!');
@@ -290,6 +307,36 @@ const TradesmanDashboard = () => {
                       onChange={(e) => setProfileForm({...profileForm, hourlyRate: parseInt(e.target.value)})}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g. 45"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* NEW: Location Section */}
+              <div>
+                <h3 className="text-lg font-medium mb-3 text-gray-700">Location</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Postcode</label>
+                    <input
+                      type="text"
+                      value={profileForm.postcode || ''}
+                      onChange={(e) => setProfileForm({...profileForm, postcode: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g. M1 1AA"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Used to calculate distance to customers
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Area Covered</label>
+                    <input
+                      type="text"
+                      value={profileForm.areaCovered || ''}
+                      onChange={(e) => setProfileForm({...profileForm, areaCovered: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g. Manchester, Salford"
                     />
                   </div>
                 </div>
@@ -431,6 +478,11 @@ const TradesmanDashboard = () => {
                   </div>
                 </div>
                 <div className="space-y-3">
+                  {/* NEW: Show postcode */}
+                  <div>
+                    <p className="text-sm text-gray-600">Postcode</p>
+                    <p className="font-medium">{profile.postcode || 'Not specified'}</p>
+                  </div>
                   <div>
                     <p className="text-sm text-gray-600">Area Covered</p>
                     <p className="font-medium">{profile.areaCovered}</p>
@@ -453,11 +505,13 @@ const TradesmanDashboard = () => {
                       </span>
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Bio</p>
-                    <p className="font-medium">{profile.bio}</p>
-                  </div>
                 </div>
+              </div>
+
+              {/* Bio */}
+              <div className="mb-6">
+                <p className="text-sm text-gray-600 mb-1">Bio</p>
+                <p className="font-medium">{profile.bio}</p>
               </div>
 
               {/* Professional Details */}
@@ -493,7 +547,6 @@ const TradesmanDashboard = () => {
               <div className="mb-6">
                 <h3 className="text-lg font-medium mb-3">Work Portfolio</h3>
                 
-                {/* Upload Button */}
                 <div className="mb-4">
                   <input
                     type="file"
@@ -512,7 +565,6 @@ const TradesmanDashboard = () => {
                   <p className="text-sm text-gray-500 mt-1">Show examples of your work</p>
                 </div>
 
-                {/* Portfolio Gallery */}
                 {profile.portfolio && profile.portfolio.length > 0 ? (
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     {profile.portfolio.map((portfolioItem) => (
@@ -542,7 +594,6 @@ const TradesmanDashboard = () => {
                 
                 {profile.reviews && profile.reviews.length > 0 ? (
                   <div>
-                    {/* Overall Rating Summary */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                       <div className="flex items-center justify-between">
                         <div>
@@ -565,10 +616,9 @@ const TradesmanDashboard = () => {
                       </div>
                     </div>
 
-                    {/* Individual Reviews */}
                     <div className="space-y-4">
                       {profile.reviews
-                        .sort((a, b) => new Date(b.date) - new Date(a.date)) // Most recent first
+                        .sort((a, b) => new Date(b.date) - new Date(a.date))
                         .map((review, index) => (
                         <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
                           <div className="flex items-center justify-between mb-2">
