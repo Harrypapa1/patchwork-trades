@@ -8,14 +8,14 @@ const CustomerRegister = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
+    postcode: '' // NEW
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Get redirect information
   const redirectMessage = location.state?.message;
   const returnTo = location.state?.returnTo;
 
@@ -26,12 +26,45 @@ const CustomerRegister = () => {
     });
   };
 
+  // NEW: Get coordinates from postcode
+  const getCoordinatesFromPostcode = async (postcode) => {
+    try {
+      const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
+      const response = await fetch(`https://api.postcodes.io/postcodes/${cleanPostcode}`);
+      const data = await response.json();
+      
+      if (data.status === 200) {
+        return {
+          latitude: data.result.latitude,
+          longitude: data.result.longitude
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching coordinates:', error);
+      return null;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
+      // NEW: Get coordinates from postcode
+      let coordinates = { latitude: 0, longitude: 0 };
+      if (formData.postcode) {
+        const coords = await getCoordinatesFromPostcode(formData.postcode);
+        if (coords) {
+          coordinates = coords;
+        } else {
+          setError('Invalid postcode. Please check and try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
       // Create Firebase Auth user
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
@@ -39,10 +72,13 @@ const CustomerRegister = () => {
         formData.password
       );
       
-      // Create Firestore document
+      // Create Firestore document with NEW FIELDS
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         name: formData.name,
         email: formData.email,
+        postcode: formData.postcode, // NEW
+        latitude: coordinates.latitude, // NEW
+        longitude: coordinates.longitude, // NEW
         user_type: 'customer',
         createdAt: new Date().toISOString(),
         userId: userCredential.user.uid
@@ -67,7 +103,6 @@ const CustomerRegister = () => {
     <div className="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold text-center mb-6">Register as Customer</h2>
       
-      {/* Show redirect message if it exists */}
       {redirectMessage && (
         <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
           <div className="flex items-center">
@@ -118,6 +153,25 @@ const CustomerRegister = () => {
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+
+        {/* NEW: Postcode field */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Postcode *
+          </label>
+          <input
+            type="text"
+            name="postcode"
+            value={formData.postcode}
+            onChange={handleChange}
+            placeholder="e.g., M1 1AA"
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Used to find tradespeople near you
+          </p>
         </div>
 
         <button
