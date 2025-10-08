@@ -8,6 +8,8 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { signOut } from 'firebase/auth';
+import { detectContactInfo, getViolationWarning, getShortWarning } from '../utils/contactInfoDetector';
+import { logViolation, checkUserStatus } from '../utils/violationTracker';
 
 const CustomerDashboard = () => {
   const { currentUser } = useAuth();
@@ -18,6 +20,29 @@ const CustomerDashboard = () => {
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({});
   const [imageExpanded, setImageExpanded] = useState(false);
+
+  // 🆕 NEW: Suspension check
+  const [userStatus, setUserStatus] = useState({ suspended: false, violationCount: 0 });
+  const [showSuspensionWarning, setShowSuspensionWarning] = useState(false);
+
+  // 🆕 NEW: Contact violation tracking
+  const [nameViolation, setNameViolation] = useState(null);
+
+  // 🆕 NEW: Check user suspension status on mount
+  useEffect(() => {
+    const checkSuspension = async () => {
+      if (!currentUser) return;
+      
+      const status = await checkUserStatus(currentUser.uid);
+      setUserStatus(status);
+      
+      if (status.suspended) {
+        setShowSuspensionWarning(true);
+      }
+    };
+    
+    checkSuspension();
+  }, [currentUser]);
 
   useEffect(() => {
     fetchProfile();
@@ -41,7 +66,6 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Get coordinates from postcode
   const getCoordinatesFromPostcode = async (postcode) => {
     try {
       const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
@@ -61,14 +85,69 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Update profile
+  // 🆕 NEW: Handle profile form input with contact detection
+  const handleProfileInputChange = (field, value) => {
+    setProfileForm(prev => ({ ...prev, [field]: value }));
+
+    // Only check name field for contact info
+    if (field === 'name') {
+      const detection = detectContactInfo(value);
+      setNameViolation(detection.detected ? detection : null);
+    }
+  };
+
+  // 🆕 NEW: Enhanced updateProfile with contact detection
   const updateProfile = async (e) => {
     e.preventDefault();
+
+    // Check if user is suspended
+    if (userStatus.suspended) {
+      alert('⚠️ Your account is suspended.\n\nYou cannot update your profile.\n\nPlease contact support@patchworktrades.com to appeal.');
+      return;
+    }
+
+    // 🆕 NEW: Check name field for contact info
+    if (profileForm.name) {
+      const detection = detectContactInfo(profileForm.name);
+      if (detection.detected) {
+        try {
+          const violationTypes = detection.violations.map(v => v.type);
+          
+          const violationResult = await logViolation(
+            currentUser.uid,
+            currentUser.email,
+            profileForm.name,
+            'customer',
+            {
+              location: 'customer_profile_name',
+              detectedContent: detection.message,
+              violationTypes: violationTypes,
+              blockedText: profileForm.name.substring(0, 100)
+            }
+          );
+
+          setUserStatus(prev => ({
+            ...prev,
+            violationCount: violationResult.violationCount,
+            suspended: violationResult.suspended
+          }));
+
+          alert(getViolationWarning(userStatus.violationCount));
+
+          if (violationResult.suspended) {
+            setShowSuspensionWarning(true);
+          }
+
+          return;
+        } catch (error) {
+          console.error('Error logging violation:', error);
+        }
+      }
+    }
     
     try {
       let updateData = { ...profileForm };
       
-      // If postcode changed, get new coordinates
       if (profileForm.postcode && profileForm.postcode !== profile.postcode) {
         const coords = await getCoordinatesFromPostcode(profileForm.postcode);
         if (coords) {
@@ -83,6 +162,7 @@ const CustomerDashboard = () => {
       await updateDoc(doc(db, 'users', currentUser.uid), updateData);
       setProfile(updateData);
       setEditingProfile(false);
+      setNameViolation(null);
       alert('Profile updated successfully!');
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -90,7 +170,6 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Image compression function
   const compressImage = (file, maxWidth = 400, quality = 0.7) => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
@@ -110,7 +189,6 @@ const CustomerDashboard = () => {
     });
   };
 
-  // Convert file to base64
   const fileToBase64 = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -119,7 +197,6 @@ const CustomerDashboard = () => {
     });
   };
 
-  // Handle profile photo upload
   const handleProfilePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -151,7 +228,6 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Handle logout
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -168,6 +244,30 @@ const CustomerDashboard = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* 🆕 NEW: Suspension Warning Banner */}
+      {showSuspensionWarning && userStatus.suspended && (
+        <div className="mb-6 bg-red-50 border-2 border-red-500 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="text-2xl mr-3">🚫</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-900 mb-2">Account Suspended</h3>
+              <p className="text-red-800 mb-2">
+                Your account has been suspended for policy violations.
+              </p>
+              <p className="text-red-700 text-sm mb-3">
+                You can view your profile but cannot edit it while suspended.
+              </p>
+              <a 
+                href="mailto:support@patchworktrades.com"
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium inline-block"
+              >
+                Contact Support to Appeal
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-3xl font-bold mb-6">Customer Dashboard</h1>
       
       {/* Image Expanded Modal */}
@@ -198,8 +298,15 @@ const CustomerDashboard = () => {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Profile Information</h2>
             <button
-              onClick={() => setEditingProfile(!editingProfile)}
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+              onClick={() => {
+                if (userStatus.suspended) {
+                  alert('⚠️ Your account is suspended. You cannot edit your profile.');
+                  return;
+                }
+                setEditingProfile(!editingProfile);
+              }}
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+              disabled={userStatus.suspended}
             >
               {editingProfile ? 'Cancel' : 'Edit Profile'}
             </button>
@@ -208,7 +315,7 @@ const CustomerDashboard = () => {
           {editingProfile ? (
             /* Edit Profile Form */
             <form onSubmit={updateProfile} className="space-y-6">
-              {/* Profile Photo Section - NOW IN EDIT MODE */}
+              {/* Profile Photo Section */}
               <div>
                 <h3 className="text-lg font-medium mb-3 text-gray-700">Profile Photo</h3>
                 <div className="flex items-center gap-4">
@@ -252,9 +359,18 @@ const CustomerDashboard = () => {
                     <input
                       type="text"
                       value={profileForm.name || ''}
-                      onChange={(e) => setProfileForm({...profileForm, name: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => handleProfileInputChange('name', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                        nameViolation 
+                          ? 'border-red-500 focus:ring-red-500' 
+                          : 'border-gray-300 focus:ring-blue-500'
+                      }`}
                     />
+                    {nameViolation && (
+                      <p className="text-red-600 text-sm mt-1">
+                        ⚠️ {nameViolation.message} - {getShortWarning(userStatus.violationCount)}
+                      </p>
+                    )}
                   </div>
                   
                   <div>
@@ -262,7 +378,7 @@ const CustomerDashboard = () => {
                     <input
                       type="text"
                       value={profileForm.postcode || ''}
-                      onChange={(e) => setProfileForm({...profileForm, postcode: e.target.value})}
+                      onChange={(e) => handleProfileInputChange('postcode', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g. M1 1AA"
                     />
@@ -276,13 +392,17 @@ const CustomerDashboard = () => {
               <div className="flex gap-4">
                 <button
                   type="submit"
-                  className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600"
+                  className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 disabled:bg-gray-400"
+                  disabled={nameViolation !== null}
                 >
                   Save Changes
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditingProfile(false)}
+                  onClick={() => {
+                    setEditingProfile(false);
+                    setNameViolation(null);
+                  }}
                   className="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600"
                 >
                   Cancel
@@ -313,13 +433,15 @@ const CustomerDashboard = () => {
                       type="file"
                       accept="image/*"
                       onChange={handleProfilePhotoUpload}
-                      disabled={uploadingImage}
+                      disabled={uploadingImage || userStatus.suspended}
                       className="hidden"
                       id="profile-photo-upload"
                     />
                     <label 
                       htmlFor="profile-photo-upload"
-                      className={`bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block ${
+                        uploadingImage || userStatus.suspended ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                     >
                       {uploadingImage ? 'Uploading...' : 'Upload Photo'}
                     </label>
