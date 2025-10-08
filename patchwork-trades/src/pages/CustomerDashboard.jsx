@@ -15,8 +15,8 @@ const CustomerDashboard = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [editingProfile, setEditingProfile] = useState(false); // NEW
-  const [profileForm, setProfileForm] = useState({}); // NEW
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({});
 
   useEffect(() => {
     fetchProfile();
@@ -31,7 +31,7 @@ const CustomerDashboard = () => {
       if (profileDoc.exists()) {
         const profileData = profileDoc.data();
         setProfile(profileData);
-        setProfileForm(profileData); // NEW
+        setProfileForm(profileData);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -40,7 +40,7 @@ const CustomerDashboard = () => {
     }
   };
 
-  // NEW: Get coordinates from postcode
+  // Get coordinates from postcode
   const getCoordinatesFromPostcode = async (postcode) => {
     try {
       const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
@@ -60,7 +60,7 @@ const CustomerDashboard = () => {
     }
   };
 
-  // NEW: Update profile
+  // Update profile
   const updateProfile = async (e) => {
     e.preventDefault();
     
@@ -185,6 +185,41 @@ const CustomerDashboard = () => {
           {editingProfile ? (
             /* Edit Profile Form */
             <form onSubmit={updateProfile} className="space-y-6">
+              {/* Profile Photo Section - NOW IN EDIT MODE */}
+              <div>
+                <h3 className="text-lg font-medium mb-3 text-gray-700">Profile Photo</h3>
+                <div className="flex items-center gap-4">
+                  {profileForm.profilePhoto ? (
+                    <img 
+                      src={profileForm.profilePhoto} 
+                      alt="Profile" 
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                      No Photo
+                    </div>
+                  )}
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePhotoUpload}
+                      disabled={uploadingImage}
+                      className="hidden"
+                      id="profile-photo-upload-edit"
+                    />
+                    <label 
+                      htmlFor="profile-photo-upload-edit"
+                      className={`bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {uploadingImage ? 'Uploading...' : 'Upload Photo'}
+                    </label>
+                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG</p>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <h3 className="text-lg font-medium mb-3 text-gray-700">Basic Information</h3>
                 <div className="space-y-4">
@@ -259,7 +294,7 @@ const CustomerDashboard = () => {
                     />
                     <label 
                       htmlFor="profile-photo-upload"
-                      className="bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 disabled:bg-gray-400"
+                      className={`bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {uploadingImage ? 'Uploading...' : 'Upload Photo'}
                     </label>
