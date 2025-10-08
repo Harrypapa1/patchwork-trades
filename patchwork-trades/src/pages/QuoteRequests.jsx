@@ -14,12 +14,10 @@ import {
   getDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { detectContactInfo, getViolationWarning, getShortWarning } from '../utils/contactInfoDetector';
+import { logViolation, checkUserStatus } from '../utils/violationTracker';
 
-// 🚀 FIXED BULLETPROOF QUOTE REQUESTS COMPONENT - PAYMENT DATA FIXED
-// Connects to 'quote_requests' collection - no more race conditions!
-// 💳 UPDATED WITH PAYMENT-FIRST FLOW - FIXED NAVIGATION DATA
-// ✅ FIXED - Hide completed quotes that moved to active jobs
-// 🆕 NEW - Customer dismissal functionality added
+// 🚀 FIXED BULLETPROOF QUOTE REQUESTS COMPONENT - WITH CONTACT INFO DETECTION
 const QuoteRequests = () => {
   const { currentUser, userType } = useAuth();
   const navigate = useNavigate();
@@ -27,13 +25,36 @@ const QuoteRequests = () => {
   const [comments, setComments] = useState({});
   const [newComments, setNewComments] = useState({});
   const [loading, setLoading] = useState(true);
-  const [acceptingQuote, setAcceptingQuote] = useState({}); // Track accept operations
+  const [acceptingQuote, setAcceptingQuote] = useState({});
+  
+  // 🆕 NEW: Suspension check
+  const [userStatus, setUserStatus] = useState({ suspended: false, violationCount: 0 });
+  const [showSuspensionWarning, setShowSuspensionWarning] = useState(false);
+
+  // 🆕 NEW: Contact violation tracking per quote
+  const [commentViolations, setCommentViolations] = useState({});
   
   // Refs for cleanup
   const activeListeners = useRef({});
   const componentId = useRef(`quote-requests-${Date.now()}-${Math.random()}`);
 
-  // EMAIL NOTIFICATION HELPER FUNCTION (same as your existing)
+  // 🆕 NEW: Check user suspension status on mount
+  useEffect(() => {
+    const checkSuspension = async () => {
+      if (!currentUser) return;
+      
+      const status = await checkUserStatus(currentUser.uid);
+      setUserStatus(status);
+      
+      if (status.suspended) {
+        setShowSuspensionWarning(true);
+      }
+    };
+    
+    checkSuspension();
+  }, [currentUser]);
+
+  // EMAIL NOTIFICATION HELPER FUNCTION
   const sendEmailNotification = async (emailData) => {
     try {
       const response = await fetch('/.netlify/functions/send-email', {
@@ -59,11 +80,9 @@ const QuoteRequests = () => {
       fetchQuoteRequests();
     }
     
-    // ✅ FIXED - Enhanced cleanup function
     return () => {
       console.log(`🧹 [${componentId.current}] Cleaning up component...`);
       
-      // Clean up all listeners
       Object.values(activeListeners.current).forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
           try {
@@ -77,7 +96,6 @@ const QuoteRequests = () => {
     };
   }, [currentUser, userType]);
 
-  // 🎯 CONNECT TO NEW quote_requests COLLECTION - FIXED: Hide completed quotes + customer dismissals
   const fetchQuoteRequests = async () => {
     try {
       let quotesQuery;
@@ -100,20 +118,17 @@ const QuoteRequests = () => {
         ...doc.data()
       }));
 
-      // FIXED: Client-side filtering instead of Firebase query to avoid != limitations
       const activeRequests = allRequests.filter(request => {
         const status = request.status;
         
-        // Hide completed, moved, rejected, or archived quotes
         if (status === 'completed' || 
             status === 'moved_to_active_jobs' || 
             status === 'rejected' || 
-            status === 'dismissed_by_customer' || // 🆕 NEW: Hide customer dismissals from both sides
+            status === 'dismissed_by_customer' ||
             request.archived) {
           return false;
         }
 
-        // For tradesmen: hide dismissed quotes
         if (userType === 'tradesman' && request.dismissed_by_tradesman) {
           return false;
         }
@@ -124,7 +139,6 @@ const QuoteRequests = () => {
       console.log('Found active quote requests:', activeRequests);
       setQuoteRequests(activeRequests);
 
-      // ✅ FIXED - Enhanced cleanup before setting up new listeners
       Object.values(activeListeners.current).forEach(unsubscribe => {
         if (typeof unsubscribe === 'function') {
           try {
@@ -136,7 +150,6 @@ const QuoteRequests = () => {
       });
       activeListeners.current = {};
 
-      // Fetch comments for each request
       for (const request of activeRequests) {
         fetchComments(request.id);
       }
@@ -148,10 +161,8 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🎯 ENHANCED COMMENTS FOR NEW ARCHITECTURE - ✅ FIXED MEMORY LEAKS
   const fetchComments = (quoteRequestId) => {
     try {
-      // ✅ FIXED - Enhanced cleanup for existing listener
       if (activeListeners.current[quoteRequestId]) {
         try {
           activeListeners.current[quoteRequestId]();
@@ -163,12 +174,11 @@ const QuoteRequests = () => {
 
       const commentsQuery = query(
         collection(db, 'booking_comments'),
-        where('quote_request_id', '==', quoteRequestId) // 🆕 NEW FIELD
+        where('quote_request_id', '==', quoteRequestId)
       );
 
       console.log('Setting up real-time listener for quote:', quoteRequestId);
 
-      // ✅ FIXED - Enhanced listener setup with better error handling
       const unsubscribe = onSnapshot(
         commentsQuery, 
         (snapshot) => {
@@ -177,7 +187,6 @@ const QuoteRequests = () => {
             ...doc.data()
           }));
           
-          // Sort by timestamp
           quoteComments.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
           
           console.log('Comments updated for quote', quoteRequestId, ':', quoteComments);
@@ -196,7 +205,6 @@ const QuoteRequests = () => {
         }
       );
 
-      // ✅ FIXED - Store the unsubscribe function for cleanup
       activeListeners.current[quoteRequestId] = unsubscribe;
 
     } catch (error) {
@@ -208,17 +216,71 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🎯 ENHANCED COMMENT SYSTEM
+  // 🆕 NEW: Enhanced addComment with contact detection
   const addComment = async (quoteRequestId) => {
     const commentText = newComments[quoteRequestId]?.trim();
     if (!commentText) return;
+
+    // Check if user is suspended
+    if (userStatus.suspended) {
+      alert('⚠️ Your account is suspended.\n\nYou cannot send comments.\n\nPlease contact support@patchworktrades.com to appeal.');
+      return;
+    }
+
+    // 🆕 NEW: Detect contact info
+    const detection = detectContactInfo(commentText);
+    
+    if (detection.detected) {
+      // Log the violation
+      try {
+        const quote = quoteRequests.find(q => q.id === quoteRequestId);
+        const violationTypes = detection.violations.map(v => v.type);
+        
+        const violationResult = await logViolation(
+          currentUser.uid,
+          currentUser.email,
+          userType === 'customer' ? quote?.customer_name : quote?.tradesman_name,
+          userType,
+          {
+            location: 'quote_request_comment',
+            detectedContent: detection.message,
+            violationTypes: violationTypes,
+            blockedText: commentText.substring(0, 100)
+          }
+        );
+
+        // Update local user status
+        setUserStatus(prev => ({
+          ...prev,
+          violationCount: violationResult.violationCount,
+          suspended: violationResult.suspended
+        }));
+
+        // Show appropriate warning
+        alert(getViolationWarning(userStatus.violationCount));
+
+        if (violationResult.suspended) {
+          setShowSuspensionWarning(true);
+        }
+
+        // Clear the input
+        setNewComments(prev => ({
+          ...prev,
+          [quoteRequestId]: ''
+        }));
+
+        return; // Block submission
+      } catch (error) {
+        console.error('Error logging violation:', error);
+      }
+    }
 
     console.log('Adding comment for quote:', quoteRequestId, 'Comment:', commentText);
 
     try {
       const commentData = {
-        quote_request_id: quoteRequestId, // 🆕 NEW FIELD
-        booking_id: null, // Legacy field for backward compatibility
+        quote_request_id: quoteRequestId,
+        booking_id: null,
         user_id: currentUser.uid,
         user_type: userType,
         user_name: userType === 'customer' ? 
@@ -232,7 +294,6 @@ const QuoteRequests = () => {
 
       await addDoc(collection(db, 'booking_comments'), commentData);
 
-      // Clear the input
       setNewComments(prev => ({
         ...prev,
         [quoteRequestId]: ''
@@ -263,7 +324,21 @@ const QuoteRequests = () => {
     }
   };
 
-  // Helper function to determine final negotiated price
+  // 🆕 NEW: Handle comment input change with real-time detection
+  const handleCommentChange = (quoteRequestId, value) => {
+    setNewComments(prev => ({
+      ...prev,
+      [quoteRequestId]: value
+    }));
+
+    // Real-time contact detection
+    const detection = detectContactInfo(value);
+    setCommentViolations(prev => ({
+      ...prev,
+      [quoteRequestId]: detection.detected ? detection : null
+    }));
+  };
+
   const getFinalNegotiatedPrice = (quoteData) => {
     if (quoteData.customer_counter_quote && quoteData.has_customer_counter) {
       return quoteData.customer_counter_quote;
@@ -276,19 +351,16 @@ const QuoteRequests = () => {
     }
   };
 
-  // Helper function to extract numeric value from price string
   const extractNumericValue = (priceString) => {
     const match = priceString.toString().match(/£?(\d+)/);
     return match ? parseInt(match[1]) : 0;
   };
 
-  // 🆕 NEW: Handle quote rejection with customer notification
   const handleRejectQuote = async (quoteRequestId) => {
     try {
       const quote = quoteRequests.find(q => q.id === quoteRequestId);
       if (!quote) return;
 
-      // Update quote status to rejected
       await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
         status: 'rejected',
         rejected_at: new Date().toISOString(),
@@ -296,7 +368,6 @@ const QuoteRequests = () => {
         updated_at: new Date().toISOString()
       });
 
-      // Add system comment
       await addDoc(collection(db, 'booking_comments'), {
         quote_request_id: quoteRequestId,
         user_id: currentUser.uid,
@@ -306,7 +377,6 @@ const QuoteRequests = () => {
         timestamp: new Date().toISOString()
       });
 
-      // Send email notification to customer
       await sendEmailNotification({
         recipientEmail: quote.customer_email,
         recipientName: quote.customer_name,
@@ -315,7 +385,6 @@ const QuoteRequests = () => {
         replyLink: `https://patchworktrades.com/browse`
       });
 
-      // Refresh the list to remove the rejected quote
       fetchQuoteRequests();
 
       alert('Quote request rejected and customer has been notified.');
@@ -326,13 +395,11 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🆕 NEW: Handle quote dismissal (hide from tradesman, no customer notification)
   const handleDismissQuote = async (quoteRequestId) => {
     try {
       const quote = quoteRequests.find(q => q.id === quoteRequestId);
       if (!quote) return;
 
-      // Update quote to be dismissed by this tradesman
       await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
         dismissed_by_tradesman: true,
         dismissed_at: new Date().toISOString(),
@@ -340,7 +407,6 @@ const QuoteRequests = () => {
         updated_at: new Date().toISOString()
       });
 
-      // Add system comment (for record keeping, not visible to customer)
       await addDoc(collection(db, 'booking_comments'), {
         quote_request_id: quoteRequestId,
         user_id: currentUser.uid,
@@ -350,7 +416,6 @@ const QuoteRequests = () => {
         timestamp: new Date().toISOString()
       });
 
-      // Refresh the list to remove the dismissed quote
       fetchQuoteRequests();
 
       alert('Quote request dismissed from your list.');
@@ -361,13 +426,11 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🆕 NEW: Handle customer dismissal (removes from both sides, tracks in admin)
   const handleCustomerDismissQuote = async (quoteRequestId, dismissalReason = '') => {
     try {
       const quote = quoteRequests.find(q => q.id === quoteRequestId);
       if (!quote) return;
 
-      // Update quote to be dismissed by customer (removes from both customer and tradesman view)
       await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
         dismissed_by_customer: true,
         status: 'dismissed_by_customer',
@@ -377,7 +440,6 @@ const QuoteRequests = () => {
         updated_at: new Date().toISOString()
       });
 
-      // Add system comment for admin tracking
       await addDoc(collection(db, 'booking_comments'), {
         quote_request_id: quoteRequestId,
         user_id: currentUser.uid,
@@ -387,7 +449,6 @@ const QuoteRequests = () => {
         timestamp: new Date().toISOString()
       });
 
-      // Refresh the list to remove the dismissed quote
       fetchQuoteRequests();
 
       alert('Quote request dismissed. This job has been removed from both your list and the tradesman\'s list.');
@@ -398,7 +459,6 @@ const QuoteRequests = () => {
     }
   };
 
-  // 💳 FIXED PAYMENT-FIRST ACCEPT OPERATION - THE MAGIC HAPPENS HERE!
   const acceptQuote = async (quoteRequestId) => {
     console.log('🚀 Starting quote acceptance with payment-first flow:', quoteRequestId);
     
@@ -410,7 +470,6 @@ const QuoteRequests = () => {
     setAcceptingQuote(prev => ({ ...prev, [quoteRequestId]: true }));
 
     try {
-      // STEP 1: Get the quote data
       console.log('📖 Step 1: Reading quote data...');
       const quoteDoc = await getDoc(doc(db, 'quote_requests', quoteRequestId));
       
@@ -421,7 +480,6 @@ const QuoteRequests = () => {
       const quoteData = quoteDoc.data();
       console.log('✅ Quote data retrieved:', quoteData);
 
-      // STEP 2: UPDATE QUOTE STATUS TO "PAYMENT_PENDING" (instead of creating job)
       console.log('💳 Step 2: Marking quote as payment pending...');
       await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
         status: 'payment_pending',
@@ -431,22 +489,18 @@ const QuoteRequests = () => {
         updated_at: new Date().toISOString()
       });
 
-      // STEP 3: REDIRECT TO PAYMENT CHECKOUT (with FIXED data structure)
       console.log('🛒 Step 3: Redirecting to payment checkout...');
       
       if (userType === 'customer') {
-        // Customer accepts quote → goes to payment - FIXED DATA STRUCTURE TO MATCH PaymentCheckout
         navigate('/payment-checkout', { 
           state: { 
-            quoteId: quoteRequestId,                  // FIXED: PaymentCheckout expects 'quoteId'
-            quoteData: quoteData,                     // FIXED: PaymentCheckout expects 'quoteData'
-            finalPrice: getFinalNegotiatedPrice(quoteData), // FIXED: PaymentCheckout expects 'finalPrice'
+            quoteId: quoteRequestId,
+            quoteData: quoteData,
+            finalPrice: getFinalNegotiatedPrice(quoteData),
             paymentRequired: true
           }
         });
       } else {
-        // Tradesman accepts customer counter-offer → customer must pay
-        // Send email to customer with payment link
         await sendEmailNotification({
           recipientEmail: quoteData.customer_email,
           recipientName: quoteData.customer_name,
@@ -458,7 +512,6 @@ const QuoteRequests = () => {
         alert(`✅ Counter-offer accepted!\n\n${quoteData.customer_name} has been notified and will receive a payment link to complete the booking.`);
       }
       
-      // STEP 4: Refresh quotes to show new status
       await fetchQuoteRequests();
       
       console.log('🎉 QUOTE ACCEPTED - CUSTOMER REDIRECTED TO PAYMENT!');
@@ -471,22 +524,59 @@ const QuoteRequests = () => {
     }
   };
 
-  // Quote update functions (same patterns as your existing, but for quotes)
+  // 🆕 NEW: Enhanced proposeCustomQuote with contact detection
   const proposeCustomQuote = async (quoteRequestId, customQuote) => {
+    // Detect contact info in custom quote
+    const detection = detectContactInfo(customQuote);
+    
+    if (detection.detected) {
+      try {
+        const quote = quoteRequests.find(q => q.id === quoteRequestId);
+        const violationTypes = detection.violations.map(v => v.type);
+        
+        const violationResult = await logViolation(
+          currentUser.uid,
+          currentUser.email,
+          quote?.tradesman_name || currentUser.email,
+          userType,
+          {
+            location: 'custom_quote_proposal',
+            detectedContent: detection.message,
+            violationTypes: violationTypes,
+            blockedText: customQuote.substring(0, 100)
+          }
+        );
+
+        setUserStatus(prev => ({
+          ...prev,
+          violationCount: violationResult.violationCount,
+          suspended: violationResult.suspended
+        }));
+
+        alert(getViolationWarning(userStatus.violationCount));
+
+        if (violationResult.suspended) {
+          setShowSuspensionWarning(true);
+        }
+
+        return;
+      } catch (error) {
+        console.error('Error logging violation:', error);
+      }
+    }
+
     try {
       const updateData = {
         custom_quote: customQuote,
         has_custom_quote: true,
-        status: 'negotiating', // Update status to show negotiation
+        status: 'negotiating',
         updated_at: new Date().toISOString()
       };
 
       await updateDoc(doc(db, 'quote_requests', quoteRequestId), updateData);
       
-      // Refresh the list
       fetchQuoteRequests();
       
-      // Add system comment
       try {
         await addDoc(collection(db, 'booking_comments'), {
           quote_request_id: quoteRequestId,
@@ -500,7 +590,6 @@ const QuoteRequests = () => {
         console.log('Could not add system comment:', commentError);
       }
 
-      // EMAIL NOTIFICATION FOR CUSTOM QUOTE
       const quote = quoteRequests.find(q => q.id === quoteRequestId);
       if (quote) {
         await sendEmailNotification({
@@ -518,7 +607,51 @@ const QuoteRequests = () => {
     }
   };
 
+  // 🆕 NEW: Enhanced proposeCustomerCounter with contact detection
   const proposeCustomerCounter = async (quoteRequestId, counterQuote, reasoning) => {
+    // Detect contact info in counter quote AND reasoning
+    const quoteDetection = detectContactInfo(counterQuote);
+    const reasoningDetection = detectContactInfo(reasoning);
+    
+    if (quoteDetection.detected || reasoningDetection.detected) {
+      try {
+        const quote = quoteRequests.find(q => q.id === quoteRequestId);
+        const violationTypes = [
+          ...(quoteDetection.violations?.map(v => v.type) || []),
+          ...(reasoningDetection.violations?.map(v => v.type) || [])
+        ];
+        
+        const violationResult = await logViolation(
+          currentUser.uid,
+          currentUser.email,
+          quote?.customer_name || currentUser.email,
+          userType,
+          {
+            location: 'customer_counter_offer',
+            detectedContent: quoteDetection.message || reasoningDetection.message,
+            violationTypes: [...new Set(violationTypes)],
+            blockedText: (counterQuote + ' ' + reasoning).substring(0, 100)
+          }
+        );
+
+        setUserStatus(prev => ({
+          ...prev,
+          violationCount: violationResult.violationCount,
+          suspended: violationResult.suspended
+        }));
+
+        alert(getViolationWarning(userStatus.violationCount));
+
+        if (violationResult.suspended) {
+          setShowSuspensionWarning(true);
+        }
+
+        return;
+      } catch (error) {
+        console.error('Error logging violation:', error);
+      }
+    }
+
     try {
       await updateDoc(doc(db, 'quote_requests', quoteRequestId), {
         customer_counter_quote: counterQuote,
@@ -532,7 +665,6 @@ const QuoteRequests = () => {
       
       fetchQuoteRequests();
       
-      // Add system comment
       try {
         await addDoc(collection(db, 'booking_comments'), {
           quote_request_id: quoteRequestId,
@@ -546,7 +678,6 @@ const QuoteRequests = () => {
         console.log('Could not add system comment:', commentError);
       }
 
-      // EMAIL NOTIFICATION FOR CUSTOMER COUNTER-OFFER
       const quote = quoteRequests.find(q => q.id === quoteRequestId);
       if (quote) {
         await sendEmailNotification({
@@ -578,7 +709,6 @@ const QuoteRequests = () => {
       
       fetchQuoteRequests();
       
-      // Add system comment
       try {
         await addDoc(collection(db, 'booking_comments'), {
           quote_request_id: quoteRequestId,
@@ -598,7 +728,6 @@ const QuoteRequests = () => {
     }
   };
 
-  // Helper functions (same as your existing)
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-GB', {
       day: 'numeric',
@@ -632,6 +761,30 @@ const QuoteRequests = () => {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {/* 🆕 NEW: Suspension Warning Banner */}
+      {showSuspensionWarning && userStatus.suspended && (
+        <div className="mb-6 bg-red-50 border-2 border-red-500 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="text-2xl mr-3">🚫</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-900 mb-2">Account Suspended</h3>
+              <p className="text-red-800 mb-2">
+                Your account has been suspended for repeatedly attempting to share contact information.
+              </p>
+              <p className="text-red-700 text-sm mb-3">
+                You cannot send comments or negotiate quotes while suspended.
+              </p>
+              <a 
+                href="mailto:support@patchworktrades.com"
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium inline-block"
+              >
+                Contact Support to Appeal
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6">
         <h1 className="text-3xl font-bold">
           {userType === 'customer' ? 'My Quote Requests' : 'Incoming Quote Requests'}
@@ -685,14 +838,12 @@ const QuoteRequests = () => {
                       {request.urgency?.charAt(0).toUpperCase() + request.urgency?.slice(1)} Priority
                     </span>
                     
-                    {/* Status badges */}
                     {request.status === 'negotiating' && (
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                         Negotiating
                       </span>
                     )}
 
-                    {/* 💳 NEW: Payment Required Badge */}
                     {request.status === 'payment_pending' && (
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
                         💳 Payment Required
@@ -713,7 +864,7 @@ const QuoteRequests = () => {
                 </div>
               </div>
 
-              {/* Job Details (same as your existing structure) */}
+              {/* Job Details */}
               <div className="px-6 py-4">
                 <div className="grid md:grid-cols-2 gap-6">
                   {/* Left Column */}
@@ -725,7 +876,6 @@ const QuoteRequests = () => {
                     
                     {/* Enhanced Pricing Section */}
                     <div className="space-y-3">
-                      {/* Tradesman Hourly Rate */}
                       {request.tradesman_hourly_rate && (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                           <h3 className="font-medium text-gray-900 mb-1">Tradesman Rate</h3>
@@ -738,7 +888,6 @@ const QuoteRequests = () => {
                         </div>
                       )}
                       
-                      {/* Customer Budget */}
                       {request.budget_expectation && (
                         <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                           <h3 className="font-medium text-gray-900 mb-1">Customer Budget</h3>
@@ -803,7 +952,7 @@ const QuoteRequests = () => {
 
                 {/* Actions Section */}
                 <div className="mt-6 pt-4 border-t border-gray-200">
-                  {/* 💳 PAYMENT PENDING STATUS */}
+                  {/* PAYMENT PENDING STATUS */}
                   {request.status === 'payment_pending' && (
                     <>
                       <h3 className="font-medium text-gray-900 mb-3">Payment Required</h3>
@@ -824,9 +973,9 @@ const QuoteRequests = () => {
                               <button
                                 onClick={() => navigate('/payment-checkout', { 
                                   state: { 
-                                    quoteId: request.id,                  // FIXED: PaymentCheckout expects 'quoteId'
-                                    quoteData: request,                   // FIXED: PaymentCheckout expects 'quoteData'
-                                    finalPrice: request.final_agreed_price, // FIXED: PaymentCheckout expects 'finalPrice'
+                                    quoteId: request.id,
+                                    quoteData: request,
+                                    finalPrice: request.final_agreed_price,
                                     paymentRequired: true
                                   }
                                 })}
@@ -835,11 +984,10 @@ const QuoteRequests = () => {
                                 💳 Complete Payment ({request.final_agreed_price})
                               </button>
                               
-                              {/* 🆕 NEW: Allow dismissal even at payment stage */}
                               <button
                                 onClick={() => {
                                   const reason = prompt('Please provide a reason for dismissing this quote (optional):');
-                                  if (reason !== null) { // User didn't cancel
+                                  if (reason !== null) {
                                     handleCustomerDismissQuote(request.id, reason);
                                   }
                                 }}
@@ -858,10 +1006,9 @@ const QuoteRequests = () => {
                     </>
                   )}
 
-                  {/* TRADESMAN ACTIONS (only show if not payment pending) */}
+                  {/* TRADESMAN ACTIONS */}
                   {userType === 'tradesman' && request.status !== 'payment_pending' && (
                     <>
-                      {/* No quotes sent yet - original buttons */}
                       {!request.has_custom_quote && !request.has_customer_counter && (
                         <>
                           <h3 className="font-medium text-gray-900 mb-3">Your Response</h3>
@@ -869,19 +1016,24 @@ const QuoteRequests = () => {
                             <button
                               onClick={() => acceptQuote(request.id)}
                               className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
-                              disabled={acceptingQuote[request.id]}
+                              disabled={acceptingQuote[request.id] || userStatus.suspended}
                             >
                               {acceptingQuote[request.id] ? 'Accepting...' : `Accept (£${request.tradesman_hourly_rate || 'Standard Rate'}/hour)`}
                             </button>
                             
                             <button
                               onClick={() => {
+                                if (userStatus.suspended) {
+                                  alert('⚠️ Your account is suspended. You cannot propose quotes.');
+                                  return;
+                                }
                                 const customQuote = prompt('Enter your custom quote (e.g., £200 fixed price, or £50/hour):');
                                 if (customQuote) {
                                   proposeCustomQuote(request.id, customQuote);
                                 }
                               }}
-                              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                              disabled={userStatus.suspended}
                             >
                               Custom Quote
                             </button>
@@ -911,7 +1063,6 @@ const QuoteRequests = () => {
                         </>
                       )}
 
-                      {/* Tradesman sent quote, waiting for customer */}
                       {request.has_custom_quote && !request.has_customer_counter && (
                         <>
                           <h3 className="font-medium text-gray-900 mb-3">Custom Quote Sent</h3>
@@ -926,7 +1077,6 @@ const QuoteRequests = () => {
                         </>
                       )}
 
-                      {/* Customer sent counter-offer */}
                       {request.has_customer_counter && (
                         <>
                           <h3 className="font-medium text-gray-900 mb-3">Customer Counter-Offer</h3>
@@ -944,18 +1094,23 @@ const QuoteRequests = () => {
                               <button
                                 onClick={() => acceptQuote(request.id)}
                                 className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
-                                disabled={acceptingQuote[request.id]}
+                                disabled={acceptingQuote[request.id] || userStatus.suspended}
                               >
                                 {acceptingQuote[request.id] ? 'Accepting...' : 'Accept Counter-Offer'}
                               </button>
                               <button
                                 onClick={() => {
+                                  if (userStatus.suspended) {
+                                    alert('⚠️ Your account is suspended. You cannot propose quotes.');
+                                    return;
+                                  }
                                   const newQuote = prompt('Enter your new counter-quote:');
                                   if (newQuote) {
                                     proposeCustomQuote(request.id, newQuote);
                                   }
                                 }}
-                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                                disabled={userStatus.suspended}
                               >
                                 New Counter-Quote
                               </button>
@@ -976,10 +1131,9 @@ const QuoteRequests = () => {
                     </>
                   )}
 
-                  {/* CUSTOMER ACTIONS (only show if not payment pending) */}
+                  {/* CUSTOMER ACTIONS */}
                   {userType === 'customer' && request.status !== 'payment_pending' && (
                     <>
-                      {/* Customer sent counter, waiting for tradesman */}
                       {request.has_customer_counter && (
                         <>
                           <h3 className="font-medium text-gray-900 mb-3">Counter-Offer Sent</h3>
@@ -997,12 +1151,11 @@ const QuoteRequests = () => {
                             </p>
                           </div>
                           
-                          {/* 🆕 NEW: Customer dismissal option */}
                           <div className="flex gap-3">
                             <button
                               onClick={() => {
                                 const reason = prompt('Please provide a reason for dismissing this quote (optional):');
-                                if (reason !== null) { // User didn't cancel
+                                if (reason !== null) {
                                   handleCustomerDismissQuote(request.id, reason);
                                 }
                               }}
@@ -1014,7 +1167,6 @@ const QuoteRequests = () => {
                         </>
                       )}
 
-                      {/* Tradesman sent quote, customer can respond */}
                       {request.has_custom_quote && !request.has_customer_counter && (
                         <>
                           <h3 className="font-medium text-gray-900 mb-3">Custom Quote Received</h3>
@@ -1027,19 +1179,24 @@ const QuoteRequests = () => {
                               <button
                                 onClick={() => acceptQuote(request.id)}
                                 className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
-                                disabled={acceptingQuote[request.id]}
+                                disabled={acceptingQuote[request.id] || userStatus.suspended}
                               >
                                 {acceptingQuote[request.id] ? 'Accepting...' : 'Accept Quote'}
                               </button>
                               <button
                                 onClick={() => {
+                                  if (userStatus.suspended) {
+                                    alert('⚠️ Your account is suspended. You cannot propose counter-offers.');
+                                    return;
+                                  }
                                   const counterQuote = prompt('Enter your counter-offer (e.g., £150 fixed price, or £40/hour):');
                                   if (counterQuote) {
                                     const reasoning = prompt('Why this price? (optional - helps with negotiation):') || '';
                                     proposeCustomerCounter(request.id, counterQuote, reasoning);
                                   }
                                 }}
-                                className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                                className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700 disabled:bg-gray-400"
+                                disabled={userStatus.suspended}
                               >
                                 Counter-Offer
                               </button>
@@ -1053,11 +1210,10 @@ const QuoteRequests = () => {
                               >
                                 Reject Quote
                               </button>
-                              {/* 🆕 NEW: Customer dismissal option */}
                               <button
                                 onClick={() => {
                                   const reason = prompt('Please provide a reason for dismissing this quote (optional):');
-                                  if (reason !== null) { // User didn't cancel
+                                  if (reason !== null) {
                                     handleCustomerDismissQuote(request.id, reason);
                                   }
                                 }}
@@ -1070,7 +1226,6 @@ const QuoteRequests = () => {
                         </>
                       )}
 
-                      {/* No quotes yet - waiting */}
                       {!request.has_custom_quote && !request.has_customer_counter && (
                         <>
                           <h3 className="font-medium text-gray-900 mb-3">Request Status</h3>
@@ -1080,12 +1235,11 @@ const QuoteRequests = () => {
                             </p>
                           </div>
                           
-                          {/* 🆕 NEW: Customer dismissal option */}
                           <div className="flex gap-3">
                             <button
                               onClick={() => {
                                 const reason = prompt('Please provide a reason for dismissing this quote (optional):');
-                                if (reason !== null) { // User didn't cancel
+                                if (reason !== null) {
                                   handleCustomerDismissQuote(request.id, reason);
                                 }
                               }}
@@ -1101,7 +1255,7 @@ const QuoteRequests = () => {
                 </div>
               </div>
 
-              {/* Comments Section (same as your existing structure) */}
+              {/* Comments Section */}
               <div className="border-t border-gray-200 bg-gray-50">
                 <div className="px-6 py-4">
                   <h3 className="font-medium text-gray-900 mb-3">Discussion</h3>
@@ -1136,24 +1290,34 @@ const QuoteRequests = () => {
                   </div>
 
                   {/* Add Comment */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newComments[request.id] || ''}
-                      onChange={(e) => setNewComments(prev => ({
-                        ...prev,
-                        [request.id]: e.target.value
-                      }))}
-                      placeholder="Ask a question or add a comment..."
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      onKeyPress={(e) => e.key === 'Enter' && addComment(request.id)}
-                    />
-                    <button
-                      onClick={() => addComment(request.id)}
-                      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                    >
-                      Comment
-                    </button>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newComments[request.id] || ''}
+                        onChange={(e) => handleCommentChange(request.id, e.target.value)}
+                        placeholder={userStatus.suspended ? "Account suspended - cannot comment" : "Ask a question or add a comment..."}
+                        className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                          commentViolations[request.id] 
+                            ? 'border-red-500 focus:ring-red-500' 
+                            : 'border-gray-300 focus:ring-blue-500'
+                        }`}
+                        onKeyPress={(e) => e.key === 'Enter' && !userStatus.suspended && addComment(request.id)}
+                        disabled={userStatus.suspended}
+                      />
+                      <button
+                        onClick={() => addComment(request.id)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                        disabled={userStatus.suspended}
+                      >
+                        Comment
+                      </button>
+                    </div>
+                    {commentViolations[request.id] && (
+                      <p className="text-red-600 text-sm">
+                        ⚠️ {commentViolations[request.id].message} - {getShortWarning(userStatus.violationCount)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
