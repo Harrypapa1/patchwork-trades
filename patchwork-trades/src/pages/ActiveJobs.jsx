@@ -16,15 +16,25 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import LazyImage from '../components/LazyImage';
+import { detectContactInfo, getViolationWarning, getShortWarning } from '../utils/contactInfoDetector';
+import { logViolation, checkUserStatus } from '../utils/violationTracker';
 
-const JOBS_PER_PAGE = 5; // Limit initial load
+const JOBS_PER_PAGE = 5;
 
-// Review Modal Component (same as your existing)
-const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
+// 🆕 UPDATED: Review Modal Component with contact detection
+const ReviewModal = ({ isOpen, onClose, job, onSubmitReview, currentUser, userStatus }) => {
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [contactViolation, setContactViolation] = useState(null);
+
+  // 🆕 NEW: Real-time contact detection in review comment
+  const handleCommentChange = (value) => {
+    setComment(value);
+    const detection = detectContactInfo(value);
+    setContactViolation(detection.detected ? detection : null);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,6 +49,37 @@ const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
       return;
     }
 
+    // 🆕 NEW: Check for contact info in review
+    const detection = detectContactInfo(comment);
+    if (detection.detected) {
+      try {
+        const violationTypes = detection.violations.map(v => v.type);
+        
+        const violationResult = await logViolation(
+          currentUser.uid,
+          currentUser.email,
+          job.customer_name,
+          'customer',
+          {
+            location: 'job_review',
+            detectedContent: detection.message,
+            violationTypes: violationTypes,
+            blockedText: comment.substring(0, 100)
+          }
+        );
+
+        alert(getViolationWarning(userStatus.violationCount));
+
+        if (violationResult.suspended) {
+          onClose();
+        }
+
+        return;
+      } catch (error) {
+        console.error('Error logging violation:', error);
+      }
+    }
+
     setSubmitting(true);
     
     try {
@@ -49,9 +90,9 @@ const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
         tradesmanId: job.tradesman_id
       });
       
-      // Reset form
       setRating(0);
       setComment('');
+      setContactViolation(null);
       onClose();
     } catch (error) {
       console.error('Error submitting review:', error);
@@ -66,7 +107,6 @@ const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="p-6 border-b">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-gray-900">Leave a Review</h2>
@@ -82,9 +122,7 @@ const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
           </p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6">
-          {/* Star Rating */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-3">
               Overall Rating *
@@ -122,25 +160,32 @@ const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
             </div>
           </div>
 
-          {/* Written Review */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Your Review *
             </label>
             <textarea
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
+              onChange={(e) => handleCommentChange(e.target.value)}
               rows="4"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                contactViolation 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-gray-300 focus:ring-blue-500'
+              }`}
               placeholder="Share details of your experience. What did the tradesman do well? How was their communication, punctuality, and quality of work?"
               maxLength="500"
             />
             <p className="text-xs text-gray-500 mt-1">
               {comment.length}/500 characters (minimum 10)
             </p>
+            {contactViolation && (
+              <p className="text-red-600 text-sm mt-1">
+                ⚠️ {contactViolation.message} - Contact information is not allowed in reviews
+              </p>
+            )}
           </div>
 
-          {/* Buttons */}
           <div className="flex gap-3">
             <button
               type="button"
@@ -152,7 +197,7 @@ const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
             </button>
             <button
               type="submit"
-              disabled={submitting || rating === 0 || comment.trim().length < 10}
+              disabled={submitting || rating === 0 || comment.trim().length < 10 || contactViolation !== null}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
             >
               {submitting ? 'Submitting...' : 'Submit Review'}
@@ -164,7 +209,7 @@ const ReviewModal = ({ isOpen, onClose, job, onSubmitReview }) => {
   );
 };
 
-// Lightweight JobCard - only load comments when expanded (same structure as your existing)
+// JobCard Component - NO CONTACT DETECTION (contact info allowed in active jobs)
 const JobCard = React.memo(({ 
   job, 
   userType, 
@@ -181,9 +226,9 @@ const JobCard = React.memo(({
   onHireAgain,
   getFinalPrice,
   getStatusColor,
-  formatDate 
+  formatDate,
+  userStatus
 }) => {
-  // Helper function to get job date (updated for new data structure)
   const getJobDate = (job) => {
     if (job.agreed_date) {
       return new Date(job.agreed_date).toLocaleDateString('en-GB', { 
@@ -207,7 +252,6 @@ const JobCard = React.memo(({
       'border-blue-500'
     }`}>
       <div className="p-6">
-        {/* Job Header - Always visible */}
         <div className="flex justify-between items-start mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
@@ -257,7 +301,6 @@ const JobCard = React.memo(({
           </div>
         </div>
 
-        {/* Expand/Collapse Button */}
         <button
           onClick={() => onToggleExpand(job.id)}
           className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-2 px-4 rounded mb-4 transition-colors"
@@ -265,10 +308,8 @@ const JobCard = React.memo(({
           {isExpanded ? '▲ Hide Details' : '▼ Show Details & Comments'}
         </button>
 
-        {/* Expandable Content - Only load when expanded */}
         {isExpanded && (
           <>
-            {/* Payment Status Banner */}
             <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-center text-green-800">
                 <span className="text-lg mr-2">💳</span>
@@ -282,13 +323,11 @@ const JobCard = React.memo(({
               </div>
             </div>
 
-            {/* Job Description */}
             <div className="mb-4">
               <h3 className="font-medium text-gray-900 mb-2">Job Description</h3>
               <p className="text-gray-700 whitespace-pre-line">{job.job_description}</p>
             </div>
 
-            {/* Job Photos - Updated field name */}
             {job.job_images && job.job_images.length > 0 && (
               <div className="mb-6">
                 <h3 className="font-medium text-gray-900 mb-3">Job Photos</h3>
@@ -308,7 +347,6 @@ const JobCard = React.memo(({
               </div>
             )}
 
-            {/* Completion Photos - New field */}
             {job.completion_photos && job.completion_photos.length > 0 && (
               <div className="mb-6">
                 <h3 className="font-medium text-gray-900 mb-3">Completion Photos</h3>
@@ -328,7 +366,6 @@ const JobCard = React.memo(({
               </div>
             )}
 
-            {/* Additional Details */}
             {job.additional_notes && (
               <div className="mb-4">
                 <h3 className="font-medium text-gray-900 mb-2">Additional Notes</h3>
@@ -336,7 +373,6 @@ const JobCard = React.memo(({
               </div>
             )}
 
-            {/* Progress Notes - New field */}
             {job.progress_notes && (
               <div className="mb-4">
                 <h3 className="font-medium text-gray-900 mb-2">Progress Notes</h3>
@@ -344,9 +380,7 @@ const JobCard = React.memo(({
               </div>
             )}
 
-            {/* Job Actions */}
             <div className="flex flex-wrap gap-3 mb-6">
-              {/* Status Update Buttons for Tradesmen */}
               {userType === 'tradesman' && (
                 <>
                   {job.status === 'accepted' && (
@@ -368,7 +402,6 @@ const JobCard = React.memo(({
                 </>
               )}
 
-              {/* Cancel Job Button */}
               {job.status !== 'completed' && job.status !== 'cancelled' && 
                !(userType === 'tradesman' && job.status === 'pending_approval') && (
                 <button
@@ -379,7 +412,6 @@ const JobCard = React.memo(({
                 </button>
               )}
 
-              {/* Additional Actions for Completed Jobs */}
               {job.status === 'completed' && (
                 <div className="flex gap-2">
                   {userType === 'customer' && (
@@ -407,7 +439,6 @@ const JobCard = React.memo(({
                 </div>
               )}
 
-              {/* Cancellation details */}
               {job.status === 'cancelled' && (
                 <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mt-2">
                   <div className="flex items-center gap-2 text-red-800 mb-2">
@@ -430,11 +461,10 @@ const JobCard = React.memo(({
               )}
             </div>
 
-            {/* Discussion Section - Only when expanded */}
+            {/* ✅ DISCUSSION SECTION - NO CONTACT DETECTION (contact info allowed here) */}
             <div className="border-t pt-6">
               <h3 className="font-medium text-gray-900 mb-4">Discussion History</h3>
               
-              {/* Comments List */}
               <div className="space-y-3 mb-6 max-h-60 overflow-y-auto">
                 {comments && comments.length > 0 ? (
                   comments.map(comment => (
@@ -463,29 +493,27 @@ const JobCard = React.memo(({
                 )}
               </div>
 
-              {/* Add New Comment */}
+              {/* ✅ ADD NEW COMMENT - NO CONTACT DETECTION */}
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={newComments[job.id] || ''}
                   onChange={(e) => setNewComments(prev => ({ ...prev, [job.id]: e.target.value }))}
-                  placeholder="Add a comment..."
+                  placeholder={userStatus.suspended ? "Account suspended - cannot comment" : "Add a comment..."}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  onKeyPress={(e) => e.key === 'Enter' && onSubmitComment(job.id)}
-                  disabled={submittingComment[job.id]}
+                  onKeyPress={(e) => e.key === 'Enter' && !userStatus.suspended && onSubmitComment(job.id)}
+                  disabled={submittingComment[job.id] || userStatus.suspended}
                 />
                 <button
                   onClick={() => onSubmitComment(job.id)}
-                  disabled={!newComments[job.id]?.trim() || submittingComment[job.id]}
+                  disabled={!newComments[job.id]?.trim() || submittingComment[job.id] || userStatus.suspended}
                   className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
                 >
                   {submittingComment[job.id] ? 'Posting...' : 'Comment'}
                 </button>
               </div>
 
-              {/* Job Completion Workflow */}
               <div className="mt-4 pt-4 border-t">
-                {/* Tradesman: Submit for Customer Approval */}
                 {userType === 'tradesman' && job.status === 'in_progress' && (
                   <button
                     onClick={() => onUpdateJobStatus(job.id, 'pending_approval')}
@@ -495,7 +523,6 @@ const JobCard = React.memo(({
                   </button>
                 )}
 
-                {/* Customer: Approve Completion */}
                 {userType === 'customer' && job.status === 'pending_approval' && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 text-yellow-800 mb-3">
@@ -522,7 +549,6 @@ const JobCard = React.memo(({
                   </div>
                 )}
 
-                {/* Pending Approval Status for Tradesman */}
                 {userType === 'tradesman' && job.status === 'pending_approval' && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <div className="flex items-center gap-2 text-blue-800">
@@ -543,25 +569,43 @@ const JobCard = React.memo(({
   );
 });
 
-// 🚀 NEW ACTIVE JOBS COMPONENT - Connected to active_jobs collection
+// Main ActiveJobs Component
 const ActiveJobs = () => {
   const { currentUser, userType } = useAuth();
   const navigate = useNavigate();
-  const [activeJobs, setActiveJobs] = useState([]); // Renamed from bookedJobs
+  const [activeJobs, setActiveJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState({}); 
   const [newComments, setNewComments] = useState({});
   const [submittingComment, setSubmittingComment] = useState({});
   const [showCompleted, setShowCompleted] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
-  const [expandedJobs, setExpandedJobs] = useState({}); // Track which jobs are expanded
-  const [commentsListeners, setCommentsListeners] = useState({}); // Track active listeners
+  const [expandedJobs, setExpandedJobs] = useState({});
+  const [commentsListeners, setCommentsListeners] = useState({});
   
-  // Review modal state
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewingJob, setReviewingJob] = useState(null);
 
-  // EMAIL NOTIFICATION HELPER FUNCTION (same as your existing)
+  // 🆕 NEW: User status for suspension check
+  const [userStatus, setUserStatus] = useState({ suspended: false, violationCount: 0 });
+  const [showSuspensionWarning, setShowSuspensionWarning] = useState(false);
+
+  // 🆕 NEW: Check user suspension status on mount
+  useEffect(() => {
+    const checkSuspension = async () => {
+      if (!currentUser) return;
+      
+      const status = await checkUserStatus(currentUser.uid);
+      setUserStatus(status);
+      
+      if (status.suspended) {
+        setShowSuspensionWarning(true);
+      }
+    };
+    
+    checkSuspension();
+  }, [currentUser]);
+
   const sendEmailNotification = async (emailData) => {
     try {
       const response = await fetch('/.netlify/functions/send-email', {
@@ -588,13 +632,11 @@ const ActiveJobs = () => {
     }
   }, [currentUser, userType]);
 
-  // ✅ FIXED - Enhanced toggle expand with proper cleanup
   const handleToggleExpand = useCallback((jobId) => {
     setExpandedJobs(prev => {
       const isCurrentlyExpanded = prev[jobId];
       const newExpanded = { ...prev, [jobId]: !isCurrentlyExpanded };
       
-      // If collapsing, clean up the listener for this job
       if (isCurrentlyExpanded && commentsListeners[jobId]) {
         try {
           commentsListeners[jobId]();
@@ -602,7 +644,6 @@ const ActiveJobs = () => {
           console.warn(`Error cleaning up listener for job ${jobId}:`, error);
         }
         
-        // Remove from listeners tracking
         setCommentsListeners(prev => {
           const updated = { ...prev };
           delete updated[jobId];
@@ -610,7 +651,6 @@ const ActiveJobs = () => {
         });
       }
       
-      // If expanding and don't have comments yet, load them
       if (!isCurrentlyExpanded && !comments[jobId]) {
         fetchJobComments(jobId);
       }
@@ -619,14 +659,13 @@ const ActiveJobs = () => {
     });
   }, [comments, commentsListeners]);
 
-  // Helper functions
   const getActiveJobs = () => activeJobs.filter(job => job.status === 'accepted' || job.status === 'in_progress' || job.status === 'pending_approval');
   const getCompletedJobs = () => activeJobs.filter(job => job.status === 'completed');
   const getCancelledJobs = () => activeJobs.filter(job => job.status === 'cancelled');
 
   const getFinalPrice = (job) => {
     if (job.final_price) {
-      return job.final_price; // New field in active_jobs
+      return job.final_price;
     } else if (job.customer_counter_quote) {
       return job.customer_counter_quote;
     } else if (job.custom_quote) {
@@ -645,11 +684,8 @@ const ActiveJobs = () => {
     return priceMatch ? parseInt(priceMatch[1]) : 200;
   };
 
-  // 🔄 NEW: HIRE AGAIN FUNCTIONALITY
   const handleHireAgain = useCallback((job) => {
-    // Navigate to booking request page with tradesman ID as path parameter
     const searchParams = new URLSearchParams({
-      // Pass job details to pre-fill the form
       prefillTitle: job.job_title || '',
       prefillDescription: job.job_description || '',
       prefillNotes: job.additional_notes || '',
@@ -657,11 +693,9 @@ const ActiveJobs = () => {
       source: 'hire_again'
     });
     
-    // Navigate to the booking request page with tradesman ID in path
     navigate(`/booking-request/${job.tradesman_id}?${searchParams.toString()}`);
   }, [navigate]);
 
-  // 🎯 CONNECT TO NEW active_jobs COLLECTION
   const fetchActiveJobs = async () => {
     if (!currentUser) return;
     
@@ -670,15 +704,15 @@ const ActiveJobs = () => {
       
       if (userType === 'customer') {
         jobsQuery = query(
-          collection(db, 'active_jobs'), // 🆕 NEW COLLECTION
+          collection(db, 'active_jobs'),
           where('customer_id', '==', currentUser.uid),
-          limit(JOBS_PER_PAGE) // Limit initial load
+          limit(JOBS_PER_PAGE)
         );
       } else if (userType === 'tradesman') {
         jobsQuery = query(
-          collection(db, 'active_jobs'), // 🆕 NEW COLLECTION
+          collection(db, 'active_jobs'),
           where('tradesman_id', '==', currentUser.uid),
-          limit(JOBS_PER_PAGE) // Limit initial load
+          limit(JOBS_PER_PAGE)
         );
       }
 
@@ -689,8 +723,6 @@ const ActiveJobs = () => {
         for (const jobDoc of querySnapshot.docs) {
           const jobData = jobDoc.data();
           
-          // No need to filter by status - all records in active_jobs are actual jobs
-          // No need to fetch user names - they're already in the job data
           jobsData.push({
             id: jobDoc.id,
             ...jobData
@@ -707,10 +739,8 @@ const ActiveJobs = () => {
     }
   };
 
-  // 🎯 ENHANCED COMMENTS FOR NEW ARCHITECTURE - ✅ FIXED MEMORY LEAKS
   const fetchJobComments = async (jobId) => {
     try {
-      // ✅ FIXED - Clean up existing listener if it exists
       if (commentsListeners[jobId]) {
         try {
           commentsListeners[jobId]();
@@ -721,7 +751,7 @@ const ActiveJobs = () => {
 
       const commentsQuery = query(
         collection(db, 'booking_comments'),
-        where('active_job_id', '==', jobId) // 🆕 NEW FIELD
+        where('active_job_id', '==', jobId)
       );
 
       const unsubscribe = onSnapshot(
@@ -748,7 +778,6 @@ const ActiveJobs = () => {
         }
       );
 
-      // ✅ FIXED - Track listener for proper cleanup
       setCommentsListeners(prev => ({
         ...prev,
         [jobId]: unsubscribe
@@ -763,9 +792,16 @@ const ActiveJobs = () => {
     }
   };
 
+  // ✅ NO CONTACT DETECTION IN ACTIVE JOB COMMENTS (contact info allowed)
   const handleSubmitComment = useCallback(async (jobId) => {
     const commentText = newComments[jobId]?.trim();
     if (!commentText) return;
+
+    // Check if suspended (but no contact detection)
+    if (userStatus.suspended) {
+      alert('⚠️ Your account is suspended.\n\nYou cannot send comments.\n\nPlease contact support@patchworktrades.com to appeal.');
+      return;
+    }
 
     setSubmittingComment(prev => ({ ...prev, [jobId]: true }));
 
@@ -774,8 +810,8 @@ const ActiveJobs = () => {
       const userName = userType === 'customer' ? job?.customer_name : job?.tradesman_name;
       
       const commentData = {
-        active_job_id: jobId, // 🆕 NEW FIELD
-        booking_id: null, // Legacy field for backward compatibility
+        active_job_id: jobId,
+        booking_id: null,
         user_id: currentUser.uid,
         user_type: userType,
         user_name: userName || 'Unknown',
@@ -786,7 +822,6 @@ const ActiveJobs = () => {
       await addDoc(collection(db, 'booking_comments'), commentData);
       setNewComments(prev => ({ ...prev, [jobId]: '' }));
 
-      // EMAIL NOTIFICATION FOR NEW COMMENT
       if (job) {
         const recipientIsCustomer = userType === 'tradesman';
         const recipientEmail = recipientIsCustomer ? job.customer_email : job.tradesman_email;
@@ -808,7 +843,7 @@ const ActiveJobs = () => {
     } finally {
       setSubmittingComment(prev => ({ ...prev, [jobId]: false }));
     }
-  }, [newComments, activeJobs, userType, currentUser.uid]);
+  }, [newComments, activeJobs, userType, currentUser.uid, userStatus.suspended]);
 
   const handleUpdateJobStatus = useCallback(async (jobId, newStatus) => {
     try {
@@ -817,14 +852,12 @@ const ActiveJobs = () => {
         updated_at: new Date().toISOString()
       };
 
-      // Add completion timestamp for completed jobs
       if (newStatus === 'completed') {
         updateData.completed_at = new Date().toISOString();
       }
 
       await updateDoc(doc(db, 'active_jobs', jobId), updateData);
       
-      // 🆕 NEW: Create completed_jobs entry when job is marked as completed
       if (newStatus === 'completed') {
         const job = activeJobs.find(j => j.id === jobId);
         if (job) {
@@ -843,7 +876,6 @@ const ActiveJobs = () => {
             created_at: job.created_at,
             agreed_date: job.agreed_date,
             payment_intent_id: job.payment_intent_id,
-            // Add any other fields needed for top earners calculations
             area_covered: job.tradesman_area || job.area_covered || 'London',
             trade_type: job.tradesman_trade_type || job.job_category || 'Tradesman'
           };
@@ -853,12 +885,10 @@ const ActiveJobs = () => {
             console.log('✅ Completed job entry created successfully');
           } catch (error) {
             console.error('❌ Error creating completed_jobs entry:', error);
-            // Don't fail the whole operation if this fails
           }
         }
       }
       
-      // Add system comment for status changes
       let statusMessage = '';
       if (newStatus === 'pending_approval') {
         statusMessage = 'Tradesman has submitted job for customer approval';
@@ -871,8 +901,8 @@ const ActiveJobs = () => {
       }
 
       await addDoc(collection(db, 'booking_comments'), {
-        active_job_id: jobId, // 🆕 NEW FIELD
-        booking_id: null, // Legacy field
+        active_job_id: jobId,
+        booking_id: null,
         user_id: currentUser.uid,
         user_type: 'system',
         user_name: 'System',
@@ -880,7 +910,6 @@ const ActiveJobs = () => {
         timestamp: new Date().toISOString()
       });
 
-      // EMAIL NOTIFICATIONS FOR STATUS CHANGES
       const job = activeJobs.find(j => j.id === jobId);
       if (job) {
         if (newStatus === 'in_progress') {
@@ -920,16 +949,6 @@ const ActiveJobs = () => {
   const handleCancelJob = useCallback(async (jobId) => {
     try {
       const job = activeJobs.find(j => j.id === jobId);
-      
-      // 🔍 DEBUG: Log the data
-      console.log('=== CANCEL JOB DEBUG ===');
-      console.log('Job ID:', jobId);
-      console.log('Current User UID:', currentUser.uid);
-      console.log('Full job object:', job);
-      console.log('Job customer_id:', job?.customer_id);
-      console.log('Job tradesman_id:', job?.tradesman_id);
-      console.log('User type:', userType);
-      console.log('========================');
       
       if (!job) return;
 
@@ -986,7 +1005,6 @@ Are you sure you want to cancel?`;
 
       await updateDoc(doc(db, 'active_jobs', jobId), updateData);
 
-      // Add system comment
       let cancellationMessage;
       if (userType === 'customer') {
         cancellationMessage = `Job cancelled by customer with ${cancellationPercentage}% fee (£${cancellationFee}). Refund: £${basePrice - cancellationFee}`;
@@ -995,8 +1013,8 @@ Are you sure you want to cancel?`;
       }
 
       await addDoc(collection(db, 'booking_comments'), {
-        active_job_id: jobId, // 🆕 NEW FIELD
-        booking_id: null, // Legacy field
+        active_job_id: jobId,
+        booking_id: null,
         user_id: currentUser.uid,
         user_type: 'system',
         user_name: 'System',
@@ -1004,7 +1022,6 @@ Are you sure you want to cancel?`;
         timestamp: new Date().toISOString()
       });
 
-      // EMAIL NOTIFICATIONS FOR JOB CANCELLATION
       const recipientIsCustomer = userType === 'tradesman';
       const recipientEmail = recipientIsCustomer ? job.customer_email : job.tradesman_email;
       const recipientName = recipientIsCustomer ? job.customer_name : job.tradesman_name;
@@ -1033,16 +1050,13 @@ Are you sure you want to cancel?`;
     }
   }, [activeJobs, userType, getNumericPrice, currentUser.uid]);
 
-  // Handle opening review modal
   const handleOpenReviewModal = useCallback((job) => {
     setReviewingJob(job);
     setReviewModalOpen(true);
   }, []);
 
-  // Handle review submission (same as your existing)
   const handleSubmitReview = useCallback(async (reviewData) => {
     try {
-      // Get current tradesman profile
       const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', reviewData.tradesmanId));
       
       if (!tradesmanDoc.exists()) {
@@ -1053,7 +1067,6 @@ Are you sure you want to cancel?`;
       const currentReviews = tradesmanData.reviews || [];
       const currentJobsCount = tradesmanData.completed_jobs_count || 0;
 
-      // Create new review object
       const newReview = {
         rating: reviewData.rating,
         comment: reviewData.comment,
@@ -1062,30 +1075,25 @@ Are you sure you want to cancel?`;
         job_id: reviewData.jobId
       };
 
-      // Add new review to array
       const updatedReviews = [...currentReviews, newReview];
 
-      // Calculate new average rating
       const totalRating = updatedReviews.reduce((sum, review) => sum + review.rating, 0);
       const newAverageRating = Number((totalRating / updatedReviews.length).toFixed(1));
 
-      // Update tradesman profile
       await updateDoc(doc(db, 'tradesmen_profiles', reviewData.tradesmanId), {
         reviews: updatedReviews,
         average_rating: newAverageRating,
         completed_jobs_count: currentJobsCount + 1
       });
       
-      // Mark job as reviewed to prevent duplicate reviews
       await updateDoc(doc(db, 'active_jobs', reviewData.jobId), {
         reviewed_by_customer: true,
         review_submitted_at: new Date().toISOString()
       });
 
-      // Add system comment
       await addDoc(collection(db, 'booking_comments'), {
-        active_job_id: reviewData.jobId, // 🆕 NEW FIELD
-        booking_id: null, // Legacy field
+        active_job_id: reviewData.jobId,
+        booking_id: null,
         user_id: currentUser.uid,
         user_type: 'system',
         user_name: 'System',
@@ -1093,7 +1101,6 @@ Are you sure you want to cancel?`;
         timestamp: new Date().toISOString()
       });
 
-      // EMAIL NOTIFICATION FOR REVIEW SUBMISSION
       const job = activeJobs.find(j => j.id === reviewData.jobId);
       if (job) {
         await sendEmailNotification({
@@ -1105,14 +1112,13 @@ Are you sure you want to cancel?`;
         });
       }
 
-      // Refresh jobs to show review status
       fetchActiveJobs();
       
       alert('Review submitted successfully!');
       
     } catch (error) {
       console.error('Error submitting review:', error);
-      throw error; // Re-throw to let modal handle error display
+      throw error;
     }
   }, [currentUser.uid, activeJobs]);
 
@@ -1136,7 +1142,6 @@ Are you sure you want to cancel?`;
     });
   };
 
-  // ✅ FIXED - Enhanced cleanup listeners on unmount
   useEffect(() => {
     return () => {
       Object.values(commentsListeners).forEach(unsubscribe => {
@@ -1164,6 +1169,27 @@ Are you sure you want to cancel?`;
 
   return (
     <div className="max-w-6xl mx-auto p-4">
+      {/* 🆕 NEW: Suspension Warning Banner */}
+      {showSuspensionWarning && userStatus.suspended && (
+        <div className="mb-6 bg-red-50 border-2 border-red-500 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="text-2xl mr-3">🚫</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-900 mb-2">Account Suspended</h3>
+              <p className="text-red-800 mb-2">
+                Your account has been suspended. You can view jobs but cannot send comments.
+              </p>
+              <a 
+                href="mailto:support@patchworktrades.com"
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium inline-block"
+              >
+                Contact Support to Appeal
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Active Jobs</h1>
         <p className="text-gray-600 mt-2">
@@ -1174,7 +1200,6 @@ Are you sure you want to cancel?`;
         </p>
       </div>
 
-      {/* Active Jobs Section */}
       <div className="mb-8">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Current Jobs</h2>
         {getActiveJobs().length === 0 ? (
@@ -1206,13 +1231,13 @@ Are you sure you want to cancel?`;
                 getFinalPrice={getFinalPrice}
                 getStatusColor={getStatusColor}
                 formatDate={formatDate}
+                userStatus={userStatus}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* Toggle Buttons */}
       <div className="flex gap-4 mb-6">
         <button
           onClick={() => setShowCompleted(!showCompleted)}
@@ -1237,7 +1262,6 @@ Are you sure you want to cancel?`;
         </button>
       </div>
 
-      {/* Completed Jobs Section */}
       {showCompleted && (
         <div className="mb-8">
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
@@ -1269,6 +1293,7 @@ Are you sure you want to cancel?`;
                   getFinalPrice={getFinalPrice}
                   getStatusColor={getStatusColor}
                   formatDate={formatDate}
+                  userStatus={userStatus}
                 />
               ))}
             </div>
@@ -1276,7 +1301,6 @@ Are you sure you want to cancel?`;
         </div>
       )}
 
-      {/* Cancelled Jobs Section */}
       {showCancelled && (
         <div className="mb-8">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
@@ -1308,6 +1332,7 @@ Are you sure you want to cancel?`;
                   getFinalPrice={getFinalPrice}
                   getStatusColor={getStatusColor}
                   formatDate={formatDate}
+                  userStatus={userStatus}
                 />
               ))}
             </div>
@@ -1315,12 +1340,14 @@ Are you sure you want to cancel?`;
         </div>
       )}
 
-      {/* Review Modal */}
+      {/* 🆕 UPDATED: Review Modal with contact detection and userStatus */}
       <ReviewModal
         isOpen={reviewModalOpen}
         onClose={() => setReviewModalOpen(false)}
         job={reviewingJob}
         onSubmitReview={handleSubmitReview}
+        currentUser={currentUser}
+        userStatus={userStatus}
       />
     </div>
   );
