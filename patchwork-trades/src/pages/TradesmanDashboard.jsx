@@ -17,6 +17,8 @@ const TradesmanDashboard = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({});
+  const [imageExpanded, setImageExpanded] = useState(false);
+  const [expandedPortfolioImage, setExpandedPortfolioImage] = useState(null);
 
   useEffect(() => {
     fetchProfile();
@@ -56,7 +58,7 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // NEW: Get coordinates from postcode
+  // Get coordinates from postcode
   const getCoordinatesFromPostcode = async (postcode) => {
     try {
       const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
@@ -81,7 +83,6 @@ const TradesmanDashboard = () => {
     e.preventDefault();
     
     try {
-      // NEW: If postcode changed, get new coordinates
       let updateData = { ...profileForm };
       
       if (profileForm.postcode && profileForm.postcode !== profile.postcode) {
@@ -261,6 +262,50 @@ const TradesmanDashboard = () => {
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Tradesman Dashboard</h1>
       
+      {/* Profile Photo Expanded Modal */}
+      {imageExpanded && (profileForm.profilePhoto || profile.profilePhoto) && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={() => setImageExpanded(false)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <img 
+              src={editingProfile ? profileForm.profilePhoto : profile.profilePhoto}
+              alt="Profile expanded" 
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            />
+            <button
+              onClick={() => setImageExpanded(false)}
+              className="absolute top-4 right-4 bg-white text-gray-800 rounded-full w-10 h-10 flex items-center justify-center hover:bg-gray-200 font-bold text-xl"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Portfolio Image Expanded Modal */}
+      {expandedPortfolioImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={() => setExpandedPortfolioImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <img 
+              src={expandedPortfolioImage}
+              alt="Portfolio expanded" 
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            />
+            <button
+              onClick={() => setExpandedPortfolioImage(null)}
+              className="absolute top-4 right-4 bg-white text-gray-800 rounded-full w-10 h-10 flex items-center justify-center hover:bg-gray-200 font-bold text-xl"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Profile Section */}
       {profile && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -285,6 +330,42 @@ const TradesmanDashboard = () => {
           {editingProfile ? (
             /* Edit Profile Form */
             <form onSubmit={updateProfile} className="space-y-6">
+              {/* Profile Photo Section - IN EDIT MODE */}
+              <div>
+                <h3 className="text-lg font-medium mb-3 text-gray-700">Profile Photo</h3>
+                <div className="flex items-center gap-4">
+                  {profileForm.profilePhoto ? (
+                    <img 
+                      src={profileForm.profilePhoto} 
+                      alt="Profile" 
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => setImageExpanded(true)}
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                      No Photo
+                    </div>
+                  )}
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePhotoUpload}
+                      disabled={uploadingImage}
+                      className="hidden"
+                      id="profile-photo-upload-edit"
+                    />
+                    <label 
+                      htmlFor="profile-photo-upload-edit"
+                      className={`bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {uploadingImage ? 'Uploading...' : 'Upload Photo'}
+                    </label>
+                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG • Click photo to expand</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Basic Information */}
               <div>
                 <h3 className="text-lg font-medium mb-3 text-gray-700">Basic Information</h3>
@@ -312,7 +393,7 @@ const TradesmanDashboard = () => {
                 </div>
               </div>
 
-              {/* NEW: Location Section */}
+              {/* Location Section */}
               <div>
                 <h3 className="text-lg font-medium mb-3 text-gray-700">Location</h3>
                 <div className="grid md:grid-cols-2 gap-4">
@@ -428,7 +509,8 @@ const TradesmanDashboard = () => {
                     <img 
                       src={profile.profilePhoto} 
                       alt="Profile" 
-                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => setImageExpanded(true)}
                     />
                   ) : (
                     <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
@@ -446,11 +528,11 @@ const TradesmanDashboard = () => {
                     />
                     <label 
                       htmlFor="profile-photo-upload"
-                      className="bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 disabled:bg-gray-400"
+                      className={`bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {uploadingImage ? 'Uploading...' : 'Upload Photo'}
                     </label>
-                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG</p>
+                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG • Click photo to expand</p>
                   </div>
                 </div>
               </div>
@@ -478,7 +560,6 @@ const TradesmanDashboard = () => {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {/* NEW: Show postcode */}
                   <div>
                     <p className="text-sm text-gray-600">Postcode</p>
                     <p className="font-medium">{profile.postcode || 'Not specified'}</p>
@@ -558,11 +639,11 @@ const TradesmanDashboard = () => {
                   />
                   <label 
                     htmlFor="portfolio-upload"
-                    className="bg-green-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-green-600 disabled:bg-gray-400"
+                    className={`bg-green-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-green-600 inline-block ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {uploadingImage ? 'Uploading...' : 'Add Portfolio Image'}
                   </label>
-                  <p className="text-sm text-gray-500 mt-1">Show examples of your work</p>
+                  <p className="text-sm text-gray-500 mt-1">Show examples of your work • Click images to expand</p>
                 </div>
 
                 {profile.portfolio && profile.portfolio.length > 0 ? (
@@ -572,7 +653,8 @@ const TradesmanDashboard = () => {
                         <img 
                           src={portfolioItem.image} 
                           alt="Portfolio work" 
-                          className="w-full h-32 object-cover rounded border"
+                          className="w-full h-32 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => setExpandedPortfolioImage(portfolioItem.image)}
                         />
                         <button
                           onClick={() => deletePortfolioImage(portfolioItem.id)}
