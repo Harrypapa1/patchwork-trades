@@ -45,7 +45,8 @@ import CookiePolicy from './pages/CookiePolicy';
 import ContactHelp from './pages/ContactHelp';
 // 🆕 NEW IMPORTS - Admin Dashboards
 import AdminDashboard from './pages/AdminDashboard';
-import AdminAnalytics from './pages/AdminAnalytics'; // 🆕 NEW IMPORT - Analytics Dashboard
+import AdminAnalytics from './pages/AdminAnalytics';
+import TradesmanAnalytics from './components/TradesmanAnalytics';
 
 // Error Boundary Component
 class ErrorBoundary extends Component {
@@ -152,7 +153,8 @@ function AppContent() {
             
             {/* 🆕 ADMIN ROUTES - Password Protected */}
             <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin-analytics" element={<AdminAnalytics />} /> {/* 🆕 NEW ROUTE */}
+            <Route path="/admin-analytics" element={<AdminAnalytics />} />
+            <Route path="/analytics/:tradesmanId" element={<TradesmanAnalytics />} />
             
             {/* 🆕 NEW ROUTES - Password Reset System (Public Routes) */}
             <Route path="/forgot-password" element={<ForgotPassword />} />
