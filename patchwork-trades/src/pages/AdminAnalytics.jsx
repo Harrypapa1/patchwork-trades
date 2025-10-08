@@ -406,13 +406,17 @@ const AdminAnalytics = () => {
           <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b border-gray-200">
               <h3 className="text-lg font-semibold text-gray-900">Top Viewed Tradesmen</h3>
-              <p className="text-gray-600 text-sm">Tradesmen profiles with the most views</p>
+              <p className="text-gray-600 text-sm">Tradesmen profiles with the most views (click for details)</p>
             </div>
             <div className="p-6">
               {profileViewStats.length > 0 ? (
                 <div className="space-y-3">
                   {profileViewStats.map((tradesman, index) => (
-                    <div key={tradesman.tradesman_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <div 
+                      key={tradesman.tradesman_id} 
+                      onClick={() => navigate(`/analytics/${tradesman.tradesman_id}`)}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-blue-50 hover:shadow-md transition-all cursor-pointer border-2 border-transparent hover:border-blue-300"
+                    >
                       <div className="flex items-center gap-4">
                         <span className="text-2xl font-bold text-gray-400">#{index + 1}</span>
                         <div>
@@ -420,12 +424,19 @@ const AdminAnalytics = () => {
                           <p className="text-sm text-gray-600">ID: {tradesman.tradesman_id}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-blue-600">{tradesman.total_views.toLocaleString()}</p>
-                        <p className="text-xs text-gray-500">total views</p>
-                        <p className="text-sm text-green-600 font-medium mt-1">
-                          {tradesman.this_month_views} this month
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="text-2xl font-bold text-blue-600">{tradesman.total_views.toLocaleString()}</p>
+                          <p className="text-xs text-gray-500">total views</p>
+                          <p className="text-sm text-green-600 font-medium mt-1">
+                            {tradesman.this_month_views} this month
+                          </p>
+                        </div>
+                        <div className="text-blue-600">
+                          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
                       </div>
                     </div>
                   ))}
