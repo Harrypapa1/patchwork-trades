@@ -11,6 +11,7 @@ const TradesmanRegister = () => {
     password: '',
     tradeType: '',
     areaCovered: '',
+    postcode: '', // NEW
     bio: ''
   });
   const [loading, setLoading] = useState(false);
@@ -29,12 +30,45 @@ const TradesmanRegister = () => {
     });
   };
 
+  // NEW: Get lat/long from postcode
+  const getCoordinatesFromPostcode = async (postcode) => {
+    try {
+      const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
+      const response = await fetch(`https://api.postcodes.io/postcodes/${cleanPostcode}`);
+      const data = await response.json();
+      
+      if (data.status === 200) {
+        return {
+          latitude: data.result.latitude,
+          longitude: data.result.longitude
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching coordinates:', error);
+      return null;
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
+      // NEW: Get coordinates from postcode
+      let coordinates = { latitude: 0, longitude: 0 };
+      if (formData.postcode) {
+        const coords = await getCoordinatesFromPostcode(formData.postcode);
+        if (coords) {
+          coordinates = coords;
+        } else {
+          setError('Invalid postcode. Please check and try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
       // Create Firebase Auth user
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
@@ -42,12 +76,15 @@ const TradesmanRegister = () => {
         formData.password
       );
       
-      // Create Firestore document
+      // Create Firestore document with NEW FIELDS
       await setDoc(doc(db, 'tradesmen_profiles', userCredential.user.uid), {
         name: formData.name,
         email: formData.email,
         tradeType: formData.tradeType,
         areaCovered: formData.areaCovered,
+        postcode: formData.postcode, // NEW
+        latitude: coordinates.latitude, // NEW
+        longitude: coordinates.longitude, // NEW
         bio: formData.bio,
         createdAt: new Date().toISOString(),
         userId: userCredential.user.uid
@@ -122,6 +159,25 @@ const TradesmanRegister = () => {
               <option key={trade} value={trade}>{trade}</option>
             ))}
           </select>
+        </div>
+
+        {/* NEW: Postcode field */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Postcode *
+          </label>
+          <input
+            type="text"
+            name="postcode"
+            value={formData.postcode}
+            onChange={handleChange}
+            placeholder="e.g., M1 1AA"
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Used to show your distance to customers
+          </p>
         </div>
 
         <div>
