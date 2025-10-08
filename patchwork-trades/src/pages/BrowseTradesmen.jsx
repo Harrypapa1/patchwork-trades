@@ -707,9 +707,15 @@ const BrowseTradesmen = () => {
           {/* Show user location if available */}
           {userLocation && (
             <div className="mb-4 text-center">
-              <p className="text-sm text-gray-600">
-                📍 Searching near <span className="font-medium">{userLocation.postcode}</span>
+              <p className="text-sm text-gray-600 mb-2">
+                Searching near <span className="font-medium">{userLocation.postcode}</span>
               </p>
+              <button
+                onClick={() => navigate('/customer-dashboard')}
+                className="text-xs text-blue-600 hover:text-blue-800 underline"
+              >
+                Not at this address?
+              </button>
             </div>
           )}
           
@@ -776,8 +782,14 @@ const BrowseTradesmen = () => {
             
             {/* Show user location */}
             {userLocation && (
-              <div className="mt-2 text-sm text-gray-600">
-                📍 Searching near <span className="font-medium">{userLocation.postcode}</span>
+              <div className="mt-2 text-sm text-gray-600 flex items-center gap-2">
+                <span>Searching near <span className="font-medium">{userLocation.postcode}</span></span>
+                <button
+                  onClick={() => navigate('/customer-dashboard')}
+                  className="text-blue-600 hover:text-blue-800 underline"
+                >
+                  Not at this address?
+                </button>
               </div>
             )}
           </div>
@@ -798,7 +810,6 @@ const BrowseTradesmen = () => {
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
                 style={{ minHeight: '44px' }}
               >
-                <span>📅</span>
                 <span>{showDateFilter ? 'Hide' : 'Filter by'} dates</span>
                 {selectedDates.length > 0 && (
                   <span className="bg-blue-800 px-2 py-1 rounded-full text-xs">
@@ -816,7 +827,7 @@ const BrowseTradesmen = () => {
                     className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
                     style={{ minHeight: '44px' }}
                   >
-                    <option value="any">📍 Any Distance</option>
+                    <option value="any">Any Distance</option>
                     <option value="5">Within 5 miles</option>
                     <option value="10">Within 10 miles</option>
                     <option value="25">Within 25 miles</option>
@@ -837,7 +848,7 @@ const BrowseTradesmen = () => {
                   className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
                   style={{ minHeight: '44px' }}
                 >
-                  <option value="any">🛡️ Any Insurance</option>
+                  <option value="any">Any Insurance</option>
                   <option value="fully-insured">Fully Insured</option>
                   <option value="public-liability">Public Liability</option>
                   <option value="not-insured">Not Insured</option>
@@ -857,7 +868,7 @@ const BrowseTradesmen = () => {
                   className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
                   style={{ minHeight: '44px' }}
                 >
-                  <option value="any">⭐ Any Rating</option>
+                  <option value="any">Any Rating</option>
                   <option value="4">4+ Stars</option>
                   <option value="3">3+ Stars</option>
                   <option value="2">2+ Stars</option>
@@ -877,7 +888,7 @@ const BrowseTradesmen = () => {
                   className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
                   style={{ minHeight: '44px' }}
                 >
-                  <option value="default">💰 Sort by</option>
+                  <option value="default">Sort by</option>
                   {userLocation && <option value="distance">Nearest First</option>}
                   <option value="low-to-high">Price: Low to High</option>
                   <option value="high-to-low">Price: High to Low</option>
@@ -905,7 +916,7 @@ const BrowseTradesmen = () => {
               <div className="flex flex-wrap gap-2 mb-4">
                 {selectedDates.length > 0 && (
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                    📅 {selectedDates.length} date{selectedDates.length > 1 ? 's' : ''}
+                    {selectedDates.length} date{selectedDates.length > 1 ? 's' : ''}
                     <button
                       onClick={() => setSelectedDates([])}
                       className="text-blue-600 hover:text-blue-800 font-bold"
@@ -916,7 +927,7 @@ const BrowseTradesmen = () => {
                 )}
                 {maxDistance !== 'any' && (
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                    📍 Within {maxDistance} miles
+                    Within {maxDistance} miles
                     <button
                       onClick={() => setMaxDistance('any')}
                       className="text-blue-600 hover:text-blue-800 font-bold"
@@ -927,7 +938,7 @@ const BrowseTradesmen = () => {
                 )}
                 {insuranceFilter !== 'any' && (
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                    🛡️ {insuranceFilter === 'fully-insured' ? 'Fully Insured' : 
+                    {insuranceFilter === 'fully-insured' ? 'Fully Insured' : 
                         insuranceFilter === 'public-liability' ? 'Public Liability' : 'Not Insured'}
                     <button
                       onClick={() => setInsuranceFilter('any')}
@@ -939,7 +950,7 @@ const BrowseTradesmen = () => {
                 )}
                 {minRatingFilter !== 'any' && (
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                    ⭐ {minRatingFilter}+ Stars
+                    {minRatingFilter}+ Stars
                     <button
                       onClick={() => setMinRatingFilter('any')}
                       className="text-blue-600 hover:text-blue-800 font-bold"
@@ -950,7 +961,7 @@ const BrowseTradesmen = () => {
                 )}
                 {sortByPrice !== 'default' && (
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                    💰 {sortByPrice === 'distance' ? 'Nearest First' : 
+                    {sortByPrice === 'distance' ? 'Nearest First' : 
                         sortByPrice === 'low-to-high' ? 'Low to High' : 'High to Low'}
                     <button
                       onClick={() => setSortByPrice('default')}
@@ -1102,7 +1113,7 @@ const BrowseTradesmen = () => {
                             {/* Show distance if available */}
                             {tradesman.distance !== undefined && tradesman.distance !== null && (
                               <p className="text-sm text-blue-600">
-                                📍 {tradesman.distance.toFixed(1)} miles away
+                                {tradesman.distance.toFixed(1)} miles away
                               </p>
                             )}
                           </div>
