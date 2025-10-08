@@ -1,16 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom'; // 🆕 ADDED useSearchParams
 import { useAuth } from '../context/AuthContext';
+import { trackReferralVisit } from '../utils/referralTracker'; // 🆕 NEW IMPORT
 
 const Home = () => {
   const [authLoaded, setAuthLoaded] = useState(false);
   const [userState, setUserState] = useState({ currentUser: null, userType: null });
   const location = useLocation();
+  const [searchParams] = useSearchParams(); // 🆕 NEW: Get URL parameters
   
   // Get redirect message from navigation state
   const redirectMessage = location.state?.message;
   const showRegister = location.state?.showRegister;
   const returnTo = location.state?.returnTo;
+
+  // 🆕 NEW: Check for referral code in URL and track it
+  useEffect(() => {
+    const referralCode = searchParams.get('ref');
+    
+    if (referralCode) {
+      trackReferralVisit(referralCode);
+      console.log('🔗 Referral code detected:', referralCode);
+    }
+  }, [searchParams]);
 
   // Load auth state asynchronously - don't block page render
   useEffect(() => {
