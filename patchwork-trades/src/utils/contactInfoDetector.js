@@ -36,9 +36,6 @@ export const detectContactInfo = (text) => {
     /\b0[1-9]\d{1,2}[\s-]?\d{3,4}[\s-]?\d{4}\b/g
   ];
 
-  // Written out numbers: "zero seven nine one two..."
-  const writtenNumbers = /\b(zero|one|two|three|four|five|six|seven|eight|nine|oh)[\s-]?(zero|one|two|three|four|five|six|seven|eight|nine|oh)[\s-]?(zero|one|two|three|four|five|six|seven|eight|nine|oh)/gi;
-  
   phonePatterns.forEach(pattern => {
     const matches = text.match(pattern);
     if (matches) {
@@ -52,6 +49,28 @@ export const detectContactInfo = (text) => {
     }
   });
 
+  // ✅ NEW: Detect spaced-out numbers (0 7 7 4 8 6 5 6 4 0 2)
+  // Look for 10+ digits with spaces/dashes between each one
+  const spacedNumberPattern = /\b\d[\s-]+\d[\s-]+\d[\s-]+\d[\s-]+\d[\s-]+\d[\s-]+\d[\s-]+\d[\s-]+\d[\s-]+\d[\s-]*\d?\b/g;
+  const spacedMatches = text.match(spacedNumberPattern);
+  if (spacedMatches) {
+    spacedMatches.forEach(match => {
+      // Count how many digits are in this match
+      const digitCount = match.replace(/[^\d]/g, '').length;
+      // UK phone numbers are 10-11 digits
+      if (digitCount >= 10 && digitCount <= 11) {
+        violations.push({
+          type: 'phone',
+          value: match,
+          message: 'Spaced phone number detected'
+        });
+      }
+    });
+  }
+
+  // Written out numbers: "zero seven nine one two..."
+  const writtenNumbers = /\b(zero|one|two|three|four|five|six|seven|eight|nine|oh)[\s-]?(zero|one|two|three|four|five|six|seven|eight|nine|oh)[\s-]?(zero|one|two|three|four|five|six|seven|eight|nine|oh)/gi;
+  
   if (writtenNumbers.test(text)) {
     violations.push({
       type: 'phone',
