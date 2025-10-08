@@ -46,7 +46,7 @@ import ContactHelp from './pages/ContactHelp';
 // 🆕 NEW IMPORTS - Admin Dashboards
 import AdminDashboard from './pages/AdminDashboard';
 import AdminAnalytics from './pages/AdminAnalytics';
-import TradesmanAnalytics from './components/TradesmanAnalytics';
+import TradesmanAnalytics from './pages/TradesmanAnalytics';
 
 // Error Boundary Component
 class ErrorBoundary extends Component {
