@@ -8,6 +8,8 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
 import { signOut } from 'firebase/auth';
+import { detectContactInfo, getViolationWarning, getShortWarning } from '../utils/contactInfoDetector';
+import { logViolation, checkUserStatus } from '../utils/violationTracker';
 
 const TradesmanDashboard = () => {
   const { currentUser } = useAuth();
@@ -19,6 +21,33 @@ const TradesmanDashboard = () => {
   const [profileForm, setProfileForm] = useState({});
   const [imageExpanded, setImageExpanded] = useState(false);
   const [expandedPortfolioImage, setExpandedPortfolioImage] = useState(null);
+
+  // 🆕 NEW: Suspension check
+  const [userStatus, setUserStatus] = useState({ suspended: false, violationCount: 0 });
+  const [showSuspensionWarning, setShowSuspensionWarning] = useState(false);
+
+  // 🆕 NEW: Contact violation tracking for multiple fields
+  const [fieldViolations, setFieldViolations] = useState({
+    certifications: null,
+    specializations: null,
+    servicesOffered: null
+  });
+
+  // 🆕 NEW: Check user suspension status on mount
+  useEffect(() => {
+    const checkSuspension = async () => {
+      if (!currentUser) return;
+      
+      const status = await checkUserStatus(currentUser.uid);
+      setUserStatus(status);
+      
+      if (status.suspended) {
+        setShowSuspensionWarning(true);
+      }
+    };
+    
+    checkSuspension();
+  }, [currentUser]);
 
   useEffect(() => {
     fetchProfile();
@@ -41,7 +70,6 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // Share profile function
   const shareProfile = () => {
     const profileUrl = `https://patchworktrades.com/tradesman/${currentUser.uid}`;
     
@@ -58,7 +86,6 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // Get coordinates from postcode
   const getCoordinatesFromPostcode = async (postcode) => {
     try {
       const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
@@ -78,9 +105,88 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // Update profile with enhanced fields
+  // 🆕 NEW: Handle profile form input with contact detection
+  const handleProfileInputChange = (field, value) => {
+    setProfileForm(prev => ({ ...prev, [field]: value }));
+
+    // Check specific fields for contact info
+    if (['certifications', 'specializations', 'servicesOffered'].includes(field)) {
+      const detection = detectContactInfo(value);
+      setFieldViolations(prev => ({
+        ...prev,
+        [field]: detection.detected ? detection : null
+      }));
+    }
+  };
+
+  // 🆕 NEW: Enhanced updateProfile with contact detection
   const updateProfile = async (e) => {
     e.preventDefault();
+
+    // Check if user is suspended
+    if (userStatus.suspended) {
+      alert('⚠️ Your account is suspended.\n\nYou cannot update your profile.\n\nPlease contact support@patchworktrades.com to appeal.');
+      return;
+    }
+
+    // 🆕 NEW: Check ALL text fields for contact info before submitting
+    const fieldsToCheck = [
+      { name: 'certifications', value: profileForm.certifications, label: 'Certifications' },
+      { name: 'specializations', value: profileForm.specializations, label: 'Specializations' },
+      { name: 'servicesOffered', value: profileForm.servicesOffered, label: 'Services Offered' }
+    ];
+
+    let hasViolation = false;
+    let violationDetails = [];
+
+    for (const field of fieldsToCheck) {
+      if (field.value) {
+        const detection = detectContactInfo(field.value);
+        if (detection.detected) {
+          hasViolation = true;
+          violationDetails.push({
+            field: field.label,
+            types: detection.violations.map(v => v.type)
+          });
+        }
+      }
+    }
+
+    if (hasViolation) {
+      try {
+        const violationTypes = [...new Set(violationDetails.flatMap(v => v.types))];
+        const detectedFields = violationDetails.map(v => v.field).join(', ');
+        
+        const violationResult = await logViolation(
+          currentUser.uid,
+          currentUser.email,
+          profile.name || currentUser.email,
+          'tradesman',
+          {
+            location: 'tradesman_profile',
+            detectedContent: `Fields: ${detectedFields}`,
+            violationTypes: violationTypes,
+            blockedText: (profileForm.certifications || profileForm.specializations || profileForm.servicesOffered || '').substring(0, 100)
+          }
+        );
+
+        setUserStatus(prev => ({
+          ...prev,
+          violationCount: violationResult.violationCount,
+          suspended: violationResult.suspended
+        }));
+
+        alert(getViolationWarning(userStatus.violationCount));
+
+        if (violationResult.suspended) {
+          setShowSuspensionWarning(true);
+        }
+
+        return;
+      } catch (error) {
+        console.error('Error logging violation:', error);
+      }
+    }
     
     try {
       let updateData = { ...profileForm };
@@ -99,6 +205,11 @@ const TradesmanDashboard = () => {
       await updateDoc(doc(db, 'tradesmen_profiles', currentUser.uid), updateData);
       setProfile(updateData);
       setEditingProfile(false);
+      setFieldViolations({
+        certifications: null,
+        specializations: null,
+        servicesOffered: null
+      });
       alert('Profile updated successfully!');
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -106,7 +217,6 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // Image compression function
   const compressImage = (file, maxWidth = 800, quality = 0.8) => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
@@ -126,7 +236,6 @@ const TradesmanDashboard = () => {
     });
   };
 
-  // Convert file to base64
   const fileToBase64 = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -135,7 +244,6 @@ const TradesmanDashboard = () => {
     });
   };
 
-  // Handle profile photo upload
   const handleProfilePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -167,7 +275,6 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // Handle portfolio image upload
   const handlePortfolioUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -205,7 +312,6 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // Delete portfolio image
   const deletePortfolioImage = async (imageId) => {
     try {
       const updatedPortfolio = profile.portfolio.filter(img => img.id !== imageId);
@@ -221,7 +327,6 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // Handle logout
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -232,7 +337,6 @@ const TradesmanDashboard = () => {
     }
   };
 
-  // Render star rating
   const renderStars = (rating) => {
     const stars = [];
     const fullStars = Math.floor(rating);
@@ -260,6 +364,30 @@ const TradesmanDashboard = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* 🆕 NEW: Suspension Warning Banner */}
+      {showSuspensionWarning && userStatus.suspended && (
+        <div className="mb-6 bg-red-50 border-2 border-red-500 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="text-2xl mr-3">🚫</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-900 mb-2">Account Suspended</h3>
+              <p className="text-red-800 mb-2">
+                Your account has been suspended for policy violations.
+              </p>
+              <p className="text-red-700 text-sm mb-3">
+                You can view your profile but cannot edit it while suspended.
+              </p>
+              <a 
+                href="mailto:support@patchworktrades.com"
+                className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium inline-block"
+              >
+                Contact Support to Appeal
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       <h1 className="text-3xl font-bold mb-6">Tradesman Dashboard</h1>
       
       {/* Profile Photo Expanded Modal */}
@@ -319,8 +447,15 @@ const TradesmanDashboard = () => {
                 Share Profile
               </button>
               <button
-                onClick={() => setEditingProfile(!editingProfile)}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                onClick={() => {
+                  if (userStatus.suspended) {
+                    alert('⚠️ Your account is suspended. You cannot edit your profile.');
+                    return;
+                  }
+                  setEditingProfile(!editingProfile);
+                }}
+                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-gray-400"
+                disabled={userStatus.suspended}
               >
                 {editingProfile ? 'Cancel' : 'Edit Profile'}
               </button>
@@ -330,7 +465,7 @@ const TradesmanDashboard = () => {
           {editingProfile ? (
             /* Edit Profile Form */
             <form onSubmit={updateProfile} className="space-y-6">
-              {/* Profile Photo Section - IN EDIT MODE */}
+              {/* Profile Photo Section */}
               <div>
                 <h3 className="text-lg font-medium mb-3 text-gray-700">Profile Photo</h3>
                 <div className="flex items-center gap-4">
@@ -375,7 +510,7 @@ const TradesmanDashboard = () => {
                     <input
                       type="number"
                       value={profileForm.yearsExperience || ''}
-                      onChange={(e) => setProfileForm({...profileForm, yearsExperience: parseInt(e.target.value)})}
+                      onChange={(e) => handleProfileInputChange('yearsExperience', parseInt(e.target.value))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g. 5"
                     />
@@ -385,7 +520,7 @@ const TradesmanDashboard = () => {
                     <input
                       type="number"
                       value={profileForm.hourlyRate || ''}
-                      onChange={(e) => setProfileForm({...profileForm, hourlyRate: parseInt(e.target.value)})}
+                      onChange={(e) => handleProfileInputChange('hourlyRate', parseInt(e.target.value))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g. 45"
                     />
@@ -402,7 +537,7 @@ const TradesmanDashboard = () => {
                     <input
                       type="text"
                       value={profileForm.postcode || ''}
-                      onChange={(e) => setProfileForm({...profileForm, postcode: e.target.value})}
+                      onChange={(e) => handleProfileInputChange('postcode', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g. M1 1AA"
                     />
@@ -415,7 +550,7 @@ const TradesmanDashboard = () => {
                     <input
                       type="text"
                       value={profileForm.areaCovered || ''}
-                      onChange={(e) => setProfileForm({...profileForm, areaCovered: e.target.value})}
+                      onChange={(e) => handleProfileInputChange('areaCovered', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g. Manchester, Salford"
                     />
@@ -431,29 +566,47 @@ const TradesmanDashboard = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Certifications & Qualifications</label>
                     <textarea
                       value={profileForm.certifications || ''}
-                      onChange={(e) => setProfileForm({...profileForm, certifications: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => handleProfileInputChange('certifications', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                        fieldViolations.certifications 
+                          ? 'border-red-500 focus:ring-red-500' 
+                          : 'border-gray-300 focus:ring-blue-500'
+                      }`}
                       rows="3"
                       placeholder="e.g. City & Guilds Level 3, Part P Certified, Gas Safe Registered"
                     />
+                    {fieldViolations.certifications && (
+                      <p className="text-red-600 text-sm mt-1">
+                        ⚠️ {fieldViolations.certifications.message} - {getShortWarning(userStatus.violationCount)}
+                      </p>
+                    )}
                   </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Specializations</label>
                     <textarea
                       value={profileForm.specializations || ''}
-                      onChange={(e) => setProfileForm({...profileForm, specializations: e.target.value})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(e) => handleProfileInputChange('specializations', e.target.value)}
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                        fieldViolations.specializations 
+                          ? 'border-red-500 focus:ring-red-500' 
+                          : 'border-gray-300 focus:ring-blue-500'
+                      }`}
                       rows="2"
                       placeholder="e.g. Kitchen installations, Bathroom renovations, Emergency repairs"
                     />
+                    {fieldViolations.specializations && (
+                      <p className="text-red-600 text-sm mt-1">
+                        ⚠️ {fieldViolations.specializations.message} - {getShortWarning(userStatus.violationCount)}
+                      </p>
+                    )}
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Insurance Status</label>
                     <select
                       value={profileForm.insuranceStatus || ''}
-                      onChange={(e) => setProfileForm({...profileForm, insuranceStatus: e.target.value})}
+                      onChange={(e) => handleProfileInputChange('insuranceStatus', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="">Select insurance status</option>
@@ -470,8 +623,12 @@ const TradesmanDashboard = () => {
                 <h3 className="text-lg font-medium mb-3 text-gray-700">Services Offered</h3>
                 <textarea
                   value={profileForm.servicesOffered || ''}
-                  onChange={(e) => setProfileForm({...profileForm, servicesOffered: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  onChange={(e) => handleProfileInputChange('servicesOffered', e.target.value)}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                    fieldViolations.servicesOffered 
+                      ? 'border-red-500 focus:ring-red-500' 
+                      : 'border-gray-300 focus:ring-blue-500'
+                  }`}
                   rows="4"
                   placeholder="List all services you provide, e.g.:
 • Complete bathroom installations
@@ -480,18 +637,35 @@ const TradesmanDashboard = () => {
 • Socket and switch installations
 • Consumer unit upgrades"
                 />
+                {fieldViolations.servicesOffered && (
+                  <p className="text-red-600 text-sm mt-1">
+                    ⚠️ {fieldViolations.servicesOffered.message} - {getShortWarning(userStatus.violationCount)}
+                  </p>
+                )}
               </div>
 
               <div className="flex gap-4">
                 <button
                   type="submit"
-                  className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600"
+                  className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 disabled:bg-gray-400"
+                  disabled={
+                    fieldViolations.certifications !== null || 
+                    fieldViolations.specializations !== null || 
+                    fieldViolations.servicesOffered !== null
+                  }
                 >
                   Save Changes
                 </button>
                 <button
                   type="button"
-                  onClick={() => setEditingProfile(false)}
+                  onClick={() => {
+                    setEditingProfile(false);
+                    setFieldViolations({
+                      certifications: null,
+                      specializations: null,
+                      servicesOffered: null
+                    });
+                  }}
                   className="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600"
                 >
                   Cancel
@@ -522,13 +696,15 @@ const TradesmanDashboard = () => {
                       type="file"
                       accept="image/*"
                       onChange={handleProfilePhotoUpload}
-                      disabled={uploadingImage}
+                      disabled={uploadingImage || userStatus.suspended}
                       className="hidden"
                       id="profile-photo-upload"
                     />
                     <label 
                       htmlFor="profile-photo-upload"
-                      className={`bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600 inline-block ${
+                        uploadingImage || userStatus.suspended ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                     >
                       {uploadingImage ? 'Uploading...' : 'Upload Photo'}
                     </label>
@@ -633,13 +809,15 @@ const TradesmanDashboard = () => {
                     type="file"
                     accept="image/*"
                     onChange={handlePortfolioUpload}
-                    disabled={uploadingImage}
+                    disabled={uploadingImage || userStatus.suspended}
                     className="hidden"
                     id="portfolio-upload"
                   />
                   <label 
                     htmlFor="portfolio-upload"
-                    className={`bg-green-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-green-600 inline-block ${uploadingImage ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`bg-green-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-green-600 inline-block ${
+                      uploadingImage || userStatus.suspended ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   >
                     {uploadingImage ? 'Uploading...' : 'Add Portfolio Image'}
                   </label>
@@ -656,12 +834,14 @@ const TradesmanDashboard = () => {
                           className="w-full h-32 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
                           onClick={() => setExpandedPortfolioImage(portfolioItem.image)}
                         />
-                        <button
-                          onClick={() => deletePortfolioImage(portfolioItem.id)}
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          ×
-                        </button>
+                        {!userStatus.suspended && (
+                          <button
+                            onClick={() => deletePortfolioImage(portfolioItem.id)}
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            ×
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
