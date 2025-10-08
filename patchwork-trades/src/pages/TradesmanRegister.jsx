@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import { getReferralCodeFromSession, recordReferral, getUserReferralCode } from '../utils/referralTracker'; // 🆕 NEW IMPORT
 
 const TradesmanRegister = () => {
   const [formData, setFormData] = useState({
@@ -11,7 +12,7 @@ const TradesmanRegister = () => {
     password: '',
     tradeType: '',
     areaCovered: '',
-    postcode: '', // NEW
+    postcode: '',
     bio: ''
   });
   const [loading, setLoading] = useState(false);
@@ -30,7 +31,6 @@ const TradesmanRegister = () => {
     });
   };
 
-  // NEW: Get lat/long from postcode
   const getCoordinatesFromPostcode = async (postcode) => {
     try {
       const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
@@ -56,7 +56,7 @@ const TradesmanRegister = () => {
     setError('');
 
     try {
-      // NEW: Get coordinates from postcode
+      // Get coordinates from postcode
       let coordinates = { latitude: 0, longitude: 0 };
       if (formData.postcode) {
         const coords = await getCoordinatesFromPostcode(formData.postcode);
@@ -76,19 +76,48 @@ const TradesmanRegister = () => {
         formData.password
       );
       
-      // Create Firestore document with NEW FIELDS
+      // 🆕 NEW: Get referral code from session (if they were referred)
+      const referralCode = getReferralCodeFromSession();
+      
+      // 🆕 NEW: Generate this user's own referral code
+      const myReferralCode = await getUserReferralCode(
+        userCredential.user.uid,
+        formData.name,
+        'tradesman'
+      );
+
+      // Create Firestore document
       await setDoc(doc(db, 'tradesmen_profiles', userCredential.user.uid), {
         name: formData.name,
         email: formData.email,
         tradeType: formData.tradeType,
         areaCovered: formData.areaCovered,
-        postcode: formData.postcode, // NEW
-        latitude: coordinates.latitude, // NEW
-        longitude: coordinates.longitude, // NEW
+        postcode: formData.postcode,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
         bio: formData.bio,
         createdAt: new Date().toISOString(),
-        userId: userCredential.user.uid
+        created_at: new Date().toISOString(), // Added for consistency
+        userId: userCredential.user.uid,
+        // 🆕 NEW: Referral fields
+        referral_code: myReferralCode,
+        referral_link: `https://patchworktrades.com/?ref=${myReferralCode}`,
+        total_referrals: 0,
+        total_profile_views: 0, // Initialize profile views
+        referred_by: referralCode || null // Track who referred them
       });
+
+      // 🆕 NEW: Record the referral if they were referred by someone
+      if (referralCode) {
+        await recordReferral(
+          userCredential.user.uid,
+          formData.name,
+          formData.email,
+          'tradesman',
+          referralCode
+        );
+        console.log('🎉 Referral recorded!');
+      }
 
       navigate('/tradesman-dashboard');
     } catch (error) {
@@ -161,7 +190,6 @@ const TradesmanRegister = () => {
           </select>
         </div>
 
-        {/* NEW: Postcode field */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Postcode *
