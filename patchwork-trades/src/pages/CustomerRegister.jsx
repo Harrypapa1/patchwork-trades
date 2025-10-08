@@ -3,13 +3,14 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import { getReferralCodeFromSession, recordReferral, getUserReferralCode } from '../utils/referralTracker'; // 🆕 NEW IMPORT
 
 const CustomerRegister = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    postcode: '' // NEW
+    postcode: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,7 +27,6 @@ const CustomerRegister = () => {
     });
   };
 
-  // NEW: Get coordinates from postcode
   const getCoordinatesFromPostcode = async (postcode) => {
     try {
       const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase();
@@ -52,7 +52,7 @@ const CustomerRegister = () => {
     setError('');
 
     try {
-      // NEW: Get coordinates from postcode
+      // Get coordinates from postcode
       let coordinates = { latitude: 0, longitude: 0 };
       if (formData.postcode) {
         const coords = await getCoordinatesFromPostcode(formData.postcode);
@@ -72,17 +72,45 @@ const CustomerRegister = () => {
         formData.password
       );
       
-      // Create Firestore document with NEW FIELDS
+      // 🆕 NEW: Get referral code from session (if they were referred)
+      const referralCode = getReferralCodeFromSession();
+      
+      // 🆕 NEW: Generate this user's own referral code
+      const myReferralCode = await getUserReferralCode(
+        userCredential.user.uid,
+        formData.name,
+        'customer'
+      );
+
+      // Create Firestore document
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         name: formData.name,
         email: formData.email,
-        postcode: formData.postcode, // NEW
-        latitude: coordinates.latitude, // NEW
-        longitude: coordinates.longitude, // NEW
+        postcode: formData.postcode,
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
         user_type: 'customer',
         createdAt: new Date().toISOString(),
-        userId: userCredential.user.uid
+        created_at: new Date().toISOString(), // Added for consistency
+        userId: userCredential.user.uid,
+        // 🆕 NEW: Referral fields
+        referral_code: myReferralCode,
+        referral_link: `https://patchworktrades.com/?ref=${myReferralCode}`,
+        total_referrals: 0,
+        referred_by: referralCode || null // Track who referred them
       });
+
+      // 🆕 NEW: Record the referral if they were referred by someone
+      if (referralCode) {
+        await recordReferral(
+          userCredential.user.uid,
+          formData.name,
+          formData.email,
+          'customer',
+          referralCode
+        );
+        console.log('🎉 Referral recorded!');
+      }
 
       // Redirect based on where they came from
       if (returnTo) {
@@ -155,7 +183,6 @@ const CustomerRegister = () => {
           />
         </div>
 
-        {/* NEW: Postcode field */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Postcode *
