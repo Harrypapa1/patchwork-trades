@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import PageViewTracker from './components/PageViewTracker'; // 🆕 NEW IMPORT - Traffic Tracking
 // Import all your pages
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -121,6 +122,7 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <Router>
+          <PageViewTracker /> {/* 🆕 NEW: Automatically tracks all page views */}
           <div className="min-h-screen bg-gray-50">
             <Navbar />
             <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
