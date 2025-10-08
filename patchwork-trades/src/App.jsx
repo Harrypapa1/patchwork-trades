@@ -1,9 +1,10 @@
-import React, { Component } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { Component, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import PageViewTracker from './components/PageViewTracker';
+import { trackPageView } from './utils/trafficTracker';
 // Import all your pages
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -121,216 +122,230 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <Router>
-          <PageViewTracker />
-          <div className="min-h-screen bg-gray-50">
-            <Navbar />
-            <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/register-tradesman" element={<TradesmanRegister />} />
-                <Route path="/register-customer" element={<CustomerRegister />} />
-                <Route path="/browse" element={<BrowseTradesmen />} />
-                <Route path="/tradesman/:tradesmanId" element={<TradesmanPublicProfile />} />
-                
-                {/* 🆕 ADMIN ROUTES - Password Protected */}
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/admin-analytics" element={<AdminAnalytics />} /> {/* 🆕 NEW ROUTE */}
-                
-                {/* 🆕 NEW ROUTES - Password Reset System (Public Routes) */}
-                <Route path="/forgot-password" element={<ForgotPassword />} />
-                <Route path="/reset-confirmation" element={<ResetConfirmation />} />
-                
-                {/* 🆕 NEW ROUTES - How It Works Pages (User-Type Restricted) */}
-                <Route
-                  path="/customer-how-it-works"
-                  element={
-                    <ProtectedRoute userType="customer">
-                      <CustomerHowItWorks />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/tradesman-how-it-works"
-                  element={
-                    <ProtectedRoute userType="tradesman">
-                      <TradesmanHowItWorks />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* Legal & Information Pages - Public Access */}
-                <Route path="/terms" element={<TermsOfService />} />
-                <Route path="/privacy" element={<PrivacyPolicy />} />
-                <Route path="/cookies" element={<CookiePolicy />} />
-                <Route path="/contact" element={<ContactHelp />} />
-                
-                <Route
-                  path="/tradesman-dashboard"
-                  element={
-                    <ProtectedRoute userType="tradesman">
-                      <TradesmanDashboard />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/manage-availability"
-                  element={
-                    <ProtectedRoute userType="tradesman">
-                      <ManageAvailability />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* 🆕 NEW ROUTE: Make More Money - Tradesman Only */}
-                <Route
-                  path="/make-more-money"
-                  element={
-                    <ProtectedRoute userType="tradesman">
-                      <MakeMoreMoney />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* 🆕 NEW ROUTES: Payment System */}
-                <Route
-                  path="/payment-checkout"
-                  element={
-                    <ProtectedRoute userType="customer">
-                      <PaymentCheckout />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/payment-success"
-                  element={
-                    <ProtectedRoute userType="customer">
-                      <PaymentSuccess />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/tradesman-onboarding"
-                  element={
-                    <ProtectedRoute userType="tradesman">
-                      <TradesmanOnboarding />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/earnings-overview"
-                  element={
-                    <ProtectedRoute userType="tradesman">
-                      <EarningsOverview />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/customer-dashboard"
-                  element={
-                    <ProtectedRoute userType="customer">
-                      <CustomerDashboard />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/booking-request/:tradesmanId?"
-                  element={
-                    <ProtectedRoute userType="customer">
-                      <BookingRequest />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* 🆕 NEW ROUTES - Bulletproof Architecture */}
-                <Route
-                  path="/quote-requests"
-                  element={
-                    <ProtectedRoute>
-                      <QuoteRequests />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* 🆕 NEW ROUTE: Weekly Jobs - Available to both customers and tradesmen */}
-                <Route
-                  path="/weekly-jobs"
-                  element={
-                    <ProtectedRoute>
-                      <WeeklyJobs />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/active-jobs"
-                  element={
-                    <ProtectedRoute>
-                      <ActiveJobs />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* 🆕 NEW ROUTE: Top Earners - Available to all users */}
-                <Route
-                  path="/top-earners"
-                  element={
-                    <ProtectedRoute>
-                      <TopEarners />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                {/* 🆕 NEW ROUTE: Top Performers - Customer-facing version */}
-                <Route
-                  path="/top-performers"
-                  element={
-                    <ProtectedRoute>
-                      <TopPerformers />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/booking-confirmation"
-                  element={
-                    <ProtectedRoute userType="customer">
-                      <BookingConfirmation />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/messages"
-                  element={
-                    <ProtectedRoute>
-                      <Messages />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route
-                  path="/messaging/:bookingId"
-                  element={
-                    <ProtectedRoute>
-                      <Messaging />
-                    </ProtectedRoute>
-                  }
-                />
-                
-                <Route path="/reviews/:tradesmanId" element={<Reviews />} />
-              </Routes>
-            </main>
-          </div>
+          <AppContent />
         </Router>
       </AuthProvider>
     </ErrorBoundary>
+  );
+}
+
+function AppContent() {
+  const location = useLocation();
+
+  useEffect(() => {
+    trackPageView(location.pathname, document.title);
+  }, [location]);
+
+  return (
+    <>
+      <PageViewTracker />
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register-tradesman" element={<TradesmanRegister />} />
+            <Route path="/register-customer" element={<CustomerRegister />} />
+            <Route path="/browse" element={<BrowseTradesmen />} />
+            <Route path="/tradesman/:tradesmanId" element={<TradesmanPublicProfile />} />
+            
+            {/* 🆕 ADMIN ROUTES - Password Protected */}
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin-analytics" element={<AdminAnalytics />} /> {/* 🆕 NEW ROUTE */}
+            
+            {/* 🆕 NEW ROUTES - Password Reset System (Public Routes) */}
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-confirmation" element={<ResetConfirmation />} />
+            
+            {/* 🆕 NEW ROUTES - How It Works Pages (User-Type Restricted) */}
+            <Route
+              path="/customer-how-it-works"
+              element={
+                <ProtectedRoute userType="customer">
+                  <CustomerHowItWorks />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/tradesman-how-it-works"
+              element={
+                <ProtectedRoute userType="tradesman">
+                  <TradesmanHowItWorks />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Legal & Information Pages - Public Access */}
+            <Route path="/terms" element={<TermsOfService />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/cookies" element={<CookiePolicy />} />
+            <Route path="/contact" element={<ContactHelp />} />
+            
+            <Route
+              path="/tradesman-dashboard"
+              element={
+                <ProtectedRoute userType="tradesman">
+                  <TradesmanDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/manage-availability"
+              element={
+                <ProtectedRoute userType="tradesman">
+                  <ManageAvailability />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 🆕 NEW ROUTE: Make More Money - Tradesman Only */}
+            <Route
+              path="/make-more-money"
+              element={
+                <ProtectedRoute userType="tradesman">
+                  <MakeMoreMoney />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 🆕 NEW ROUTES: Payment System */}
+            <Route
+              path="/payment-checkout"
+              element={
+                <ProtectedRoute userType="customer">
+                  <PaymentCheckout />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/payment-success"
+              element={
+                <ProtectedRoute userType="customer">
+                  <PaymentSuccess />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/tradesman-onboarding"
+              element={
+                <ProtectedRoute userType="tradesman">
+                  <TradesmanOnboarding />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/earnings-overview"
+              element={
+                <ProtectedRoute userType="tradesman">
+                  <EarningsOverview />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/customer-dashboard"
+              element={
+                <ProtectedRoute userType="customer">
+                  <CustomerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/booking-request/:tradesmanId?"
+              element={
+                <ProtectedRoute userType="customer">
+                  <BookingRequest />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 🆕 NEW ROUTES - Bulletproof Architecture */}
+            <Route
+              path="/quote-requests"
+              element={
+                <ProtectedRoute>
+                  <QuoteRequests />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 🆕 NEW ROUTE: Weekly Jobs - Available to both customers and tradesmen */}
+            <Route
+              path="/weekly-jobs"
+              element={
+                <ProtectedRoute>
+                  <WeeklyJobs />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/active-jobs"
+              element={
+                <ProtectedRoute>
+                  <ActiveJobs />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 🆕 NEW ROUTE: Top Earners - Available to all users */}
+            <Route
+              path="/top-earners"
+              element={
+                <ProtectedRoute>
+                  <TopEarners />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* 🆕 NEW ROUTE: Top Performers - Customer-facing version */}
+            <Route
+              path="/top-performers"
+              element={
+                <ProtectedRoute>
+                  <TopPerformers />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/booking-confirmation"
+              element={
+                <ProtectedRoute userType="customer">
+                  <BookingConfirmation />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/messages"
+              element={
+                <ProtectedRoute>
+                  <Messages />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route
+              path="/messaging/:bookingId"
+              element={
+                <ProtectedRoute>
+                  <Messaging />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route path="/reviews/:tradesmanId" element={<Reviews />} />
+          </Routes>
+        </main>
+      </div>
+    </>
   );
 }
 
