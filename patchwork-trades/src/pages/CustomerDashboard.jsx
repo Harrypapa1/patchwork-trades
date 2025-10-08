@@ -17,6 +17,7 @@ const CustomerDashboard = () => {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({});
+  const [imageExpanded, setImageExpanded] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -169,6 +170,28 @@ const CustomerDashboard = () => {
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Customer Dashboard</h1>
       
+      {/* Image Expanded Modal */}
+      {imageExpanded && (profileForm.profilePhoto || profile.profilePhoto) && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={() => setImageExpanded(false)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <img 
+              src={editingProfile ? profileForm.profilePhoto : profile.profilePhoto}
+              alt="Profile expanded" 
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            />
+            <button
+              onClick={() => setImageExpanded(false)}
+              className="absolute top-4 right-4 bg-white text-gray-800 rounded-full w-10 h-10 flex items-center justify-center hover:bg-gray-200 font-bold text-xl"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Profile Section */}
       {profile && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
@@ -193,7 +216,8 @@ const CustomerDashboard = () => {
                     <img 
                       src={profileForm.profilePhoto} 
                       alt="Profile" 
-                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => setImageExpanded(true)}
                     />
                   ) : (
                     <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
@@ -215,7 +239,7 @@ const CustomerDashboard = () => {
                     >
                       {uploadingImage ? 'Uploading...' : 'Upload Photo'}
                     </label>
-                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG</p>
+                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG • Click photo to expand</p>
                   </div>
                 </div>
               </div>
@@ -276,7 +300,8 @@ const CustomerDashboard = () => {
                     <img 
                       src={profile.profilePhoto} 
                       alt="Profile" 
-                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => setImageExpanded(true)}
                     />
                   ) : (
                     <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
@@ -298,7 +323,7 @@ const CustomerDashboard = () => {
                     >
                       {uploadingImage ? 'Uploading...' : 'Upload Photo'}
                     </label>
-                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG</p>
+                    <p className="text-sm text-gray-500 mt-1">Max 5MB, JPG/PNG • Click photo to expand</p>
                   </div>
                 </div>
               </div>
