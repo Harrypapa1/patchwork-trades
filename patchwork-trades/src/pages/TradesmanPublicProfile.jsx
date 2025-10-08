@@ -3,11 +3,12 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
+import { trackProfileView, endProfileView } from '../utils/profileViewTracker'; // 🆕 NEW IMPORT
 
 const TradesmanPublicProfile = () => {
   const { tradesmanId } = useParams();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, userType } = useAuth(); // 🆕 ADDED userType
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -15,6 +16,30 @@ const TradesmanPublicProfile = () => {
   useEffect(() => {
     fetchTradesmanProfile();
   }, [tradesmanId]);
+
+  // 🆕 NEW: Track profile view when component mounts
+  useEffect(() => {
+    if (profile && tradesmanId) {
+      // Determine viewer info
+      const viewerId = currentUser ? currentUser.uid : null;
+      const viewerUserType = currentUser ? userType : 'anonymous';
+      
+      // Track the view
+      trackProfileView(
+        tradesmanId,
+        profile.name,
+        viewerId,
+        viewerUserType
+      );
+      
+      console.log('📊 Profile view tracked for:', profile.name);
+    }
+    
+    // 🆕 NEW: End tracking when component unmounts (user leaves page)
+    return () => {
+      endProfileView();
+    };
+  }, [profile, tradesmanId, currentUser, userType]);
 
   const fetchTradesmanProfile = async () => {
     try {
