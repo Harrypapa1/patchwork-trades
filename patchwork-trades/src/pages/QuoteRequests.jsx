@@ -216,7 +216,7 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🆕 NEW: Enhanced addComment with contact detection
+  // ✅ FIXED: Enhanced addComment with contact detection - BLOCKS FIRST
   const addComment = async (quoteRequestId) => {
     const commentText = newComments[quoteRequestId]?.trim();
     if (!commentText) return;
@@ -231,7 +231,19 @@ const QuoteRequests = () => {
     const detection = detectContactInfo(commentText);
     
     if (detection.detected) {
-      // Log the violation
+      // ✅ FIXED: Block submission FIRST, log violation SECOND
+      // This ensures comment is blocked even if logging fails
+      
+      // Clear the input immediately
+      setNewComments(prev => ({
+        ...prev,
+        [quoteRequestId]: ''
+      }));
+
+      // Show warning immediately
+      alert(getViolationWarning(userStatus.violationCount));
+
+      // Now try to log the violation (non-blocking)
       try {
         const quote = quoteRequests.find(q => q.id === quoteRequestId);
         const violationTypes = detection.violations.map(v => v.type);
@@ -256,23 +268,15 @@ const QuoteRequests = () => {
           suspended: violationResult.suspended
         }));
 
-        // Show appropriate warning
-        alert(getViolationWarning(userStatus.violationCount));
-
         if (violationResult.suspended) {
           setShowSuspensionWarning(true);
         }
-
-        // Clear the input
-        setNewComments(prev => ({
-          ...prev,
-          [quoteRequestId]: ''
-        }));
-
-        return; // Block submission
       } catch (error) {
         console.error('Error logging violation:', error);
+        // Even if logging fails, we've already blocked the comment
       }
+
+      return; // Block submission
     }
 
     console.log('Adding comment for quote:', quoteRequestId, 'Comment:', commentText);
@@ -524,12 +528,16 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🆕 NEW: Enhanced proposeCustomQuote with contact detection
+  // ✅ FIXED: Enhanced proposeCustomQuote with contact detection - BLOCKS FIRST
   const proposeCustomQuote = async (quoteRequestId, customQuote) => {
     // Detect contact info in custom quote
     const detection = detectContactInfo(customQuote);
     
     if (detection.detected) {
+      // ✅ FIXED: Block first, log second
+      alert(getViolationWarning(userStatus.violationCount));
+
+      // Try to log violation (non-blocking)
       try {
         const quote = quoteRequests.find(q => q.id === quoteRequestId);
         const violationTypes = detection.violations.map(v => v.type);
@@ -553,16 +561,15 @@ const QuoteRequests = () => {
           suspended: violationResult.suspended
         }));
 
-        alert(getViolationWarning(userStatus.violationCount));
-
         if (violationResult.suspended) {
           setShowSuspensionWarning(true);
         }
-
-        return;
       } catch (error) {
         console.error('Error logging violation:', error);
+        // Even if logging fails, we've already blocked the quote
       }
+
+      return; // Block submission
     }
 
     try {
@@ -607,13 +614,17 @@ const QuoteRequests = () => {
     }
   };
 
-  // 🆕 NEW: Enhanced proposeCustomerCounter with contact detection
+  // ✅ FIXED: Enhanced proposeCustomerCounter with contact detection - BLOCKS FIRST
   const proposeCustomerCounter = async (quoteRequestId, counterQuote, reasoning) => {
     // Detect contact info in counter quote AND reasoning
     const quoteDetection = detectContactInfo(counterQuote);
     const reasoningDetection = detectContactInfo(reasoning);
     
     if (quoteDetection.detected || reasoningDetection.detected) {
+      // ✅ FIXED: Block first, log second
+      alert(getViolationWarning(userStatus.violationCount));
+
+      // Try to log violation (non-blocking)
       try {
         const quote = quoteRequests.find(q => q.id === quoteRequestId);
         const violationTypes = [
@@ -640,16 +651,15 @@ const QuoteRequests = () => {
           suspended: violationResult.suspended
         }));
 
-        alert(getViolationWarning(userStatus.violationCount));
-
         if (violationResult.suspended) {
           setShowSuspensionWarning(true);
         }
-
-        return;
       } catch (error) {
         console.error('Error logging violation:', error);
+        // Even if logging fails, we've already blocked the counter-offer
       }
+
+      return; // Block submission
     }
 
     try {
