@@ -11,6 +11,8 @@ import {
   addDoc 
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { detectContactInfo, getViolationWarning, getShortWarning } from '../utils/contactInfoDetector';
+import { logViolation, checkUserStatus } from '../utils/violationTracker';
 
 const BookingRequest = () => {
   const { currentUser } = useAuth();
@@ -32,6 +34,18 @@ const BookingRequest = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
 
+  // 🆕 NEW: Suspension check
+  const [userStatus, setUserStatus] = useState({ suspended: false, violationCount: 0 });
+  const [showSuspensionWarning, setShowSuspensionWarning] = useState(false);
+
+  // 🆕 NEW: Contact info violation tracking
+  const [contactViolations, setContactViolations] = useState({
+    jobTitle: null,
+    jobDescription: null,
+    budgetExpectation: null,
+    additionalNotes: null
+  });
+
   // Time slot definitions
   const TIME_SLOTS = {
     'morning': { label: 'Morning', time: '9am-1pm', start: '09:00', end: '13:00' },
@@ -49,6 +63,22 @@ const BookingRequest = () => {
     additionalNotes: '',
     jobImages: []
   });
+
+  // 🆕 NEW: Check user suspension status on mount
+  useEffect(() => {
+    const checkSuspension = async () => {
+      if (!currentUser) return;
+      
+      const status = await checkUserStatus(currentUser.uid);
+      setUserStatus(status);
+      
+      if (status.suspended) {
+        setShowSuspensionWarning(true);
+      }
+    };
+    
+    checkSuspension();
+  }, [currentUser]);
 
   // Detect mobile viewport
   useEffect(() => {
@@ -435,12 +465,25 @@ const BookingRequest = () => {
     );
   };
 
+  // 🆕 NEW: Handle input change with contact detection
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    
+    // Update form data
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+
+    // Check for contact info (only for text fields that matter)
+    if (['jobTitle', 'jobDescription', 'budgetExpectation', 'additionalNotes'].includes(name)) {
+      const detection = detectContactInfo(value);
+      
+      setContactViolations(prev => ({
+        ...prev,
+        [name]: detection.detected ? detection : null
+      }));
+    }
   };
 
   // Image compression function
@@ -531,8 +574,15 @@ const BookingRequest = () => {
     }));
   };
 
+  // 🆕 NEW: Enhanced submit with contact detection
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check if user is suspended
+    if (userStatus.suspended) {
+      alert('⚠️ Your account is suspended.\n\nYou cannot submit quote requests.\n\nPlease contact support@patchworktrades.com to appeal.');
+      return;
+    }
     
     if (!formData.jobTitle.trim() || !formData.jobDescription.trim()) {
       alert('Please fill in the job title and description.');
@@ -542,6 +592,69 @@ const BookingRequest = () => {
     if (!formData.selectedTimeSlot) {
       alert('Please select a time slot.');
       return;
+    }
+
+    // 🆕 NEW: Check ALL fields for contact info before submitting
+    const fieldsToCheck = [
+      { name: 'jobTitle', value: formData.jobTitle, label: 'Job Title' },
+      { name: 'jobDescription', value: formData.jobDescription, label: 'Job Description' },
+      { name: 'budgetExpectation', value: formData.budgetExpectation, label: 'Budget Expectation' },
+      { name: 'additionalNotes', value: formData.additionalNotes, label: 'Additional Notes' }
+    ];
+
+    let hasViolation = false;
+    let violationDetails = [];
+
+    for (const field of fieldsToCheck) {
+      if (field.value) {
+        const detection = detectContactInfo(field.value);
+        if (detection.detected) {
+          hasViolation = true;
+          violationDetails.push({
+            field: field.label,
+            types: detection.violations.map(v => v.type)
+          });
+        }
+      }
+    }
+
+    if (hasViolation) {
+      // Log the violation
+      try {
+        const violationTypes = [...new Set(violationDetails.flatMap(v => v.types))];
+        const detectedFields = violationDetails.map(v => v.field).join(', ');
+        
+        const violationResult = await logViolation(
+          currentUser.uid,
+          currentUser.email,
+          customerProfile?.name || currentUser.email,
+          'customer',
+          {
+            location: 'booking_request_form',
+            detectedContent: `Fields: ${detectedFields}`,
+            violationTypes: violationTypes,
+            blockedText: formData.jobDescription.substring(0, 100)
+          }
+        );
+
+        // Update local user status
+        setUserStatus(prev => ({
+          ...prev,
+          violationCount: violationResult.violationCount,
+          suspended: violationResult.suspended
+        }));
+
+        // Show appropriate warning
+        alert(getViolationWarning(userStatus.violationCount));
+
+        if (violationResult.suspended) {
+          setShowSuspensionWarning(true);
+        }
+
+        return; // Block submission
+      } catch (error) {
+        console.error('Error logging violation:', error);
+      }
     }
 
     setSubmitting(true);
@@ -673,6 +786,38 @@ Thanks!`,
 
   return (
     <div className="max-w-4xl mx-auto">
+      {/* 🆕 NEW: Suspension Warning Banner */}
+      {showSuspensionWarning && userStatus.suspended && (
+        <div className="mb-6 bg-red-50 border-2 border-red-500 rounded-lg p-4">
+          <div className="flex items-start">
+            <div className="text-2xl mr-3">🚫</div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-red-900 mb-2">Account Suspended</h3>
+              <p className="text-red-800 mb-2">
+                Your account has been suspended for repeatedly attempting to share contact information before job confirmation.
+              </p>
+              <p className="text-red-700 text-sm mb-3">
+                You cannot submit quote requests or send messages while suspended.
+              </p>
+              <div className="flex gap-3">
+                <a 
+                  href="mailto:support@patchworktrades.com"
+                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium"
+                >
+                  Contact Support to Appeal
+                </a>
+                <button
+                  onClick={() => navigate('/browse')}
+                  className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm"
+                >
+                  Back to Browse
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6">
         <button 
           onClick={() => navigate('/browse')}
@@ -725,9 +870,19 @@ Thanks!`,
               value={formData.jobTitle}
               onChange={handleInputChange}
               placeholder="e.g. Fix leaking kitchen tap, Install new socket..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                contactViolations.jobTitle 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-gray-300 focus:ring-blue-500'
+              }`}
               required
+              disabled={userStatus.suspended}
             />
+            {contactViolations.jobTitle && (
+              <p className="text-red-600 text-sm mt-1">
+                ⚠️ {contactViolations.jobTitle.message} - {getShortWarning(userStatus.violationCount)}
+              </p>
+            )}
           </div>
 
           {/* Job Description */}
@@ -741,9 +896,19 @@ Thanks!`,
               onChange={handleInputChange}
               rows="4"
               placeholder="Please describe the job in detail. Include any specific requirements, materials needed, access information, etc."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                contactViolations.jobDescription 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-gray-300 focus:ring-blue-500'
+              }`}
               required
+              disabled={userStatus.suspended}
             />
+            {contactViolations.jobDescription && (
+              <p className="text-red-600 text-sm mt-1">
+                ⚠️ {contactViolations.jobDescription.message} - {getShortWarning(userStatus.violationCount)}
+              </p>
+            )}
           </div>
 
           {/* Job Images */}
@@ -757,14 +922,14 @@ Thanks!`,
                 accept="image/*"
                 multiple
                 onChange={handleImageUpload}
-                disabled={uploadingImages || formData.jobImages.length >= 3}
+                disabled={uploadingImages || formData.jobImages.length >= 3 || userStatus.suspended}
                 className="hidden"
                 id="job-images-upload"
               />
               <label 
                 htmlFor="job-images-upload"
                 className={`inline-block px-4 py-2 rounded cursor-pointer transition-colors ${
-                  uploadingImages || formData.jobImages.length >= 3
+                  uploadingImages || formData.jobImages.length >= 3 || userStatus.suspended
                     ? 'bg-gray-400 text-white cursor-not-allowed'
                     : 'bg-blue-500 text-white hover:bg-blue-600'
                 }`}
@@ -812,6 +977,7 @@ Thanks!`,
               value={formData.urgency}
               onChange={handleInputChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={userStatus.suspended}
             >
               <option value="low">Low - Can wait a few weeks</option>
               <option value="normal">Normal - Within next week or two</option>
@@ -982,8 +1148,18 @@ Thanks!`,
               value={formData.budgetExpectation}
               onChange={handleInputChange}
               placeholder="e.g. £200-300, or 'flexible'"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                contactViolations.budgetExpectation 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-gray-300 focus:ring-blue-500'
+              }`}
+              disabled={userStatus.suspended}
             />
+            {contactViolations.budgetExpectation && (
+              <p className="text-red-600 text-sm mt-1">
+                ⚠️ {contactViolations.budgetExpectation.message} - {getShortWarning(userStatus.violationCount)}
+              </p>
+            )}
           </div>
 
           {/* Additional Notes */}
@@ -997,22 +1173,32 @@ Thanks!`,
               onChange={handleInputChange}
               rows="3"
               placeholder="Any other information that might be helpful..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+                contactViolations.additionalNotes 
+                  ? 'border-red-500 focus:ring-red-500' 
+                  : 'border-gray-300 focus:ring-blue-500'
+              }`}
+              disabled={userStatus.suspended}
             />
+            {contactViolations.additionalNotes && (
+              <p className="text-red-600 text-sm mt-1">
+                ⚠️ {contactViolations.additionalNotes.message} - {getShortWarning(userStatus.violationCount)}
+              </p>
+            )}
           </div>
 
           {/* Submit Button */}
           <div className="flex gap-4">
             <button
               type="submit"
-              disabled={submitting || availableTimeSlots.length === 0}
+              disabled={submitting || availableTimeSlots.length === 0 || userStatus.suspended}
               className={`flex-1 py-3 px-6 rounded-md font-medium ${
-                submitting || availableTimeSlots.length === 0
+                submitting || availableTimeSlots.length === 0 || userStatus.suspended
                   ? 'bg-gray-400 text-white cursor-not-allowed'
                   : 'bg-green-600 text-white hover:bg-green-700'
               }`}
             >
-              {submitting ? 'Sending Request...' : 'Send Quote Request'}
+              {userStatus.suspended ? '🚫 Account Suspended' : submitting ? 'Sending Request...' : 'Send Quote Request'}
             </button>
             
             <button
