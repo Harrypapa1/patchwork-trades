@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom'; // 🆕 NEW IMPORT
 import { 
   collection, 
   query, 
@@ -32,16 +33,6 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [disputedJobs, setDisputedJobs] = useState([]);
   const [dismissedQuotes, setDismissedQuotes] = useState([]);
-  
-  // 🆕 NEW: Traffic Stats
-  const [trafficStats, setTrafficStats] = useState({
-    totalPageViews: 0,
-    uniqueVisitors: 0,
-    thisMonthViews: 0,
-    todayViews: 0,
-    pageViewsByPage: [],
-    viewsByDay: []
-  });
 
   // Password-based admin access
   const [isAdmin, setIsAdmin] = useState(false);
@@ -72,74 +63,6 @@ const AdminDashboard = () => {
       setShowPasswordPrompt(false);
     }
   }, []);
-
-  // 🆕 NEW: Fetch Traffic Stats
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    const fetchTrafficStats = async () => {
-      try {
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
-        const today = now.toISOString().split('T')[0];
-
-        const allViewsQuery = query(collection(db, 'page_views'));
-        const allViewsSnapshot = await getDocs(allViewsQuery);
-        const allViews = allViewsSnapshot.docs.map(doc => doc.data());
-
-        const totalPageViews = allViews.length;
-
-        const uniqueVisitorIds = new Set(allViews.map(view => view.visitor_id));
-        const uniqueVisitors = uniqueVisitorIds.size;
-
-        const thisMonthViews = allViews.filter(view => 
-          view.year === currentYear && view.month === currentMonth
-        ).length;
-
-        const todayViews = allViews.filter(view => view.date === today).length;
-
-        const pageViewCounts = {};
-        allViews.forEach(view => {
-          const page = view.page_path || 'unknown';
-          pageViewCounts[page] = (pageViewCounts[page] || 0) + 1;
-        });
-        const pageViewsByPage = Object.entries(pageViewCounts)
-          .map(([page, count]) => ({ page, count }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 10);
-
-        const last30Days = [];
-        for (let i = 29; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          const dateStr = date.toISOString().split('T')[0];
-          const viewCount = allViews.filter(view => view.date === dateStr).length;
-          last30Days.push({
-            date: dateStr,
-            views: viewCount,
-            displayDate: date.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
-          });
-        }
-
-        setTrafficStats({
-          totalPageViews,
-          uniqueVisitors,
-          thisMonthViews,
-          todayViews,
-          pageViewsByPage,
-          viewsByDay: last30Days
-        });
-
-      } catch (error) {
-        console.error('Error fetching traffic stats:', error);
-      }
-    };
-
-    fetchTrafficStats();
-    const interval = setInterval(fetchTrafficStats, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [isAdmin]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -376,18 +299,27 @@ const AdminDashboard = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="text-gray-600">Real-time platform management and analytics</p>
+            <p className="text-gray-600">Platform operations and management</p>
           </div>
-          <button
-            onClick={() => {
-              sessionStorage.removeItem('admin_authenticated');
-              setIsAdmin(false);
-              setShowPasswordPrompt(true);
-            }}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            🔓 Logout
-          </button>
+          <div className="flex gap-3">
+            {/* 🆕 NEW: Link to Analytics Dashboard */}
+            <Link
+              to="/admin-analytics"
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              📊 View Analytics
+            </Link>
+            <button
+              onClick={() => {
+                sessionStorage.removeItem('admin_authenticated');
+                setIsAdmin(false);
+                setShowPasswordPrompt(true);
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+            >
+              🔓 Logout
+            </button>
+          </div>
         </div>
       </div>
 
@@ -395,7 +327,6 @@ const AdminDashboard = () => {
       <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
         {[
           { id: 'overview', label: 'Overview' },
-          { id: 'traffic', label: '📊 Traffic' },
           { id: 'live', label: '🔴 Live Activity' },
           { id: 'jobs', label: 'Jobs' },
           { id: 'users', label: 'Users' },
@@ -419,6 +350,7 @@ const AdminDashboard = () => {
       {/* Overview Tab */}
       {activeView === 'overview' && (
         <div className="space-y-6">
+          {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white rounded-lg shadow p-6">
               <div className="flex items-center">
@@ -461,7 +393,9 @@ const AdminDashboard = () => {
             </div>
           </div>
 
+          {/* Quick Actions */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Active Bookings in Progress */}
             <div className="bg-white rounded-lg shadow">
               <div className="p-6 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900">Active Booking Sessions</h3>
@@ -489,6 +423,7 @@ const AdminDashboard = () => {
               </div>
             </div>
 
+            {/* Recent Activity */}
             <div className="bg-white rounded-lg shadow">
               <div className="p-6 border-b border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
@@ -521,158 +456,381 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* 🆕 NEW: Traffic Tab */}
-      {activeView === 'traffic' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <div className="text-3xl text-blue-600 mr-4">👁️</div>
-                <div>
-                  <p className="text-gray-600 text-sm">Total Page Views</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {trafficStats.totalPageViews.toLocaleString()}
-                  </p>
-                </div>
+      {/* Live Activity Tab */}
+      {activeView === 'live' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">🔴 Live Activity Feed</h3>
+                <p className="text-gray-600 text-sm">Real-time user activity and job creation tracking</p>
               </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <div className="text-3xl text-green-600 mr-4">👥</div>
-                <div>
-                  <p className="text-gray-600 text-sm">Unique Visitors</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {trafficStats.uniqueVisitors.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <div className="text-3xl text-purple-600 mr-4">📅</div>
-                <div>
-                  <p className="text-gray-600 text-sm">This Month</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {trafficStats.thisMonthViews.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center">
-                <div className="text-3xl text-orange-600 mr-4">🔥</div>
-                <div>
-                  <p className="text-gray-600 text-sm">Today</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {trafficStats.todayViews.toLocaleString()}
-                  </p>
-                </div>
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm text-gray-600">Live</span>
               </div>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Top Pages</h3>
-                <p className="text-gray-600 text-sm">Most visited pages on your site</p>
-              </div>
-              <div className="p-6">
-                {trafficStats.pageViewsByPage.length > 0 ? (
-                  <div className="space-y-3">
-                    {trafficStats.pageViewsByPage.map((page, index) => (
-                      <div key={page.page} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center">
-                          <span className="text-lg font-bold text-gray-400 mr-3">#{index + 1}</span>
-                          <div>
-                            <p className="font-medium text-gray-900">{page.page}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-bold text-blue-600">{page.count.toLocaleString()}</p>
-                          <p className="text-xs text-gray-500">views</p>
-                        </div>
+          
+          <div className="p-6">
+            <div className="space-y-4">
+              {liveActivity.map(activity => (
+                <div key={activity.id} className={`p-4 rounded-lg border-l-4 ${
+                  activity.type === 'booking_started' ? 'bg-blue-50 border-blue-500' :
+                  activity.type === 'booking_abandoned' ? 'bg-red-50 border-red-500' :
+                  activity.type === 'payment_completed' ? 'bg-green-50 border-green-500' :
+                  activity.type === 'photos_uploaded' ? 'bg-yellow-50 border-yellow-500' :
+                  'bg-gray-50 border-gray-500'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{activity.description}</p>
+                      <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
+                        <span>User: {activity.user_name || activity.user_id}</span>
+                        {activity.job_category && <span>Category: {activity.job_category}</span>}
+                        {activity.amount && <span>Amount: {formatCurrency(activity.amount)}</span>}
                       </div>
-                    ))}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium">{formatTime(activity.timestamp)}</p>
+                      {activity.session_duration && (
+                        <p className="text-xs text-gray-500">Duration: {activity.session_duration}</p>
+                      )}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-gray-500 text-center py-4">No page view data yet</p>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-900">Last 30 Days</h3>
-                <p className="text-gray-600 text-sm">Daily page views trend</p>
-              </div>
-              <div className="p-6">
-                {trafficStats.viewsByDay.length > 0 ? (
-                  <div className="space-y-2">
-                    {trafficStats.viewsByDay.map((day) => {
-                      const maxViews = Math.max(...trafficStats.viewsByDay.map(d => d.views));
-                      const barWidth = maxViews > 0 ? (day.views / maxViews) * 100 : 0;
-                      
-                      return (
-                        <div key={day.date} className="flex items-center gap-3">
-                          <div className="text-xs text-gray-600 w-16 flex-shrink-0">
-                            {day.displayDate}
-                          </div>
-                          <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-                            <div 
-                              className="bg-blue-500 h-full flex items-center justify-end pr-2"
-                              style={{ width: `${Math.max(barWidth, 2)}%` }}
-                            >
-                              {day.views > 0 && (
-                                <span className="text-xs text-white font-medium">{day.views}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-center py-4">No data yet</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow">
-            <div className="p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Traffic Insights</h3>
-              <p className="text-gray-600 text-sm">Understanding your visitors</p>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center p-6 bg-blue-50 rounded-lg">
-                  <div className="text-4xl mb-2">💻</div>
-                  <p className="text-sm text-gray-600 mb-1">Average Time on Site</p>
-                  <p className="text-2xl font-bold text-gray-900">Tracking Soon</p>
                 </div>
-                <div className="text-center p-6 bg-green-50 rounded-lg">
-                  <div className="text-4xl mb-2">📱</div>
-                  <p className="text-sm text-gray-600 mb-1">Mobile vs Desktop</p>
-                  <p className="text-2xl font-bold text-gray-900">Tracking Soon</p>
-                </div>
-                <div className="text-center p-6 bg-purple-50 rounded-lg">
-                  <div className="text-4xl mb-2">🔗</div>
-                  <p className="text-sm text-gray-600 mb-1">Top Referrers</p>
-                  <p className="text-2xl font-bold text-gray-900">Tracking Soon</p>
-                </div>
-              </div>
+              ))}
             </div>
+            
+            {liveActivity.length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-6xl text-gray-300 mb-4">📊</div>
+                <p className="text-gray-500">No recent activity</p>
+                <p className="text-sm text-gray-400">Activity will appear here in real-time</p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Rest of the tabs remain the same... I'll continue in next message if needed */}
-      {/* For brevity, I'm skipping the other tabs since they haven't changed */}
-      {/* They remain exactly as they were in your original AdminDashboard.jsx */}
+      {/* Jobs Tab */}
+      {activeView === 'jobs' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Jobs</h3>
+            <p className="text-gray-600 text-sm">All platform jobs and their status</p>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tradesman</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Commission</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {recentJobs.map(job => (
+                  <tr key={job.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div>
+                        <p className="font-medium text-gray-900">{job.job_title}</p>
+                        <p className="text-sm text-gray-600">{job.job_category}</p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-medium text-gray-900">{job.customer_name}</p>
+                      <p className="text-sm text-gray-600">{job.customer_email}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm font-medium text-gray-900">{job.tradesman_name}</p>
+                      <p className="text-sm text-gray-600">{job.tradesman_email}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-medium">{formatCurrency(job.agreed_price)}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-green-600">{formatCurrency(job.platform_fee)}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        job.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        job.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                        job.status === 'accepted' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {job.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {new Date(job.created_at).toLocaleDateString('en-GB')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Users Tab */}
+      {activeView === 'users' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
+            <p className="text-gray-600 text-sm">Manage platform users and their accounts</p>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jobs</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {users.map(user => (
+                  <tr key={user.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div>
+                        <p className="font-medium text-gray-900">{user.name || 'Unknown'}</p>
+                        <p className="text-sm text-gray-600">{user.email}</p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        user.user_type === 'tradesman' ? 'bg-blue-100 text-blue-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {user.user_type || 'customer'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {user.total_jobs || 0}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      {formatCurrency(user.total_revenue || 0)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        user.status === 'suspended' ? 'bg-red-100 text-red-800' :
+                        'bg-green-100 text-green-800'
+                      }`}>
+                        {user.status || 'active'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => suspendUser(user.id)}
+                        className="text-red-600 hover:text-red-800 text-sm font-medium"
+                      >
+                        {user.status === 'suspended' ? 'Unsuspend' : 'Suspend'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Disputes Tab */}
+      {activeView === 'disputes' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Job Disputes</h3>
+            <p className="text-gray-600 text-sm">Resolve conflicts between customers and tradesmen</p>
+          </div>
+          
+          <div className="p-6">
+            {disputedJobs.length > 0 ? (
+              <div className="space-y-6">
+                {disputedJobs.map(dispute => (
+                  <div key={dispute.id} className="border border-red-200 rounded-lg p-6 bg-red-50">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-900 mb-2">{dispute.job_title}</h4>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <p className="text-sm text-gray-600">Customer: {dispute.customer_name}</p>
+                            <p className="text-sm text-gray-600">Tradesman: {dispute.tradesman_name}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Amount: {formatCurrency(dispute.agreed_price)}</p>
+                            <p className="text-sm text-gray-600">Date: {new Date(dispute.created_at).toLocaleDateString('en-GB')}</p>
+                          </div>
+                        </div>
+                        {dispute.dispute_reason && (
+                          <div className="bg-white p-3 rounded border">
+                            <p className="text-sm font-medium text-gray-900 mb-1">Dispute Reason:</p>
+                            <p className="text-sm text-gray-700">{dispute.dispute_reason}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-6 space-y-2">
+                        <button
+                          onClick={() => resolveDispute(dispute.id, 'customer')}
+                          className="block w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700"
+                        >
+                          Refund Customer
+                        </button>
+                        <button
+                          onClick={() => resolveDispute(dispute.id, 'tradesman')}
+                          className="block w-full px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700"
+                        >
+                          Pay Tradesman
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-6xl text-gray-300 mb-4">✅</div>
+                <p className="text-gray-500">No active disputes</p>
+                <p className="text-sm text-gray-400">All jobs are running smoothly</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Dismissed Quotes Tab */}
+      {activeView === 'dismissed' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Dismissed Quote Requests</h3>
+            <p className="text-gray-600 text-sm">Track quotes that were dismissed by customers or rejected by tradesmen</p>
+          </div>
+          
+          <div className="p-6">
+            {dismissedQuotes.length > 0 ? (
+              <div className="space-y-6">
+                {dismissedQuotes.map(quote => (
+                  <div key={quote.id} className={`border rounded-lg p-6 ${
+                    quote.status === 'dismissed_by_customer' ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200'
+                  }`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="font-medium text-gray-900">{quote.job_title}</h4>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            quote.status === 'dismissed_by_customer' 
+                              ? 'bg-orange-100 text-orange-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {quote.status === 'dismissed_by_customer' ? 'Customer Dismissed' : 'Tradesman Rejected'}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <p className="text-sm text-gray-600">Customer: {quote.customer_name}</p>
+                            <p className="text-sm text-gray-600">Email: {quote.customer_email}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Tradesman: {quote.tradesman_name}</p>
+                            <p className="text-sm text-gray-600">Email: {quote.tradesman_email}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-4 mb-4">
+                          <div>
+                            <p className="text-sm text-gray-600">Submitted:</p>
+                            <p className="text-sm font-medium">{new Date(quote.created_at).toLocaleDateString('en-GB')}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Dismissed/Rejected:</p>
+                            <p className="text-sm font-medium">{new Date(quote.dismissed_at || quote.rejected_at).toLocaleDateString('en-GB')}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Budget Expected:</p>
+                            <p className="text-sm font-medium">{quote.budget_expectation || 'Not specified'}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="bg-white p-3 rounded border">
+                          <p className="text-sm font-medium text-gray-900 mb-1">Job Description:</p>
+                          <p className="text-sm text-gray-700">{quote.job_description}</p>
+                        </div>
+                        
+                        {quote.additional_notes && (
+                          <div className="bg-white p-3 rounded border mt-2">
+                            <p className="text-sm font-medium text-gray-900 mb-1">Additional Notes:</p>
+                            <p className="text-sm text-gray-700">{quote.additional_notes}</p>
+                          </div>
+                        )}
+                        
+                        {quote.status === 'dismissed_by_customer' && (
+                          <div className="bg-orange-100 p-3 rounded border border-orange-200 mt-2">
+                            <p className="text-sm font-medium text-orange-900 mb-1">Customer Dismissal Details:</p>
+                            <p className="text-sm text-orange-800 mb-2">
+                              Customer dismissed this quote request. It was removed from both customer and tradesman views.
+                            </p>
+                            {quote.dismissal_reason && (
+                              <div className="bg-orange-50 p-2 rounded border border-orange-300">
+                                <p className="text-sm font-medium text-orange-900">Reason provided:</p>
+                                <p className="text-sm text-orange-800 italic">"{quote.dismissal_reason}"</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
+                        {quote.status === 'rejected' && (
+                          <div className="bg-red-100 p-3 rounded border border-red-200 mt-2">
+                            <p className="text-sm font-medium text-red-900 mb-1">Rejection Details:</p>
+                            <p className="text-sm text-red-800">
+                              Tradesman rejected this quote request and customer was notified.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Admin Actions */}
+                      <div className="ml-6 space-y-2">
+                        <button
+                          onClick={() => restoreDismissedQuote(quote.id)}
+                          className="block w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700"
+                        >
+                          Restore Quote
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Permanently delete this quote? This action cannot be undone.')) {
+                              deleteDoc(doc(db, 'quote_requests', quote.id));
+                            }
+                          }}
+                          className="block w-full px-4 py-2 bg-red-600 text-white text-sm font-medium rounded hover:bg-red-700"
+                        >
+                          Delete Permanently
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-6xl text-gray-300 mb-4">📝</div>
+                <p className="text-gray-500">No dismissed quote requests</p>
+                <p className="text-sm text-gray-400">Dismissed and rejected quotes will appear here</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
