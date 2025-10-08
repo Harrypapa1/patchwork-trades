@@ -12,6 +12,19 @@ import {
 import { db } from '../config/firebase';
 import LazyImage from '../components/LazyImage';
 
+// Distance calculation function (Haversine formula)
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 3959; // Earth radius in miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in miles
+};
+
 const BrowseTradesmen = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
@@ -30,10 +43,14 @@ const BrowseTradesmen = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchTimeout, setSearchTimeout] = useState(null);
   
-  // New filter states
+  // Filter states
   const [insuranceFilter, setInsuranceFilter] = useState('any');
   const [minRatingFilter, setMinRatingFilter] = useState('any');
   const [sortByPrice, setSortByPrice] = useState('default');
+  
+  // NEW: Location states
+  const [userLocation, setUserLocation] = useState(null);
+  const [maxDistance, setMaxDistance] = useState('any');
 
   const TIME_SLOTS = {
     'morning': { label: 'Morning', time: '9am-1pm' },
@@ -67,21 +84,42 @@ const BrowseTradesmen = () => {
   }, []);
 
   useEffect(() => {
+    fetchUserLocation();
     fetchTradesmen();
   }, []);
 
   useEffect(() => {
     filterTradesmen();
-  }, [tradesmen, searchQuery, selectedDates, insuranceFilter, minRatingFilter, sortByPrice]);
+  }, [tradesmen, searchQuery, selectedDates, insuranceFilter, minRatingFilter, sortByPrice, maxDistance, userLocation]);
 
   useEffect(() => {
-    // Cleanup timeout on unmount
     return () => {
       if (searchTimeout) {
         clearTimeout(searchTimeout);
       }
     };
   }, [searchTimeout]);
+
+  // NEW: Fetch user's location from Firebase
+  const fetchUserLocation = async () => {
+    if (!currentUser) return;
+    
+    try {
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        if (userData.latitude && userData.longitude) {
+          setUserLocation({
+            postcode: userData.postcode,
+            latitude: userData.latitude,
+            longitude: userData.longitude
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user location:', error);
+    }
+  };
 
   const fetchTradesmen = async () => {
     try {
@@ -144,7 +182,11 @@ const BrowseTradesmen = () => {
           availableTimeSlots,
           completed_jobs_count: tradesmanData.completed_jobs_count || 0,
           average_rating: tradesmanData.average_rating || 0,
-          review_count: tradesmanData.reviews?.length || 0
+          review_count: tradesmanData.reviews?.length || 0,
+          // NEW: Location data
+          postcode: tradesmanData.postcode,
+          latitude: tradesmanData.latitude,
+          longitude: tradesmanData.longitude
         });
       }
       
@@ -210,6 +252,30 @@ const BrowseTradesmen = () => {
   const filterTradesmen = () => {
     let filtered = tradesmen;
 
+    // Calculate distances if user has location
+    if (userLocation && userLocation.latitude && userLocation.longitude) {
+      filtered = filtered.map(tradesman => {
+        if (tradesman.latitude && tradesman.longitude) {
+          const distance = calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            tradesman.latitude,
+            tradesman.longitude
+          );
+          return { ...tradesman, distance: distance };
+        }
+        return { ...tradesman, distance: null };
+      });
+    }
+
+    // Distance filter
+    if (maxDistance !== 'any' && userLocation) {
+      const maxDist = parseFloat(maxDistance);
+      filtered = filtered.filter(tradesman => {
+        return tradesman.distance !== null && tradesman.distance <= maxDist;
+      });
+    }
+
     // Search query filter
     if (searchQuery.trim()) {
       const matchedTrades = matchTradesByKeywords(searchQuery);
@@ -258,18 +324,22 @@ const BrowseTradesmen = () => {
     if (minRatingFilter !== 'any') {
       const minRating = parseFloat(minRatingFilter);
       filtered = filtered.filter(tradesman => {
-        // Only include tradesmen with reviews who meet the minimum rating
         return tradesman.review_count > 0 && tradesman.average_rating >= minRating;
       });
     }
 
-    // Sort by price
-    if (sortByPrice !== 'default') {
+    // Sort by price or distance
+    if (sortByPrice === 'distance' && userLocation) {
+      filtered = [...filtered].sort((a, b) => {
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
+    } else if (sortByPrice !== 'default') {
       filtered = [...filtered].sort((a, b) => {
         const aRate = a.hourlyRate;
         const bRate = b.hourlyRate;
         
-        // Put tradesmen without rates at the end
         if (!aRate && !bRate) return 0;
         if (!aRate) return 1;
         if (!bRate) return -1;
@@ -290,18 +360,15 @@ const BrowseTradesmen = () => {
     const query = e.target.value;
     setSearchQuery(query);
     
-    // Clear existing timeout
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
     
-    // If query is empty, immediately return to hero view
     if (query.trim().length === 0) {
       setHasSearched(false);
       return;
     }
     
-    // Set new timeout - wait 1 second after user stops typing
     const newTimeout = setTimeout(() => {
       if (query.trim().length > 0) {
         setHasSearched(true);
@@ -319,6 +386,7 @@ const BrowseTradesmen = () => {
     setInsuranceFilter('any');
     setMinRatingFilter('any');
     setSortByPrice('default');
+    setMaxDistance('any');
   };
 
   const toggleDate = (dateStr) => {
@@ -337,6 +405,7 @@ const BrowseTradesmen = () => {
     setInsuranceFilter('any');
     setMinRatingFilter('any');
     setSortByPrice('default');
+    setMaxDistance('any');
   };
 
   const getActiveFilterCount = () => {
@@ -345,6 +414,7 @@ const BrowseTradesmen = () => {
     if (insuranceFilter !== 'any') count++;
     if (minRatingFilter !== 'any') count++;
     if (sortByPrice !== 'default') count++;
+    if (maxDistance !== 'any') count++;
     return count;
   };
 
@@ -634,6 +704,15 @@ const BrowseTradesmen = () => {
             Search by describing what you need done
           </p>
           
+          {/* Show user location if available */}
+          {userLocation && (
+            <div className="mb-4 text-center">
+              <p className="text-sm text-gray-600">
+                📍 Searching near <span className="font-medium">{userLocation.postcode}</span>
+              </p>
+            </div>
+          )}
+          
           <div className="relative w-full max-w-2xl">
             <input
               type="text"
@@ -694,6 +773,13 @@ const BrowseTradesmen = () => {
                 </button>
               )}
             </div>
+            
+            {/* Show user location */}
+            {userLocation && (
+              <div className="mt-2 text-sm text-gray-600">
+                📍 Searching near <span className="font-medium">{userLocation.postcode}</span>
+              </div>
+            )}
           </div>
 
           <div className="mb-6">
@@ -720,6 +806,28 @@ const BrowseTradesmen = () => {
                   </span>
                 )}
               </button>
+
+              {/* Distance Filter - only show if user has location */}
+              {userLocation && (
+                <div className="relative">
+                  <select
+                    value={maxDistance}
+                    onChange={(e) => setMaxDistance(e.target.value)}
+                    className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
+                    style={{ minHeight: '44px' }}
+                  >
+                    <option value="any">📍 Any Distance</option>
+                    <option value="5">Within 5 miles</option>
+                    <option value="10">Within 10 miles</option>
+                    <option value="25">Within 25 miles</option>
+                  </select>
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                    <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+              )}
 
               {/* Insurance Filter */}
               <div className="relative">
@@ -761,7 +869,7 @@ const BrowseTradesmen = () => {
                 </div>
               </div>
 
-              {/* Sort by Price */}
+              {/* Sort by Price/Distance */}
               <div className="relative">
                 <select
                   value={sortByPrice}
@@ -769,7 +877,8 @@ const BrowseTradesmen = () => {
                   className="px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none bg-white cursor-pointer appearance-none pr-10"
                   style={{ minHeight: '44px' }}
                 >
-                  <option value="default">💰 Sort by Price</option>
+                  <option value="default">💰 Sort by</option>
+                  {userLocation && <option value="distance">Nearest First</option>}
                   <option value="low-to-high">Price: Low to High</option>
                   <option value="high-to-low">Price: High to Low</option>
                 </select>
@@ -805,6 +914,17 @@ const BrowseTradesmen = () => {
                     </button>
                   </span>
                 )}
+                {maxDistance !== 'any' && (
+                  <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                    📍 Within {maxDistance} miles
+                    <button
+                      onClick={() => setMaxDistance('any')}
+                      className="text-blue-600 hover:text-blue-800 font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
                 {insuranceFilter !== 'any' && (
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
                     🛡️ {insuranceFilter === 'fully-insured' ? 'Fully Insured' : 
@@ -830,7 +950,8 @@ const BrowseTradesmen = () => {
                 )}
                 {sortByPrice !== 'default' && (
                   <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2">
-                    💰 {sortByPrice === 'low-to-high' ? 'Low to High' : 'High to Low'}
+                    💰 {sortByPrice === 'distance' ? 'Nearest First' : 
+                        sortByPrice === 'low-to-high' ? 'Low to High' : 'High to Low'}
                     <button
                       onClick={() => setSortByPrice('default')}
                       className="text-blue-600 hover:text-blue-800 font-bold"
@@ -978,6 +1099,12 @@ const BrowseTradesmen = () => {
                           <div className="flex-1">
                             <h3 className="text-xl font-semibold">{tradesman.name}</h3>
                             <p className="text-gray-600">{tradesman.tradeType}</p>
+                            {/* Show distance if available */}
+                            {tradesman.distance !== undefined && tradesman.distance !== null && (
+                              <p className="text-sm text-blue-600">
+                                📍 {tradesman.distance.toFixed(1)} miles away
+                              </p>
+                            )}
                           </div>
                           
                           <button
