@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
-import PageViewTracker from './components/PageViewTracker'; // 🆕 NEW IMPORT - Traffic Tracking
+import PageViewTracker from './components/PageViewTracker';
 // Import all your pages
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -18,8 +18,8 @@ import BookingRequest from './pages/BookingRequest';
 // 🆕 NEW IMPORTS - Bulletproof Architecture
 import QuoteRequests from './pages/QuoteRequests';
 import ActiveJobs from './pages/ActiveJobs';
-import WeeklyJobs from './pages/WeeklyJobs'; // 🆕 NEW IMPORT - Weekly Jobs
-import MakeMoreMoney from './pages/MakeMoreMoney'; // 🆕 NEW IMPORT
+import WeeklyJobs from './pages/WeeklyJobs';
+import MakeMoreMoney from './pages/MakeMoreMoney';
 import Messaging from './pages/Messaging';
 import Messages from './pages/Messages';
 import Reviews from './pages/Reviews';
@@ -29,8 +29,8 @@ import PaymentCheckout from './pages/PaymentCheckout';
 import PaymentSuccess from './pages/PaymentSuccess';
 import TradesmanOnboarding from './pages/TradesmanOnboarding';
 import EarningsOverview from './pages/EarningsOverview';
-import TopEarners from './pages/TopEarners'; // 🆕 NEW IMPORT - Top Earners
-import TopPerformers from './pages/TopPerformers'; // 🆕 NEW IMPORT - Top Performers (Customer-facing)
+import TopEarners from './pages/TopEarners';
+import TopPerformers from './pages/TopPerformers';
 // 🆕 NEW IMPORTS - Password Reset System
 import ForgotPassword from './pages/ForgotPassword';
 import ResetConfirmation from './pages/ResetConfirmation';
@@ -42,8 +42,9 @@ import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import CookiePolicy from './pages/CookiePolicy';
 import ContactHelp from './pages/ContactHelp';
-// 🆕 NEW IMPORT - Admin Dashboard
+// 🆕 NEW IMPORTS - Admin Dashboards
 import AdminDashboard from './pages/AdminDashboard';
+import AdminAnalytics from './pages/AdminAnalytics'; // 🆕 NEW IMPORT - Analytics Dashboard
 
 // Error Boundary Component
 class ErrorBoundary extends Component {
@@ -53,12 +54,10 @@ class ErrorBoundary extends Component {
   }
 
   static getDerivedStateFromError(error) {
-    // Update state so the next render will show the fallback UI
     return { hasError: true };
   }
 
   componentDidCatch(error, errorInfo) {
-    // Log the error to an error reporting service
     console.error('Error caught by boundary:', error, errorInfo);
     this.setState({
       error: error,
@@ -122,7 +121,7 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <Router>
-          <PageViewTracker /> {/* 🆕 NEW: Automatically tracks all page views */}
+          <PageViewTracker />
           <div className="min-h-screen bg-gray-50">
             <Navbar />
             <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -134,8 +133,9 @@ function App() {
                 <Route path="/browse" element={<BrowseTradesmen />} />
                 <Route path="/tradesman/:tradesmanId" element={<TradesmanPublicProfile />} />
                 
-                {/* 🆕 ADMIN ROUTE - Password Protected */}
+                {/* 🆕 ADMIN ROUTES - Password Protected */}
                 <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin-analytics" element={<AdminAnalytics />} /> {/* 🆕 NEW ROUTE */}
                 
                 {/* 🆕 NEW ROUTES - Password Reset System (Public Routes) */}
                 <Route path="/forgot-password" element={<ForgotPassword />} />
