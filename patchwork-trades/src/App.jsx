@@ -144,11 +144,19 @@ function AppContent() {
         <Navbar />
         <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <Routes>
-            <Route path="/" element={<Home />} />
+            {/* 🏠 HOME PAGE IS NOW BROWSE TRADESMEN */}
+            <Route path="/" element={<BrowseTradesmen />} />
+            
+            {/* Old landing page kept at /home just in case */}
+            <Route path="/home" element={<Home />} />
+            
             <Route path="/login" element={<Login />} />
             <Route path="/register-tradesman" element={<TradesmanRegister />} />
             <Route path="/register-customer" element={<CustomerRegister />} />
+            
+            {/* /browse now redirects to / but kept for backwards compatibility */}
             <Route path="/browse" element={<BrowseTradesmen />} />
+            
             <Route path="/tradesman/:tradesmanId" element={<TradesmanPublicProfile />} />
             
             {/* 🆕 ADMIN ROUTES - Password Protected */}
