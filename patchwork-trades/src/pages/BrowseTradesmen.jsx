@@ -149,6 +149,11 @@ const BrowseTradesmen = () => {
           isAnonymous: true
         });
         setPostcodeError('');
+        
+        // If there's already a search query, trigger the search
+        if (searchQuery.trim().length > 0) {
+          setHasSearched(true);
+        }
       } else {
         setPostcodeError('Postcode not found. Please check and try again.');
         setUserLocation(null);
@@ -408,7 +413,7 @@ const BrowseTradesmen = () => {
       return;
     }
     
-    // For anonymous users, don't trigger search without postcode
+    // For anonymous users, require postcode but allow search once they have it
     if (!currentUser && !userLocation) {
       return;
     }
@@ -417,7 +422,7 @@ const BrowseTradesmen = () => {
       if (query.trim().length > 0) {
         setHasSearched(true);
       }
-    }, 1000);
+    }, 300); // Reduced timeout for faster response
     
     setSearchTimeout(newTimeout);
   };
@@ -767,40 +772,14 @@ const BrowseTradesmen = () => {
             Search by describing what you need done
           </p>
           
-          <div className="relative w-full max-w-2xl">
-            {userLocation && isMobileView && (
-              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                📍 {userLocation.postcode}
-              </div>
-            )}
-            
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={handleSearch}
-              placeholder={isMobileView ? "e.g., 'fix my tap'..." : "e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."}
-              className={`w-full ${isMobileView ? 'px-4 py-4 pl-28 text-base' : 'px-6 py-5 text-lg'} border-2 border-gray-300 rounded-full focus:border-blue-500 focus:outline-none shadow-lg hover:shadow-xl transition-shadow`}
-              style={{ minHeight: isMobileView ? '52px' : '64px' }}
-              autoFocus
-            />
-            {searchQuery && (
-              <button
-                onClick={clearSearch}
-                className={`absolute ${isMobileView ? 'right-4' : 'right-6'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl`}
-              >
-                ×
-              </button>
-            )}
-          </div>
-          
           {!currentUser ? (
-            <div className="mt-4 w-full max-w-2xl">
+            <div className="w-full max-w-2xl mb-4">
               {!userLocation ? (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-800 mb-3 text-center">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-blue-800 mb-3 text-center font-medium">
                     📍 Enter your postcode to see tradespeople near you
                   </p>
-                  <form onSubmit={handleAnonymousPostcodeSearch} className="flex gap-2">
+                  <div className="flex gap-2">
                     <input
                       type="text"
                       value={anonymousPostcode}
@@ -808,9 +787,15 @@ const BrowseTradesmen = () => {
                       placeholder="e.g., SW1A 1AA"
                       className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
                       disabled={lookingUpPostcode}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAnonymousPostcodeSearch(e);
+                        }
+                      }}
                     />
                     <button
-                      type="submit"
+                      onClick={handleAnonymousPostcodeSearch}
                       disabled={lookingUpPostcode}
                       className={`px-6 py-2 rounded-lg font-medium transition-colors ${
                         lookingUpPostcode
@@ -820,13 +805,13 @@ const BrowseTradesmen = () => {
                     >
                       {lookingUpPostcode ? 'Looking up...' : 'Search'}
                     </button>
-                  </form>
+                  </div>
                   {postcodeError && (
                     <p className="text-red-600 text-sm mt-2">{postcodeError}</p>
                   )}
                 </div>
               ) : (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between mb-4">
                   <span className="text-sm text-green-800">
                     📍 Searching near <strong>{userLocation.postcode}</strong>
                   </span>
@@ -841,7 +826,7 @@ const BrowseTradesmen = () => {
             </div>
           ) : (
             userLocation && (
-              <div className="mt-3 text-center">
+              <div className="w-full max-w-2xl mb-3 text-center">
                 <p className="text-sm text-gray-600 mb-1">
                   Searching near <span className="font-medium">{userLocation.postcode}</span>
                 </p>
@@ -854,6 +839,41 @@ const BrowseTradesmen = () => {
               </div>
             )
           )}
+          
+          <div className="relative w-full max-w-2xl">
+            {userLocation && isMobileView && (
+              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                📍 {userLocation.postcode}
+              </div>
+            )}
+            
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={handleSearch}
+              placeholder={
+                !currentUser && !userLocation 
+                  ? "Enter your postcode above to start searching..."
+                  : isMobileView 
+                    ? "e.g., 'fix my tap'..." 
+                    : "e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."
+              }
+              className={`w-full ${isMobileView ? 'px-4 py-4 pl-28 text-base' : 'px-6 py-5 text-lg'} border-2 ${
+                !currentUser && !userLocation ? 'border-gray-200 bg-gray-50' : 'border-gray-300'
+              } rounded-full focus:border-blue-500 focus:outline-none shadow-lg hover:shadow-xl transition-shadow`}
+              style={{ minHeight: isMobileView ? '52px' : '64px' }}
+              autoFocus={currentUser || userLocation}
+              disabled={!currentUser && !userLocation}
+            />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className={`absolute ${isMobileView ? 'right-4' : 'right-6'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl`}
+              >
+                ×
+              </button>
+            )}
+          </div>
           
           <div className={`${isMobileView ? 'mt-4' : 'mt-8'} text-center w-full max-w-2xl`}>
             <p className="text-xs md:text-sm text-gray-500 mb-2 md:mb-3">Popular searches:</p>
