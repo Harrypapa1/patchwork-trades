@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import LazyImage from '../components/LazyImage';
+import AuthModal from '../components/AuthModal';
 
 // Distance calculation function (Haversine formula)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -22,7 +23,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLon/2) * Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c; // Distance in miles
+  return R * c;
 };
 
 const BrowseTradesmen = () => {
@@ -48,9 +49,13 @@ const BrowseTradesmen = () => {
   const [minRatingFilter, setMinRatingFilter] = useState('any');
   const [sortByPrice, setSortByPrice] = useState('default');
   
-  // NEW: Location states
+  // Location states
   const [userLocation, setUserLocation] = useState(null);
   const [maxDistance, setMaxDistance] = useState('any');
+
+  // Auth modal state
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [selectedTradesmanForBooking, setSelectedTradesmanForBooking] = useState(null);
 
   const TIME_SLOTS = {
     'morning': { label: 'Morning', time: '9am-1pm' },
@@ -100,7 +105,7 @@ const BrowseTradesmen = () => {
     };
   }, [searchTimeout]);
 
-  // NEW: Fetch user's location from Firebase
+  // Fetch user's location from Firebase (only if logged in)
   const fetchUserLocation = async () => {
     if (!currentUser) return;
     
@@ -183,7 +188,6 @@ const BrowseTradesmen = () => {
           completed_jobs_count: tradesmanData.completed_jobs_count || 0,
           average_rating: tradesmanData.average_rating || 0,
           review_count: tradesmanData.reviews?.length || 0,
-          // NEW: Location data
           postcode: tradesmanData.postcode,
           latitude: tradesmanData.latitude,
           longitude: tradesmanData.longitude
@@ -252,7 +256,6 @@ const BrowseTradesmen = () => {
   const filterTradesmen = () => {
     let filtered = tradesmen;
 
-    // Calculate distances if user has location
     if (userLocation && userLocation.latitude && userLocation.longitude) {
       filtered = filtered.map(tradesman => {
         if (tradesman.latitude && tradesman.longitude) {
@@ -268,7 +271,6 @@ const BrowseTradesmen = () => {
       });
     }
 
-    // Distance filter
     if (maxDistance !== 'any' && userLocation) {
       const maxDist = parseFloat(maxDistance);
       filtered = filtered.filter(tradesman => {
@@ -276,7 +278,6 @@ const BrowseTradesmen = () => {
       });
     }
 
-    // Search query filter
     if (searchQuery.trim()) {
       const matchedTrades = matchTradesByKeywords(searchQuery);
       
@@ -297,7 +298,6 @@ const BrowseTradesmen = () => {
       }
     }
 
-    // Date filter
     if (selectedDates.length > 0) {
       filtered = filtered.filter(tradesman => {
         return selectedDates.some(selectedDate => {
@@ -306,7 +306,6 @@ const BrowseTradesmen = () => {
       });
     }
 
-    // Insurance filter
     if (insuranceFilter !== 'any') {
       filtered = filtered.filter(tradesman => {
         if (insuranceFilter === 'fully-insured') {
@@ -320,7 +319,6 @@ const BrowseTradesmen = () => {
       });
     }
 
-    // Minimum rating filter
     if (minRatingFilter !== 'any') {
       const minRating = parseFloat(minRatingFilter);
       filtered = filtered.filter(tradesman => {
@@ -328,7 +326,6 @@ const BrowseTradesmen = () => {
       });
     }
 
-    // Sort by price or distance
     if (sortByPrice === 'distance' && userLocation) {
       filtered = [...filtered].sort((a, b) => {
         if (a.distance === null) return 1;
@@ -513,12 +510,16 @@ const BrowseTradesmen = () => {
     return days;
   };
 
-  const handleBooking = (tradesmanId) => {
+  // NEW: Handle booking with auth check
+  const handleBooking = (tradesmanId, tradesmanName) => {
     if (!currentUser) {
-      navigate('/login');
+      // Show auth modal if not logged in
+      setSelectedTradesmanForBooking({ id: tradesmanId, name: tradesmanName });
+      setShowAuthModal(true);
       return;
     }
     
+    // If logged in, proceed to booking
     navigate('/booking-request', {
       state: { tradesmanId }
     });
@@ -695,6 +696,14 @@ const BrowseTradesmen = () => {
 
   return (
     <div className="min-h-screen">
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        tradesmanName={selectedTradesmanForBooking?.name}
+        tradesmanId={selectedTradesmanForBooking?.id}
+      />
+
       {!hasSearched ? (
         <div className="flex flex-col items-center justify-center min-h-[70vh] px-4">
           <h1 className="text-3xl md:text-6xl font-bold mb-3 md:mb-6 text-gray-900 text-center">
@@ -705,7 +714,6 @@ const BrowseTradesmen = () => {
           </p>
           
           <div className="relative w-full max-w-2xl">
-            {/* Location indicator inside search bar on mobile */}
             {userLocation && isMobileView && (
               <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
                 📍 {userLocation.postcode}
@@ -731,22 +739,23 @@ const BrowseTradesmen = () => {
             )}
           </div>
           
-          {/* Location change link - desktop only or below search on mobile */}
           {userLocation && !isMobileView && (
             <div className="mt-3 text-center">
               <p className="text-sm text-gray-600 mb-1">
                 Searching near <span className="font-medium">{userLocation.postcode}</span>
               </p>
-              <button
-                onClick={() => navigate('/customer-dashboard')}
-                className="text-xs text-blue-600 hover:text-blue-800 underline"
-              >
-                Not at this address?
-              </button>
+              {currentUser && (
+                <button
+                  onClick={() => navigate('/customer-dashboard')}
+                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                >
+                  Not at this address?
+                </button>
+              )}
             </div>
           )}
           
-          {userLocation && isMobileView && (
+          {userLocation && isMobileView && currentUser && (
             <button
               onClick={() => navigate('/customer-dashboard')}
               className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
@@ -797,16 +806,17 @@ const BrowseTradesmen = () => {
               )}
             </div>
             
-            {/* Show user location */}
             {userLocation && (
               <div className="mt-2 text-sm text-gray-600 flex items-center gap-2">
                 <span>Searching near <span className="font-medium">{userLocation.postcode}</span></span>
-                <button
-                  onClick={() => navigate('/customer-dashboard')}
-                  className="text-blue-600 hover:text-blue-800 underline"
-                >
-                  Not at this address?
-                </button>
+                {currentUser && (
+                  <button
+                    onClick={() => navigate('/customer-dashboard')}
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Not at this address?
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -821,7 +831,6 @@ const BrowseTradesmen = () => {
             
             {/* Horizontal Filter Bar */}
             <div className="flex flex-wrap items-center gap-3 mb-4">
-              {/* Date Filter Button */}
               <button
                 onClick={() => setShowDateFilter(!showDateFilter)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -835,7 +844,6 @@ const BrowseTradesmen = () => {
                 )}
               </button>
 
-              {/* Distance Filter - only show if user has location */}
               {userLocation && (
                 <div className="relative">
                   <select
@@ -857,7 +865,6 @@ const BrowseTradesmen = () => {
                 </div>
               )}
 
-              {/* Insurance Filter */}
               <div className="relative">
                 <select
                   value={insuranceFilter}
@@ -877,7 +884,6 @@ const BrowseTradesmen = () => {
                 </div>
               </div>
 
-              {/* Rating Filter */}
               <div className="relative">
                 <select
                   value={minRatingFilter}
@@ -897,7 +903,6 @@ const BrowseTradesmen = () => {
                 </div>
               </div>
 
-              {/* Sort by Price/Distance */}
               <div className="relative">
                 <select
                   value={sortByPrice}
@@ -917,7 +922,6 @@ const BrowseTradesmen = () => {
                 </div>
               </div>
 
-              {/* Clear all filters button */}
               {getActiveFilterCount() > 0 && (
                 <button
                   onClick={clearAllFilters}
@@ -928,7 +932,6 @@ const BrowseTradesmen = () => {
               )}
             </div>
 
-            {/* Active Filter Badges */}
             {getActiveFilterCount() > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
                 {selectedDates.length > 0 && (
@@ -991,7 +994,6 @@ const BrowseTradesmen = () => {
               </div>
             )}
 
-            {/* Date Filter Calendar */}
             {showDateFilter && (
               <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border border-gray-200">
                 <div className="flex justify-between items-center mb-4">
@@ -1127,7 +1129,6 @@ const BrowseTradesmen = () => {
                           <div className="flex-1">
                             <h3 className="text-xl font-semibold">{tradesman.name}</h3>
                             <p className="text-gray-600">{tradesman.tradeType}</p>
-                            {/* Show distance if available */}
                             {tradesman.distance !== undefined && tradesman.distance !== null && (
                               <p className="text-sm text-blue-600">
                                 {tradesman.distance.toFixed(1)} miles away
@@ -1219,7 +1220,6 @@ const BrowseTradesmen = () => {
                         )}
                         
                         <div className="border-t pt-4 mt-4">
-                          {/* Show time slots only on desktop */}
                           {!isMobileView && (
                             <>
                               <h4 className="font-medium mb-2">Available Time Slots:</h4>
@@ -1227,7 +1227,6 @@ const BrowseTradesmen = () => {
                             </>
                           )}
                           
-                          {/* On mobile, just show availability status */}
                           {isMobileView && (
                             <p className="text-sm text-gray-600 mb-3">
                               {tradesman.availableTimeSlots.length > 0 
@@ -1239,7 +1238,7 @@ const BrowseTradesmen = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleBooking(tradesman.id);
+                              handleBooking(tradesman.id, tradesman.name);
                             }}
                             className={`w-full py-3 px-4 rounded font-medium transition-colors ${
                               tradesman.availableTimeSlots.length > 0 
