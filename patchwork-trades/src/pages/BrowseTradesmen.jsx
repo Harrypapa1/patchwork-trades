@@ -408,6 +408,11 @@ const BrowseTradesmen = () => {
       return;
     }
     
+    // For anonymous users, don't trigger search without postcode
+    if (!currentUser && !userLocation) {
+      return;
+    }
+    
     const newTimeout = setTimeout(() => {
       if (query.trim().length > 0) {
         setHasSearched(true);
@@ -679,7 +684,7 @@ const BrowseTradesmen = () => {
   const renderAvailableTimeSlots = (tradesman) => {
     if (tradesman.availableTimeSlots.length === 0) {
       return (
-        <div className="mb-3" style={{ minHeight: '120px' }}>
+        <div className="mb-3" style={{ height: '145px' }}>
           <p className="text-gray-500 text-sm">No time slots available</p>
         </div>
       );
@@ -699,7 +704,7 @@ const BrowseTradesmen = () => {
     const displayedSlots = next3Dates.reduce((sum, date) => sum + slotsByDate[date].length, 0);
 
     return (
-      <div className="mb-3" style={{ minHeight: '120px' }}>
+      <div className="mb-3" style={{ height: '145px' }}>
         <div className="space-y-2">
           {next3Dates.map((date) => (
             <div key={date} className="text-sm">
@@ -857,6 +862,11 @@ const BrowseTradesmen = () => {
                 <button
                   key={trade}
                   onClick={() => {
+                    // For anonymous users, require postcode first
+                    if (!currentUser && !userLocation) {
+                      // Scroll to postcode input
+                      return;
+                    }
                     setSearchQuery(trade.toLowerCase());
                     setHasSearched(true);
                     filterTradesmen();
