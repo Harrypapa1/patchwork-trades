@@ -20,7 +20,6 @@ const BookingRequest = () => {
   const location = useLocation();
   const { tradesmanId: urlTradesmanId } = useParams();
   
-  // Get tradesman ID from URL params or location state
   const tradesmanId = urlTradesmanId || location.state?.tradesmanId;
 
   const [tradesman, setTradesman] = useState(null);
@@ -34,11 +33,9 @@ const BookingRequest = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
 
-  // 🆕 NEW: Suspension check
   const [userStatus, setUserStatus] = useState({ suspended: false, violationCount: 0 });
   const [showSuspensionWarning, setShowSuspensionWarning] = useState(false);
 
-  // 🆕 NEW: Contact info violation tracking
   const [contactViolations, setContactViolations] = useState({
     jobTitle: null,
     jobDescription: null,
@@ -46,14 +43,12 @@ const BookingRequest = () => {
     additionalNotes: null
   });
 
-  // Time slot definitions
   const TIME_SLOTS = {
     'morning': { label: 'Morning', time: '9am-1pm', start: '09:00', end: '13:00' },
     'afternoon': { label: 'Afternoon', time: '1pm-5pm', start: '13:00', end: '17:00' },
     'evening': { label: 'Evening', time: '5pm-8pm', start: '17:00', end: '20:00' }
   };
 
-  // Form state
   const [formData, setFormData] = useState({
     jobTitle: '',
     jobDescription: '',
@@ -64,7 +59,6 @@ const BookingRequest = () => {
     jobImages: []
   });
 
-  // 🆕 NEW: Check user suspension status on mount
   useEffect(() => {
     const checkSuspension = async () => {
       if (!currentUser) return;
@@ -80,7 +74,6 @@ const BookingRequest = () => {
     checkSuspension();
   }, [currentUser]);
 
-  // Detect mobile viewport
   useEffect(() => {
     const checkMobile = () => {
       setIsMobileView(window.innerWidth < 768);
@@ -102,22 +95,49 @@ const BookingRequest = () => {
     fetchCustomerProfile();
   }, [tradesmanId, currentUser]);
 
+  // 🆕 NEW: Session recovery for booking intent
+  useEffect(() => {
+    const checkBookingIntent = () => {
+      const savedIntent = sessionStorage.getItem('bookingIntent');
+      
+      if (savedIntent) {
+        try {
+          const intent = JSON.parse(savedIntent);
+          const intentAge = Date.now() - intent.timestamp;
+          const oneHour = 60 * 60 * 1000;
+          
+          if (intentAge < oneHour && intent.tradesmanId) {
+            if (!tradesmanId) {
+              console.log('Recovering booking intent for:', intent.tradesmanName);
+              navigate(`/booking-request/${intent.tradesmanId}`, { replace: true });
+            }
+            sessionStorage.removeItem('bookingIntent');
+          } else {
+            sessionStorage.removeItem('bookingIntent');
+          }
+        } catch (error) {
+          console.error('Error parsing booking intent:', error);
+          sessionStorage.removeItem('bookingIntent');
+        }
+      }
+    };
+    
+    checkBookingIntent();
+  }, [navigate, tradesmanId]);
+
   const fetchTradesmanDetails = async () => {
     try {
-      // Get tradesman profile
       const tradesmanDoc = await getDoc(doc(db, 'tradesmen_profiles', tradesmanId));
       if (tradesmanDoc.exists()) {
         setTradesman({ id: tradesmanDoc.id, ...tradesmanDoc.data() });
       }
 
-      // Get availability
       const availabilityQuery = query(
         collection(db, 'availability'),
         where('tradesman_id', '==', tradesmanId)
       );
       const availabilitySnapshot = await getDocs(availabilityQuery);
       
-      // Process availability data to extract individual time slots
       const timeSlots = [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -127,7 +147,6 @@ const BookingRequest = () => {
         const date = availabilityData.date;
         const slots = availabilityData.available_slots || [];
         
-        // Only include future dates
         const slotDate = new Date(date);
         if (slotDate >= today) {
           slots.forEach(slot => {
@@ -152,7 +171,6 @@ const BookingRequest = () => {
         }
       });
 
-      // Sort by date then by time
       timeSlots.sort((a, b) => {
         const dateCompare = new Date(a.date) - new Date(b.date);
         if (dateCompare !== 0) return dateCompare;
@@ -181,14 +199,13 @@ const BookingRequest = () => {
     }
   };
 
-  // Calendar helper functions
   const getDaysInMonth = (date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
 
   const getFirstDayOfMonth = (date) => {
     const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-    return firstDay === 0 ? 6 : firstDay - 1; // Make Monday = 0
+    return firstDay === 0 ? 6 : firstDay - 1;
   };
 
   const formatDateString = (year, month, day) => {
@@ -221,7 +238,6 @@ const BookingRequest = () => {
 
   const handleTimeSlotSelection = (slotId) => {
     if (formData.selectedTimeSlot === slotId) {
-      // Deselect if already selected
       setFormData(prev => ({
         ...prev,
         selectedTimeSlot: ''
@@ -234,7 +250,6 @@ const BookingRequest = () => {
     }
   };
 
-  // Mobile calendar rendering
   const renderMobileCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -243,12 +258,10 @@ const BookingRequest = () => {
     
     const days = [];
 
-    // Empty cells for days before the first day of the month
     for (let i = 0; i < firstDay; i++) {
       days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
     }
 
-    // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDateString(year, month, day);
       const isPast = isDateInPast(year, month, day);
@@ -294,7 +307,6 @@ const BookingRequest = () => {
     return days;
   };
 
-  // Desktop time slots rendering
   const renderTimeSlots = (dateStr, isPast) => {
     const slotsForDate = getSlotsForDate(dateStr);
     
@@ -343,7 +355,6 @@ const BookingRequest = () => {
     );
   };
 
-  // Desktop calendar rendering
   const renderDesktopCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -353,7 +364,6 @@ const BookingRequest = () => {
     const days = [];
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    // Day headers
     dayNames.forEach(day => {
       days.push(
         <div key={day} className="p-2 text-center font-semibold text-gray-600 text-sm">
@@ -362,12 +372,10 @@ const BookingRequest = () => {
       );
     });
 
-    // Empty cells for days before the first day of the month
     for (let i = 0; i < firstDay; i++) {
       days.push(<div key={`empty-${i}`} className="p-2"></div>);
     }
 
-    // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDateString(year, month, day);
       const isPast = isDateInPast(year, month, day);
@@ -391,7 +399,6 @@ const BookingRequest = () => {
     return days;
   };
 
-  // Time slot modal for mobile
   const renderTimeSlotModal = () => {
     if (!showTimeSlotModal || !selectedDate) return null;
 
@@ -424,7 +431,7 @@ const BookingRequest = () => {
               const slotInfo = TIME_SLOTS[slotId];
               const isSelected = formData.selectedTimeSlot === availableSlot?.id;
               
-              if (!availableSlot) return null; // Don't show unavailable slots on mobile
+              if (!availableSlot) return null;
               
               let buttonClass = "w-full p-4 rounded-lg text-left transition-colors border-2 ";
               
@@ -458,24 +465,20 @@ const BookingRequest = () => {
             })}
           </div>
           
-          {/* Bottom padding for safe area */}
           <div className="h-4"></div>
         </div>
       </div>
     );
   };
 
-  // 🆕 NEW: Handle input change with contact detection
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     
-    // Update form data
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
 
-    // Check for contact info (only for text fields that matter)
     if (['jobTitle', 'jobDescription', 'budgetExpectation', 'additionalNotes'].includes(name)) {
       const detection = detectContactInfo(value);
       
@@ -486,7 +489,6 @@ const BookingRequest = () => {
     }
   };
 
-  // Image compression function
   const compressImage = (file, maxWidth = 400, quality = 0.6) => {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
@@ -506,7 +508,6 @@ const BookingRequest = () => {
     });
   };
 
-  // Convert file to base64
   const fileToBase64 = (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -515,7 +516,6 @@ const BookingRequest = () => {
     });
   };
 
-  // Handle image upload
   const handleImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     
@@ -566,7 +566,6 @@ const BookingRequest = () => {
     }
   };
 
-  // Delete image
   const deleteImage = (imageId) => {
     setFormData(prev => ({
       ...prev,
@@ -574,11 +573,9 @@ const BookingRequest = () => {
     }));
   };
 
-  // 🆕 NEW: Enhanced submit with contact detection
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Check if user is suspended
     if (userStatus.suspended) {
       alert('⚠️ Your account is suspended.\n\nYou cannot submit quote requests.\n\nPlease contact support@patchworktrades.com to appeal.');
       return;
@@ -594,7 +591,6 @@ const BookingRequest = () => {
       return;
     }
 
-    // 🆕 NEW: Check ALL fields for contact info before submitting
     const fieldsToCheck = [
       { name: 'jobTitle', value: formData.jobTitle, label: 'Job Title' },
       { name: 'jobDescription', value: formData.jobDescription, label: 'Job Description' },
@@ -619,7 +615,6 @@ const BookingRequest = () => {
     }
 
     if (hasViolation) {
-      // Log the violation
       try {
         const violationTypes = [...new Set(violationDetails.flatMap(v => v.types))];
         const detectedFields = violationDetails.map(v => v.field).join(', ');
@@ -637,21 +632,19 @@ const BookingRequest = () => {
           }
         );
 
-        // Update local user status
         setUserStatus(prev => ({
           ...prev,
           violationCount: violationResult.violationCount,
           suspended: violationResult.suspended
         }));
 
-        // Show appropriate warning
         alert(getViolationWarning(userStatus.violationCount));
 
         if (violationResult.suspended) {
           setShowSuspensionWarning(true);
         }
 
-        return; // Block submission
+        return;
       } catch (error) {
         console.error('Error logging violation:', error);
       }
@@ -660,25 +653,20 @@ const BookingRequest = () => {
     setSubmitting(true);
 
     try {
-      // Find the selected time slot details
       const selectedSlot = availableTimeSlots.find(slot => slot.id === formData.selectedTimeSlot);
       
-      // Create quote request
       const quoteRequestData = {
-        // Customer information
         customer_id: currentUser.uid,
         customer_name: customerProfile?.name || currentUser.email,
         customer_email: currentUser.email,
         customer_photo: customerProfile?.profilePhoto || null,
         
-        // Tradesman information
         tradesman_id: tradesmanId,
         tradesman_name: tradesman.name,
         tradesman_email: tradesman.email || tradesman.contactEmail,
         tradesman_photo: tradesman.profilePhoto || null,
         tradesman_hourly_rate: tradesman.hourlyRate,
         
-        // Job details
         job_title: formData.jobTitle,
         job_description: formData.jobDescription,
         job_images: formData.jobImages,
@@ -686,7 +674,6 @@ const BookingRequest = () => {
         urgency: formData.urgency,
         budget_expectation: formData.budgetExpectation,
         
-        // Save selected time slot details
         selected_time_slot: {
           id: selectedSlot.id,
           date: selectedSlot.date,
@@ -698,7 +685,6 @@ const BookingRequest = () => {
           label: selectedSlot.label
         },
         
-        // Quote status
         status: 'pending',
         has_custom_quote: false,
         custom_quote: '',
@@ -707,7 +693,6 @@ const BookingRequest = () => {
         customer_counter_quote: '',
         customer_reasoning: '',
         
-        // Timestamps
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -716,7 +701,6 @@ const BookingRequest = () => {
       console.log('Creating quote request:', quoteRequestData);
       const quoteRef = await addDoc(collection(db, 'quote_requests'), quoteRequestData);
 
-      // Send message
       console.log('Sending message for quote request:', quoteRef.id);
       await addDoc(collection(db, 'messages'), {
         booking_id: quoteRef.id,
@@ -749,7 +733,6 @@ Thanks!`,
         attached_images: formData.jobImages
       });
 
-      // Navigate to quote requests
       navigate('/quote-requests', {
         state: { 
           success: 'Quote request sent successfully! The tradesman will respond shortly.'
@@ -786,7 +769,6 @@ Thanks!`,
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* 🆕 NEW: Suspension Warning Banner */}
       {showSuspensionWarning && userStatus.suspended && (
         <div className="mb-6 bg-red-50 border-2 border-red-500 rounded-lg p-4">
           <div className="flex items-start">
@@ -828,7 +810,6 @@ Thanks!`,
         <h1 className="text-3xl font-bold">Request Quote</h1>
       </div>
 
-      {/* Tradesman Summary */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Requesting Quote From:</h2>
         <div className="flex items-center">
@@ -854,12 +835,10 @@ Thanks!`,
         </div>
       </div>
 
-      {/* Booking Request Form */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-xl font-semibold mb-6">Job Details</h2>
         
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Job Title */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Job Title *
@@ -885,7 +864,6 @@ Thanks!`,
             )}
           </div>
 
-          {/* Job Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Detailed Description *
@@ -911,7 +889,6 @@ Thanks!`,
             )}
           </div>
 
-          {/* Job Images */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Job Photos (Optional - but recommended)
@@ -941,7 +918,6 @@ Thanks!`,
               </p>
             </div>
 
-            {/* Image Gallery */}
             {formData.jobImages.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                 {formData.jobImages.map((image) => (
@@ -967,7 +943,6 @@ Thanks!`,
             )}
           </div>
 
-          {/* Urgency */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Urgency
@@ -986,7 +961,6 @@ Thanks!`,
             </select>
           </div>
 
-          {/* Calendar-based Time Slot Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Select Time Slot * {formData.selectedTimeSlot && <span className="text-green-600 font-medium">✓ Selected</span>}
@@ -1000,16 +974,13 @@ Thanks!`,
             ) : (
               <div className="bg-gray-50 rounded-lg p-4">
                 {isMobileView ? (
-                  // Mobile Calendar View
                   <div>
-                    {/* Instructions */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                       <p className="text-blue-800 text-sm">
                         <strong>Tap any date</strong> with a blue dot to see available time slots
                       </p>
                     </div>
 
-                    {/* Month navigation */}
                     <div className="flex justify-between items-center mb-4">
                       <button
                         type="button"
@@ -1032,7 +1003,6 @@ Thanks!`,
                       </button>
                     </div>
 
-                    {/* Day headers */}
                     <div className="grid grid-cols-7 gap-1 mb-2">
                       {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
                         <div key={day} className="text-center font-medium text-gray-600 text-sm py-2">
@@ -1041,12 +1011,10 @@ Thanks!`,
                       ))}
                     </div>
                     
-                    {/* Calendar grid */}
                     <div className="grid grid-cols-7 gap-2">
                       {renderMobileCalendar()}
                     </div>
                     
-                    {/* Legend */}
                     <div className="mt-4 text-sm">
                       <div className="flex items-center gap-2">
                         <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
@@ -1055,9 +1023,7 @@ Thanks!`,
                     </div>
                   </div>
                 ) : (
-                  // Desktop Calendar View
                   <div>
-                    {/* Instructions */}
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                       <h4 className="font-semibold text-blue-800 mb-2">Select your preferred time slot:</h4>
                       <ul className="text-blue-700 text-sm space-y-1">
@@ -1068,7 +1034,6 @@ Thanks!`,
                       </ul>
                     </div>
 
-                    {/* Calendar Header */}
                     <div className="flex justify-between items-center mb-4">
                       <button
                         type="button"
@@ -1091,12 +1056,10 @@ Thanks!`,
                       </button>
                     </div>
 
-                    {/* Calendar Grid */}
                     <div className="grid grid-cols-7 gap-2">
                       {renderDesktopCalendar()}
                     </div>
 
-                    {/* Legend */}
                     <div className="mt-4 flex flex-wrap gap-4 justify-center text-sm">
                       <div className="flex items-center gap-2">
                         <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
@@ -1121,7 +1084,6 @@ Thanks!`,
             )}
           </div>
 
-          {/* Selected Time Slot Display */}
           {formData.selectedTimeSlot && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <h4 className="font-semibold text-green-800 mb-2">Selected Time Slot:</h4>
@@ -1137,7 +1099,6 @@ Thanks!`,
             </div>
           )}
 
-          {/* Budget Expectation */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Budget Expectation (Optional)
@@ -1162,7 +1123,6 @@ Thanks!`,
             )}
           </div>
 
-          {/* Additional Notes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Additional Notes (Optional)
@@ -1187,7 +1147,6 @@ Thanks!`,
             )}
           </div>
 
-          {/* Submit Button */}
           <div className="flex gap-4">
             <button
               type="submit"
@@ -1212,10 +1171,8 @@ Thanks!`,
         </form>
       </div>
 
-      {/* Time Slot Modal for Mobile */}
       {renderTimeSlotModal()}
 
-      {/* Help Text */}
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="font-medium text-blue-900 mb-2">What happens next?</h3>
         <ul className="text-sm text-blue-800 space-y-1">
