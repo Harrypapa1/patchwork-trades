@@ -1219,8 +1219,22 @@ const BrowseTradesmen = () => {
                         )}
                         
                         <div className="border-t pt-4 mt-4">
-                          <h4 className="font-medium mb-2">Available Time Slots:</h4>
-                          {renderAvailableTimeSlots(tradesman)}
+                          {/* Show time slots only on desktop */}
+                          {!isMobileView && (
+                            <>
+                              <h4 className="font-medium mb-2">Available Time Slots:</h4>
+                              {renderAvailableTimeSlots(tradesman)}
+                            </>
+                          )}
+                          
+                          {/* On mobile, just show availability status */}
+                          {isMobileView && (
+                            <p className="text-sm text-gray-600 mb-3">
+                              {tradesman.availableTimeSlots.length > 0 
+                                ? `${tradesman.availableTimeSlots.length} time slots available` 
+                                : 'No time slots available'}
+                            </p>
+                          )}
                           
                           <button
                             onClick={(e) => {
