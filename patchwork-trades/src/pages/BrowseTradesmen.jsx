@@ -697,17 +697,44 @@ const BrowseTradesmen = () => {
     <div className="min-h-screen">
       {!hasSearched ? (
         <div className="flex flex-col items-center justify-center min-h-[70vh] px-4">
-          <h1 className="text-5xl md:text-6xl font-bold mb-6 text-gray-900 text-center">
+          <h1 className="text-3xl md:text-6xl font-bold mb-3 md:mb-6 text-gray-900 text-center">
             Find a Tradesperson
           </h1>
-          <p className="text-xl text-gray-600 mb-8 text-center max-w-2xl">
+          <p className="text-base md:text-xl text-gray-600 mb-4 md:mb-8 text-center max-w-2xl">
             Search by describing what you need done
           </p>
           
-          {/* Show user location if available */}
-          {userLocation && (
-            <div className="mb-4 text-center">
-              <p className="text-sm text-gray-600 mb-2">
+          <div className="relative w-full max-w-2xl">
+            {/* Location indicator inside search bar on mobile */}
+            {userLocation && isMobileView && (
+              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 flex items-center text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                📍 {userLocation.postcode}
+              </div>
+            )}
+            
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={handleSearch}
+              placeholder={isMobileView ? "e.g., 'fix my tap'..." : "e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."}
+              className={`w-full ${isMobileView ? 'px-4 py-4 pl-28 text-base' : 'px-6 py-5 text-lg'} border-2 border-gray-300 rounded-full focus:border-blue-500 focus:outline-none shadow-lg hover:shadow-xl transition-shadow`}
+              style={{ minHeight: isMobileView ? '52px' : '64px' }}
+              autoFocus
+            />
+            {searchQuery && (
+              <button
+                onClick={clearSearch}
+                className={`absolute ${isMobileView ? 'right-4' : 'right-6'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl`}
+              >
+                ×
+              </button>
+            )}
+          </div>
+          
+          {/* Location change link - desktop only or below search on mobile */}
+          {userLocation && !isMobileView && (
+            <div className="mt-3 text-center">
+              <p className="text-sm text-gray-600 mb-1">
                 Searching near <span className="font-medium">{userLocation.postcode}</span>
               </p>
               <button
@@ -719,29 +746,18 @@ const BrowseTradesmen = () => {
             </div>
           )}
           
-          <div className="relative w-full max-w-2xl">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={handleSearch}
-              placeholder="e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."
-              className="w-full px-6 py-5 text-lg border-2 border-gray-300 rounded-full focus:border-blue-500 focus:outline-none shadow-lg hover:shadow-xl transition-shadow"
-              style={{ minHeight: '64px' }}
-              autoFocus
-            />
-            {searchQuery && (
-              <button
-                onClick={clearSearch}
-                className="absolute right-6 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 text-2xl"
-              >
-                ×
-              </button>
-            )}
-          </div>
+          {userLocation && isMobileView && (
+            <button
+              onClick={() => navigate('/customer-dashboard')}
+              className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+            >
+              Change location
+            </button>
+          )}
           
-          <div className="mt-8 text-center">
-            <p className="text-sm text-gray-500 mb-3">Popular searches:</p>
-            <div className="flex flex-wrap justify-center gap-2">
+          <div className={`${isMobileView ? 'mt-4' : 'mt-8'} text-center w-full max-w-2xl`}>
+            <p className="text-xs md:text-sm text-gray-500 mb-2 md:mb-3">Popular searches:</p>
+            <div className={`grid ${isMobileView ? 'grid-cols-2 gap-2' : 'flex flex-wrap justify-center gap-2'}`}>
               {['Plumber', 'Electrician', 'Painter', 'Gardener', 'Carpenter'].map(trade => (
                 <button
                   key={trade}
@@ -750,7 +766,8 @@ const BrowseTradesmen = () => {
                     setHasSearched(true);
                     filterTradesmen();
                   }}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700 transition-colors"
+                  className={`${isMobileView ? 'px-3 py-2 text-sm' : 'px-4 py-2 text-sm'} bg-gray-100 hover:bg-gray-200 rounded-full text-gray-700 transition-colors`}
+                  style={{ minHeight: '40px' }}
                 >
                   {trade}
                 </button>
