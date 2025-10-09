@@ -135,20 +135,17 @@ const BrowseTradesmen = () => {
     setAnonymousPostcode(value);
     setPostcodeError('');
     
-    // Clear existing timeout
     if (postcodeTimeout) {
       clearTimeout(postcodeTimeout);
     }
     
-    // If empty, clear location
     if (!value.trim()) {
       setUserLocation(null);
       return;
     }
     
-    // Set new timeout to lookup postcode after 1 second
     const newTimeout = setTimeout(async () => {
-      if (value.trim().length >= 5) { // Minimum UK postcode length
+      if (value.trim().length >= 5) {
         setLookingUpPostcode(true);
         try {
           const response = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(value.trim())}`);
@@ -163,7 +160,6 @@ const BrowseTradesmen = () => {
             });
             setPostcodeError('');
             
-            // If there's already a search query, trigger the search
             if (searchQuery.trim().length > 0) {
               setHasSearched(true);
             }
@@ -208,7 +204,6 @@ const BrowseTradesmen = () => {
         });
         setPostcodeError('');
         
-        // If there's already a search query, trigger the search
         if (searchQuery.trim().length > 0) {
           setHasSearched(true);
         }
@@ -471,7 +466,6 @@ const BrowseTradesmen = () => {
       return;
     }
     
-    // For anonymous users, show prompt if no postcode
     if (!currentUser && !userLocation) {
       setPostcodeError('Please enter your postcode first');
       return;
@@ -929,9 +923,7 @@ const BrowseTradesmen = () => {
                 <button
                   key={trade}
                   onClick={() => {
-                    // For anonymous users, require postcode first
                     if (!currentUser && !userLocation) {
-                      // Scroll to postcode input
                       return;
                     }
                     setSearchQuery(trade.toLowerCase());
@@ -1413,3 +1405,58 @@ const BrowseTradesmen = () => {
                                 <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
                                   {tradesman.servicesOffered}
                                 </p>
+                              </div>
+                            )}
+
+                            <div>
+                              <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
+                              {renderPortfolioGallery(details.portfolio_images, loadingDetails)}
+                            </div>
+
+                            <div>
+                              <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
+                              {renderReviews(details.reviews, loadingDetails)}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="border-t pt-4 mt-4">
+                          {!isMobileView && (
+                            <>
+                              <h4 className="font-medium mb-2">Available Time Slots:</h4>
+                              {renderAvailableTimeSlots(tradesman)}
+                            </>
+                          )}
+                          
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleBooking(tradesman.id, tradesman.name);
+                            }}
+                            className={`w-full ${isMobileView ? 'py-2 px-2 text-xs' : 'py-3 px-4'} rounded font-medium transition-colors ${
+                              tradesman.availableTimeSlots.length > 0 
+                                ? 'bg-green-600 text-white hover:bg-green-700' 
+                                : 'bg-gray-400 text-white cursor-not-allowed'
+                            }`}
+                            style={{ minHeight: isMobileView ? '36px' : '48px' }}
+                            disabled={tradesman.availableTimeSlots.length === 0}
+                          >
+                            {isMobileView ? 'Book' : (tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available')}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {isMobileView && <div className="h-20"></div>}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default BrowseTradesmen;
