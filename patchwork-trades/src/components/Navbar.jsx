@@ -18,13 +18,11 @@ const Navbar = () => {
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isCustomerDashboardOpen, setIsCustomerDashboardOpen] = useState(false);
   
-  // Notification counts
   const [notifications, setNotifications] = useState({
     quoteRequests: 0,
     activeJobs: 0
   });
 
-  // Check if mobile screen
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
@@ -36,7 +34,6 @@ const Navbar = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Close mobile menu when clicking outside or on route change
   useEffect(() => {
     const handleClickOutside = () => {
       if (isMenuOpen) {
@@ -50,7 +47,6 @@ const Navbar = () => {
     }
   }, [isMenuOpen]);
 
-  // Enhanced notification listeners
   useEffect(() => {
     if (!currentUser) {
       setNotifications({ quoteRequests: 0, activeJobs: 0 });
@@ -60,7 +56,6 @@ const Navbar = () => {
     const unsubscribes = [];
 
     try {
-      // 1. Quote Requests Listener
       let quotesQuery;
       if (userType === 'customer') {
         quotesQuery = query(
@@ -92,7 +87,6 @@ const Navbar = () => {
         unsubscribes.push(quoteUnsubscribe);
       }
 
-      // 2. Active Jobs Listener - Look for status changes
       let jobsQuery;
       if (userType === 'customer') {
         jobsQuery = query(
@@ -112,7 +106,6 @@ const Navbar = () => {
         const jobsUnsubscribe = onSnapshot(
           jobsQuery,
           (snapshot) => {
-            // Count jobs with recent updates (last 24 hours)
             const recentJobs = snapshot.docs.filter(doc => {
               const data = doc.data();
               const updatedAt = data.updated_at;
@@ -141,13 +134,11 @@ const Navbar = () => {
       console.error('Error setting up notification listeners:', error);
     }
 
-    // Cleanup function
     return () => {
       unsubscribes.forEach(unsubscribe => unsubscribe());
     };
   }, [currentUser, userType]);
 
-  // Handle logout function
   const handleLogout = async () => {
     try {
       setIsMenuOpen(false);
@@ -169,7 +160,6 @@ const Navbar = () => {
     e.stopPropagation();
   };
 
-  // Clear notifications when clicking nav links
   const clearNotifications = (type) => {
     setNotifications(prev => ({
       ...prev,
@@ -177,7 +167,6 @@ const Navbar = () => {
     }));
   };
 
-  // Notification badge component
   const NotificationBadge = ({ count }) => {
     if (count === 0) return null;
     
@@ -192,7 +181,6 @@ const Navbar = () => {
     <nav className="bg-blue-600 text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo and Brand */}
           <Link to="/" className="flex items-center space-x-3" onClick={closeMenu}>
             <img 
               src="/patchwork-logo.png" 
@@ -205,16 +193,21 @@ const Navbar = () => {
             <span className="text-xl font-bold">Patchwork Trades</span>
           </Link>
           
-          {/* Desktop Menu - Only show on desktop */}
           {!isMobile && (
             <div className="flex items-center space-x-4">
               {!currentUser ? (
                 <>
+                  <Link to="/browse" className="hover:text-blue-200 transition-colors">
+                    Browse Tradesmen
+                  </Link>
                   <Link to="/login" className="hover:text-blue-200 transition-colors">
                     Login
                   </Link>
-                  <Link to="/register-customer" className="hover:text-blue-200 transition-colors">
-                    Register
+                  <Link 
+                    to="/register-customer" 
+                    className="bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors font-medium"
+                  >
+                    Sign Up
                   </Link>
                 </>
               ) : (
@@ -225,14 +218,12 @@ const Navbar = () => {
                     </Link>
                   )}
                   
-                  {/* MOVED TO FIRST: Manage Availability - Tradesman Only */}
                   {userType === 'tradesman' && (
                     <Link to="/manage-availability" className="hover:text-blue-200 transition-colors">
                       Manage Availability
                     </Link>
                   )}
                   
-                  {/* Quote Requests with Notification */}
                   <Link 
                     to="/quote-requests" 
                     className="hover:text-blue-200 transition-colors relative"
@@ -242,18 +233,15 @@ const Navbar = () => {
                     <NotificationBadge count={notifications.quoteRequests} />
                   </Link>
 
-                  {/* Weekly Jobs */}
                   <Link to="/weekly-jobs" className="hover:text-blue-200 transition-colors">
                     Weekly Jobs
                   </Link>
 
-                  {/* Active Jobs with Notification */}
                   <Link to="/active-jobs" className="hover:text-blue-200 transition-colors relative" onClick={() => clearNotifications('activeJobs')}>
                     Active Jobs
                     <NotificationBadge count={notifications.activeJobs} />
                   </Link>
                   
-                  {/* Customer Dashboard with Dropdown */}
                   {userType === 'customer' && (
                     <div className="relative group">
                       <Link to="/customer-dashboard" className="hover:text-blue-200 transition-colors flex items-center">
@@ -274,7 +262,6 @@ const Navbar = () => {
                     </div>
                   )}
                   
-                  {/* Tradesman Dashboard with Top Earners */}
                   {userType === 'tradesman' && (
                     <div className="relative group">
                       <Link to="/tradesman-dashboard" className="hover:text-blue-200 transition-colors flex items-center">
@@ -300,12 +287,18 @@ const Navbar = () => {
                       </div>
                     </div>
                   )}
+
+                  <button
+                    onClick={handleLogout}
+                    className="hover:text-blue-200 transition-colors"
+                  >
+                    Logout
+                  </button>
                 </>
               )}
             </div>
           )}
 
-          {/* Mobile Menu Button - Only show on mobile */}
           {isMobile && (
             <div>
               <button
@@ -320,8 +313,7 @@ const Navbar = () => {
                 <span className="text-2xl">
                   {isMenuOpen ? '✕' : '☰'}
                 </span>
-                {/* Total notifications indicator for mobile menu button */}
-                {(notifications.quoteRequests + notifications.activeJobs) > 0 && (
+                {currentUser && (notifications.quoteRequests + notifications.activeJobs) > 0 && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-4 h-4 rounded-full flex items-center justify-center">
                     {notifications.quoteRequests + notifications.activeJobs > 9 ? '9+' : 
                      notifications.quoteRequests + notifications.activeJobs}
@@ -332,7 +324,6 @@ const Navbar = () => {
           )}
         </div>
 
-        {/* Mobile Menu - Only show on mobile when open */}
         {isMobile && isMenuOpen && (
           <div 
             className="bg-blue-700 rounded-md mt-2 p-1 shadow-lg border border-blue-500"
@@ -340,6 +331,13 @@ const Navbar = () => {
           >
             {!currentUser ? (
               <>
+                <Link 
+                  to="/browse" 
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
+                  onClick={closeMenu}
+                >
+                  Browse Tradesmen
+                </Link>
                 <Link 
                   to="/login" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
@@ -352,7 +350,7 @@ const Navbar = () => {
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
-                  Register
+                  Sign Up
                 </Link>
               </>
             ) : (
@@ -367,7 +365,6 @@ const Navbar = () => {
                   </Link>
                 )}
                 
-                {/* MOVED TO FIRST: Manage Availability - Tradesman Only */}
                 {userType === 'tradesman' && (
                   <Link 
                     to="/manage-availability" 
@@ -378,7 +375,6 @@ const Navbar = () => {
                   </Link>
                 )}
                 
-                {/* Quote Requests with Mobile Notification */}
                 <Link 
                   to="/quote-requests" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
@@ -395,7 +391,6 @@ const Navbar = () => {
                   )}
                 </Link>
 
-                {/* Weekly Jobs */}
                 <Link 
                   to="/weekly-jobs" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
@@ -404,7 +399,6 @@ const Navbar = () => {
                   Weekly Jobs
                 </Link>
 
-                {/* Active Jobs with Mobile Notification */}
                 <Link 
                   to="/active-jobs" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium relative"
@@ -421,7 +415,6 @@ const Navbar = () => {
                   )}
                 </Link>
                 
-                {/* Customer Dashboard Mobile with Dropdown */}
                 {userType === 'customer' && (
                   <div>
                     <button
@@ -462,7 +455,6 @@ const Navbar = () => {
                   </div>
                 )}
                 
-                {/* Tradesman Dashboard Mobile with Top Earners */}
                 {userType === 'tradesman' && (
                   <div>
                     <button
