@@ -13,9 +13,8 @@ import { db } from '../config/firebase';
 import LazyImage from '../components/LazyImage';
 import AuthModal from '../components/AuthModal';
 
-// Distance calculation function (Haversine formula)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 3959; // Earth radius in miles
+  const R = 3959;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = 
@@ -44,16 +43,18 @@ const BrowseTradesmen = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchTimeout, setSearchTimeout] = useState(null);
   
-  // Filter states
   const [insuranceFilter, setInsuranceFilter] = useState('any');
   const [minRatingFilter, setMinRatingFilter] = useState('any');
   const [sortByPrice, setSortByPrice] = useState('default');
   
-  // Location states
   const [userLocation, setUserLocation] = useState(null);
   const [maxDistance, setMaxDistance] = useState('any');
 
-  // Auth modal state
+  // NEW: Anonymous user postcode search
+  const [anonymousPostcode, setAnonymousPostcode] = useState('');
+  const [lookingUpPostcode, setLookingUpPostcode] = useState(false);
+  const [postcodeError, setPostcodeError] = useState('');
+
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedTradesmanForBooking, setSelectedTradesmanForBooking] = useState(null);
 
@@ -105,7 +106,6 @@ const BrowseTradesmen = () => {
     };
   }, [searchTimeout]);
 
-  // Fetch user's location from Firebase (only if logged in)
   const fetchUserLocation = async () => {
     if (!currentUser) return;
     
@@ -117,13 +117,57 @@ const BrowseTradesmen = () => {
           setUserLocation({
             postcode: userData.postcode,
             latitude: userData.latitude,
-            longitude: userData.longitude
+            longitude: userData.longitude,
+            isAnonymous: false
           });
         }
       }
     } catch (error) {
       console.error('Error fetching user location:', error);
     }
+  };
+
+  // NEW: Postcode lookup for anonymous users
+  const handleAnonymousPostcodeSearch = async (e) => {
+    e.preventDefault();
+    
+    if (!anonymousPostcode.trim()) {
+      setPostcodeError('Please enter a postcode');
+      return;
+    }
+
+    setLookingUpPostcode(true);
+    setPostcodeError('');
+
+    try {
+      const response = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(anonymousPostcode.trim())}`);
+      const data = await response.json();
+
+      if (data.status === 200 && data.result) {
+        setUserLocation({
+          postcode: data.result.postcode,
+          latitude: data.result.latitude,
+          longitude: data.result.longitude,
+          isAnonymous: true
+        });
+        setPostcodeError('');
+      } else {
+        setPostcodeError('Postcode not found. Please check and try again.');
+        setUserLocation(null);
+      }
+    } catch (error) {
+      console.error('Error looking up postcode:', error);
+      setPostcodeError('Error looking up postcode. Please try again.');
+      setUserLocation(null);
+    } finally {
+      setLookingUpPostcode(false);
+    }
+  };
+
+  const clearAnonymousLocation = () => {
+    setUserLocation(null);
+    setAnonymousPostcode('');
+    setMaxDistance('any');
   };
 
   const fetchTradesmen = async () => {
@@ -510,16 +554,13 @@ const BrowseTradesmen = () => {
     return days;
   };
 
-  // NEW: Handle booking with auth check
   const handleBooking = (tradesmanId, tradesmanName) => {
     if (!currentUser) {
-      // Show auth modal if not logged in
       setSelectedTradesmanForBooking({ id: tradesmanId, name: tradesmanName });
       setShowAuthModal(true);
       return;
     }
     
-    // If logged in, proceed to booking
     navigate('/booking-request', {
       state: { tradesmanId }
     });
@@ -696,7 +737,6 @@ const BrowseTradesmen = () => {
 
   return (
     <div className="min-h-screen">
-      {/* Auth Modal */}
       <AuthModal 
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -739,29 +779,67 @@ const BrowseTradesmen = () => {
             )}
           </div>
           
-          {userLocation && !isMobileView && (
-            <div className="mt-3 text-center">
-              <p className="text-sm text-gray-600 mb-1">
-                Searching near <span className="font-medium">{userLocation.postcode}</span>
-              </p>
-              {currentUser && (
+          {/* NEW: Anonymous postcode search or logged-in location display */}
+          {!currentUser ? (
+            <div className="mt-4 w-full max-w-2xl">
+              {!userLocation ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800 mb-3 text-center">
+                    📍 Enter your postcode to see tradespeople near you
+                  </p>
+                  <form onSubmit={handleAnonymousPostcodeSearch} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={anonymousPostcode}
+                      onChange={(e) => setAnonymousPostcode(e.target.value.toUpperCase())}
+                      placeholder="e.g., SW1A 1AA"
+                      className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                      disabled={lookingUpPostcode}
+                    />
+                    <button
+                      type="submit"
+                      disabled={lookingUpPostcode}
+                      className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                        lookingUpPostcode
+                          ? 'bg-gray-400 text-white cursor-not-allowed'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {lookingUpPostcode ? 'Looking up...' : 'Search'}
+                    </button>
+                  </form>
+                  {postcodeError && (
+                    <p className="text-red-600 text-sm mt-2">{postcodeError}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
+                  <span className="text-sm text-green-800">
+                    📍 Searching near <strong>{userLocation.postcode}</strong>
+                  </span>
+                  <button
+                    onClick={clearAnonymousLocation}
+                    className="text-sm text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            userLocation && (
+              <div className="mt-3 text-center">
+                <p className="text-sm text-gray-600 mb-1">
+                  Searching near <span className="font-medium">{userLocation.postcode}</span>
+                </p>
                 <button
                   onClick={() => navigate('/customer-dashboard')}
                   className="text-xs text-blue-600 hover:text-blue-800 underline"
                 >
                   Not at this address?
                 </button>
-              )}
-            </div>
-          )}
-          
-          {userLocation && isMobileView && currentUser && (
-            <button
-              onClick={() => navigate('/customer-dashboard')}
-              className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
-            >
-              Change location
-            </button>
+              </div>
+            )
           )}
           
           <div className={`${isMobileView ? 'mt-4' : 'mt-8'} text-center w-full max-w-2xl`}>
@@ -806,15 +884,23 @@ const BrowseTradesmen = () => {
               )}
             </div>
             
+            {/* NEW: Show location with change option for everyone */}
             {userLocation && (
               <div className="mt-2 text-sm text-gray-600 flex items-center gap-2">
                 <span>Searching near <span className="font-medium">{userLocation.postcode}</span></span>
-                {currentUser && (
+                {currentUser ? (
                   <button
                     onClick={() => navigate('/customer-dashboard')}
                     className="text-blue-600 hover:text-blue-800 underline"
                   >
                     Not at this address?
+                  </button>
+                ) : (
+                  <button
+                    onClick={clearAnonymousLocation}
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Change postcode
                   </button>
                 )}
               </div>
@@ -829,7 +915,6 @@ const BrowseTradesmen = () => {
               </p>
             </div>
             
-            {/* Horizontal Filter Bar */}
             <div className="flex flex-wrap items-center gap-3 mb-4">
               <button
                 onClick={() => setShowDateFilter(!showDateFilter)}
