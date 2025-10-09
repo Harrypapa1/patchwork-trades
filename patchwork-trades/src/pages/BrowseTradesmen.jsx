@@ -1211,7 +1211,7 @@ const BrowseTradesmen = () => {
               </div>
             </div>
           ) : (
-            <div className={`grid gap-6 ${isMobileView ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+            <div className="grid gap-2 grid-cols-3 lg:gap-6">
               {filteredTradesmen.map(tradesman => {
                 const isExpanded = expandedCard === tradesman.id;
                 const details = detailedData[tradesman.id] || { portfolio_images: [], reviews: [] };
@@ -1229,94 +1229,122 @@ const BrowseTradesmen = () => {
                       isExpanded ? 'relative z-20 transform scale-105 shadow-2xl ring-4 ring-blue-500' : ''
                     }`}>
                       <div 
-                        className="p-6 cursor-pointer"
+                        className={`${isMobileView ? 'p-2' : 'p-6'} cursor-pointer`}
                         onClick={(e) => {
                           if (!e.target.closest('button')) {
                             toggleExpanded(tradesman.id);
                           }
                         }}
                       >
-                        <div className="flex items-center mb-4">
+                        <div className="flex flex-col items-center mb-2">
                           {tradesman.profilePhoto ? (
                             <LazyImage 
                               src={tradesman.profilePhoto} 
                               alt={tradesman.name} 
-                              className="w-12 h-12 rounded-full object-cover border-2 border-gray-300 mr-3"
+                              className={`${isMobileView ? 'w-12 h-12 mb-2' : 'w-12 h-12 mr-3'} rounded-full object-cover border-2 border-gray-300`}
                             />
                           ) : (
-                            <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 mr-3 text-xs">
+                            <div className={`${isMobileView ? 'w-12 h-12 mb-2 text-xs' : 'w-12 h-12 text-xs mr-3'} rounded-full bg-gray-200 flex items-center justify-center text-gray-500`}>
                               No Photo
                             </div>
                           )}
-                          <div className="flex-1">
-                            <h3 className="text-xl font-semibold">{tradesman.name}</h3>
-                            <p className="text-gray-600">{tradesman.tradeType}</p>
+                          <div className={`${isMobileView ? 'text-center' : 'flex-1'} min-w-0 w-full`}>
+                            <h3 className={`${isMobileView ? 'text-xs' : 'text-xl'} font-semibold truncate`}>{tradesman.name}</h3>
+                            <p className={`${isMobileView ? 'text-xs' : 'text-base'} text-gray-600 truncate`}>{tradesman.tradeType}</p>
                             {tradesman.distance !== undefined && tradesman.distance !== null && (
-                              <p className="text-sm text-blue-600">
-                                {tradesman.distance.toFixed(1)} miles away
+                              <p className="text-xs text-blue-600">
+                                {tradesman.distance.toFixed(1)}mi
                               </p>
                             )}
                           </div>
                           
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleExpanded(tradesman.id);
-                            }}
-                            className="text-blue-600 hover:text-blue-800 ml-2 p-2 rounded-full hover:bg-blue-50"
-                            style={{ minHeight: '44px', minWidth: '44px' }}
-                          >
-                            {isExpanded ? '−' : '+'}
-                          </button>
+                          {!isMobileView && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleExpanded(tradesman.id);
+                              }}
+                              className="text-blue-600 hover:text-blue-800 ml-2 p-2 rounded-full hover:bg-blue-50 flex-shrink-0"
+                              style={{ minHeight: '44px', minWidth: '44px' }}
+                            >
+                              {isExpanded ? '−' : '+'}
+                            </button>
+                          )}
                         </div>
 
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center space-x-4 text-sm">
-                            <div className="flex items-center space-x-1">
-                              <span className="text-green-600 font-medium">
-                                {tradesman.completed_jobs_count} jobs
-                              </span>
+                        {!isMobileView && (
+                          <>
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center space-x-4 text-sm">
+                                <div className="flex items-center space-x-1">
+                                  <span className="text-green-600 font-medium">
+                                    {tradesman.completed_jobs_count} jobs
+                                  </span>
+                                </div>
+                                
+                                {tradesman.average_rating > 0 && (
+                                  <div className="flex items-center space-x-1">
+                                    <div className="flex">{renderStars(tradesman.average_rating)}</div>
+                                    <span className="text-gray-600">
+                                      ({tradesman.review_count})
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            
-                            {tradesman.average_rating > 0 && (
-                              <div className="flex items-center space-x-1">
-                                <div className="flex">{renderStars(tradesman.average_rating)}</div>
-                                <span className="text-gray-600">
-                                  ({tradesman.review_count})
+
+                            <div className="mb-4 space-y-2">
+                              <p className="text-sm text-gray-600"><strong>Area:</strong> {tradesman.areaCovered}</p>
+                              
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p className="text-base text-blue-800 font-semibold">
+                                  {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
+                                </p>
+                                {tradesman.yearsExperience && (
+                                  <p className="text-sm text-blue-600">{tradesman.yearsExperience} years experience</p>
+                                )}
+                              </div>
+
+                              {tradesman.insuranceStatus && (
+                                <div>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
+                                    tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                  }`}>
+                                    {tradesman.insuranceStatus}
+                                  </span>
+                                </div>
+                              )}
+
+                              <p className="text-sm text-gray-600">
+                                {isExpanded ? tradesman.bio : `${tradesman.bio?.slice(0, 100)}...`}
+                              </p>
+                            </div>
+                          </>
+                        )}
+
+                        {isMobileView && (
+                          <div className="mb-2">
+                            <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-2">
+                              <p className="text-xs text-blue-800 font-semibold text-center">
+                                {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hr` : 'Rate on request'}
+                              </p>
+                            </div>
+                            {tradesman.insuranceStatus && (
+                              <div className="text-center mb-2">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
+                                  tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-red-100 text-red-800'
+                                }`}>
+                                  {tradesman.insuranceStatus === 'Fully Insured' ? 'Insured' : 
+                                   tradesman.insuranceStatus === 'Public Liability Only' ? 'Pub. Liability' : 'Not Insured'}
                                 </span>
                               </div>
                             )}
                           </div>
-                        </div>
-
-                        <div className="mb-4 space-y-2">
-                          <p className="text-gray-600"><strong>Area:</strong> {tradesman.areaCovered}</p>
-                          
-                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <p className="text-blue-800 font-semibold">
-                              {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hour` : 'Rate on request'}
-                            </p>
-                            {tradesman.yearsExperience && (
-                              <p className="text-blue-600 text-sm">{tradesman.yearsExperience} years experience</p>
-                            )}
-                          </div>
-
-                          {tradesman.insuranceStatus && (
-                            <div>
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
-                                tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {tradesman.insuranceStatus}
-                              </span>
-                            </div>
-                          )}
-
-                          <p className="text-gray-600 text-sm">
-                            {isExpanded ? tradesman.bio : `${tradesman.bio?.slice(0, 100)}...`}
-                          </p>
-                        </div>
+                        )}
 
                         {isExpanded && (
                           <div className="border-t pt-3 space-y-4">
@@ -1349,28 +1377,20 @@ const BrowseTradesmen = () => {
                             </>
                           )}
                           
-                          {isMobileView && (
-                            <p className="text-sm text-gray-600 mb-3">
-                              {tradesman.availableTimeSlots.length > 0 
-                                ? `${tradesman.availableTimeSlots.length} time slots available` 
-                                : 'No time slots available'}
-                            </p>
-                          )}
-                          
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleBooking(tradesman.id, tradesman.name);
                             }}
-                            className={`w-full py-3 px-4 rounded font-medium transition-colors ${
+                            className={`w-full ${isMobileView ? 'py-2 px-2 text-xs' : 'py-3 px-4'} rounded font-medium transition-colors ${
                               tradesman.availableTimeSlots.length > 0 
                                 ? 'bg-green-600 text-white hover:bg-green-700' 
                                 : 'bg-gray-400 text-white cursor-not-allowed'
                             }`}
-                            style={{ minHeight: '48px' }}
+                            style={{ minHeight: isMobileView ? '36px' : '48px' }}
                             disabled={tradesman.availableTimeSlots.length === 0}
                           >
-                            {tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available'}
+                            {isMobileView ? 'Book' : (tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available')}
                           </button>
                         </div>
                       </div>
