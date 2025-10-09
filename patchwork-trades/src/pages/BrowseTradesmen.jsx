@@ -53,6 +53,7 @@ const BrowseTradesmen = () => {
   const [anonymousPostcode, setAnonymousPostcode] = useState('');
   const [lookingUpPostcode, setLookingUpPostcode] = useState(false);
   const [postcodeError, setPostcodeError] = useState('');
+  const [postcodeTimeout, setPostcodeTimeout] = useState(null);
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedTradesmanForBooking, setSelectedTradesmanForBooking] = useState(null);
