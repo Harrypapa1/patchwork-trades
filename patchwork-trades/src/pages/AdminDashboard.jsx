@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom'; // 🆕 NEW IMPORT
+import { Link } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -30,9 +30,14 @@ const AdminDashboard = () => {
   const [liveActivity, setLiveActivity] = useState([]);
   const [activeBookings, setActiveBookings] = useState([]);
   const [recentJobs, setRecentJobs] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [tradesmen, setTradesmen] = useState([]);
   const [disputedJobs, setDisputedJobs] = useState([]);
   const [dismissedQuotes, setDismissedQuotes] = useState([]);
+  
+  // Search states
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [tradesmanSearch, setTradesmanSearch] = useState('');
 
   // Password-based admin access
   const [isAdmin, setIsAdmin] = useState(false);
@@ -132,22 +137,46 @@ const AdminDashboard = () => {
     });
     unsubscribes.push(jobsUnsubscribe);
 
-    // 4. Users
-    const usersQuery = query(
-      collection(db, 'users'),
-      orderBy('created_at', 'desc'),
-      limit(100)
-    );
+    // 4. Users - Fetch both collections separately
+    const fetchAllUsers = async () => {
+      try {
+        // Get customers
+        const customersSnapshot = await getDocs(collection(db, 'users'));
+        const customersData = customersSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        // Get tradesmen
+        const tradesmenSnapshot = await getDocs(collection(db, 'tradesmen_profiles'));
+        const tradesmenData = tradesmenSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        setCustomers(customersData);
+        setTradesmen(tradesmenData);
+        setStats(prev => ({ 
+          ...prev, 
+          activeUsers: customersData.length + tradesmenData.length 
+        }));
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+    };
     
-    const usersUnsubscribe = onSnapshot(usersQuery, (snapshot) => {
-      const userData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setUsers(userData);
-      setStats(prev => ({ ...prev, activeUsers: userData.length }));
+    // Initial fetch
+    fetchAllUsers();
+    
+    // Set up real-time listeners for both collections
+    const customersUnsubscribe = onSnapshot(collection(db, 'users'), () => {
+      fetchAllUsers();
     });
-    unsubscribes.push(usersUnsubscribe);
+    const tradesmenUnsubscribe = onSnapshot(collection(db, 'tradesmen_profiles'), () => {
+      fetchAllUsers();
+    });
+    
+    unsubscribes.push(customersUnsubscribe, tradesmenUnsubscribe);
 
     // 5. Disputes
     const disputesQuery = query(
@@ -184,15 +213,49 @@ const AdminDashboard = () => {
     };
   }, [isAdmin]);
 
-  const suspendUser = async (userId) => {
+  const suspendUser = async (userId, userType) => {
     if (window.confirm('Are you sure you want to suspend this user?')) {
-      await updateDoc(doc(db, 'users', userId), {
+      const collectionName = userType === 'tradesman' ? 'tradesmen_profiles' : 'users';
+      await updateDoc(doc(db, collectionName, userId), {
         status: 'suspended',
         suspended_at: new Date().toISOString(),
-        suspended_by: currentUser.uid
+        suspended_by: 'admin'
       });
     }
   };
+  
+  const unsuspendUser = async (userId, userType) => {
+    if (window.confirm('Are you sure you want to unsuspend this user?')) {
+      const collectionName = userType === 'tradesman' ? 'tradesmen_profiles' : 'users';
+      await updateDoc(doc(db, collectionName, userId), {
+        status: 'active',
+        unsuspended_at: new Date().toISOString(),
+        unsuspended_by: 'admin'
+      });
+    }
+  };
+  
+  // Filter functions
+  const filteredCustomers = customers.filter(customer => {
+    const searchLower = customerSearch.toLowerCase();
+    return (
+      customer.name?.toLowerCase().includes(searchLower) ||
+      customer.email?.toLowerCase().includes(searchLower) ||
+      customer.id?.toLowerCase().includes(searchLower)
+    );
+  });
+  
+  const filteredTradesmen = tradesmen.filter(tradesman => {
+    const searchLower = tradesmanSearch.toLowerCase();
+    return (
+      tradesman.name?.toLowerCase().includes(searchLower) ||
+      tradesman.email?.toLowerCase().includes(searchLower) ||
+      tradesman.areaCovered?.toLowerCase().includes(searchLower) ||
+      tradesman.business_type?.toLowerCase().includes(searchLower) ||
+      tradesman.certifications?.toLowerCase().includes(searchLower) ||
+      tradesman.id?.toLowerCase().includes(searchLower)
+    );
+  });
 
   const resolveDispute = async (jobId, resolution) => {
     await updateDoc(doc(db, 'active_jobs', jobId), {
@@ -302,7 +365,6 @@ const AdminDashboard = () => {
             <p className="text-gray-600">Platform operations and management</p>
           </div>
           <div className="flex gap-3">
-            {/* 🆕 NEW: Link to Analytics Dashboard */}
             <Link
               to="/admin-analytics"
               className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
@@ -329,7 +391,8 @@ const AdminDashboard = () => {
           { id: 'overview', label: 'Overview' },
           { id: 'live', label: '🔴 Live Activity' },
           { id: 'jobs', label: 'Jobs' },
-          { id: 'users', label: 'Users' },
+          { id: 'customers', label: 'Customers' },
+          { id: 'tradesmen', label: 'Tradesmen' },
           { id: 'disputes', label: 'Disputes' },
           { id: 'dismissed', label: '🗑️ Dismissed Quotes' }
         ].map(tab => (
@@ -578,69 +641,207 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {/* Users Tab */}
-      {activeView === 'users' && (
+      {/* Customers Tab */}
+      {activeView === 'customers' && (
         <div className="bg-white rounded-lg shadow">
           <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">User Management</h3>
-            <p className="text-gray-600 text-sm">Manage platform users and their accounts</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Customer Management</h3>
+                <p className="text-gray-600 text-sm">Manage customer accounts ({customers.length} total)</p>
+              </div>
+              <div className="w-96">
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or ID..."
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
           </div>
           
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jobs</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Revenue</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jobs Posted</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Spent</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {users.map(user => (
-                  <tr key={user.id} className="hover:bg-gray-50">
+                {filteredCustomers.map(customer => (
+                  <tr key={customer.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div>
-                        <p className="font-medium text-gray-900">{user.name || 'Unknown'}</p>
-                        <p className="text-sm text-gray-600">{user.email}</p>
+                        <p className="font-medium text-gray-900">{customer.name || 'Unknown'}</p>
+                        <p className="text-sm text-gray-600">{customer.email}</p>
+                        <p className="text-xs text-gray-400 mt-1">ID: {customer.id.substring(0, 12)}...</p>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {customer.total_jobs || 0}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      {formatCurrency(customer.total_spent || 0)}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        user.user_type === 'tradesman' ? 'bg-blue-100 text-blue-800' :
+                        customer.status === 'suspended' ? 'bg-red-100 text-red-800' :
                         'bg-green-100 text-green-800'
                       }`}>
-                        {user.user_type || 'customer'}
+                        {customer.status || 'active'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600">
-                      {user.total_jobs || 0}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium">
-                      {formatCurrency(user.total_revenue || 0)}
+                      {customer.createdAt ? new Date(customer.createdAt).toLocaleDateString('en-GB') : 'N/A'}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        user.status === 'suspended' ? 'bg-red-100 text-red-800' :
-                        'bg-green-100 text-green-800'
-                      }`}>
-                        {user.status || 'active'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => suspendUser(user.id)}
-                        className="text-red-600 hover:text-red-800 text-sm font-medium"
-                      >
-                        {user.status === 'suspended' ? 'Unsuspend' : 'Suspend'}
-                      </button>
+                      {customer.status === 'suspended' ? (
+                        <button
+                          onClick={() => unsuspendUser(customer.id, 'customer')}
+                          className="text-green-600 hover:text-green-800 text-sm font-medium"
+                        >
+                          Unsuspend
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => suspendUser(customer.id, 'customer')}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        >
+                          Suspend
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            
+            {filteredCustomers.length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-6xl text-gray-300 mb-4">👤</div>
+                <p className="text-gray-500">
+                  {customerSearch ? 'No customers found matching your search' : 'No customers yet'}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tradesmen Tab */}
+      {activeView === 'tradesmen' && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Tradesman Management</h3>
+                <p className="text-gray-600 text-sm">Manage tradesman accounts ({tradesmen.length} total)</p>
+              </div>
+              <div className="w-96">
+                <input
+                  type="text"
+                  placeholder="Search by name, location, job type, certifications..."
+                  value={tradesmanSearch}
+                  onChange={(e) => setTradesmanSearch(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tradesman</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jobs Done</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hourly Rate</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredTradesmen.map(tradesman => (
+                  <tr key={tradesman.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div>
+                        <p className="font-medium text-gray-900">{tradesman.name || 'Unknown'}</p>
+                        <p className="text-sm text-gray-600">{tradesman.email}</p>
+                        {tradesman.certifications && (
+                          <p className="text-xs text-blue-600 mt-1">🏅 {tradesman.certifications}</p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                        {tradesman.business_type || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {tradesman.areaCovered || 'Not specified'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <span className="text-yellow-500 mr-1">⭐</span>
+                        <span className="text-sm font-medium">{tradesman.average_rating || 'N/A'}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {tradesman.completed_jobs_count || 0}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium">
+                      {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hr` : 'N/A'}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                        tradesman.status === 'suspended' ? 'bg-red-100 text-red-800' :
+                        tradesman.payment_enabled ? 'bg-green-100 text-green-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {tradesman.status === 'suspended' ? 'suspended' :
+                         tradesman.payment_enabled ? 'active' : 'pending setup'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {tradesman.status === 'suspended' ? (
+                        <button
+                          onClick={() => unsuspendUser(tradesman.id, 'tradesman')}
+                          className="text-green-600 hover:text-green-800 text-sm font-medium"
+                        >
+                          Unsuspend
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => suspendUser(tradesman.id, 'tradesman')}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        >
+                          Suspend
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            
+            {filteredTradesmen.length === 0 && (
+              <div className="text-center py-12">
+                <div className="text-6xl text-gray-300 mb-4">🔨</div>
+                <p className="text-gray-500">
+                  {tradesmanSearch ? 'No tradesmen found matching your search' : 'No tradesmen yet'}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
