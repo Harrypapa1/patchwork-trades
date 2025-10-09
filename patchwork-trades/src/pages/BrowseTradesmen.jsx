@@ -50,7 +50,6 @@ const BrowseTradesmen = () => {
   const [userLocation, setUserLocation] = useState(null);
   const [maxDistance, setMaxDistance] = useState('any');
 
-  // NEW: Anonymous user postcode search
   const [anonymousPostcode, setAnonymousPostcode] = useState('');
   const [lookingUpPostcode, setLookingUpPostcode] = useState(false);
   const [postcodeError, setPostcodeError] = useState('');
@@ -127,7 +126,6 @@ const BrowseTradesmen = () => {
     }
   };
 
-  // NEW: Postcode lookup for anonymous users
   const handleAnonymousPostcodeSearch = async (e) => {
     e.preventDefault();
     
@@ -680,44 +678,55 @@ const BrowseTradesmen = () => {
 
   const renderAvailableTimeSlots = (tradesman) => {
     if (tradesman.availableTimeSlots.length === 0) {
-      return <p className="text-gray-500 text-sm mb-3">No time slots available</p>;
+      return (
+        <div className="mb-3" style={{ minHeight: '120px' }}>
+          <p className="text-gray-500 text-sm">No time slots available</p>
+        </div>
+      );
     }
 
     const slotsByDate = {};
-    tradesman.availableTimeSlots.slice(0, 6).forEach(slot => {
+    tradesman.availableTimeSlots.forEach(slot => {
       if (!slotsByDate[slot.date]) {
         slotsByDate[slot.date] = [];
       }
       slotsByDate[slot.date].push(slot);
     });
 
+    const sortedDates = Object.keys(slotsByDate).sort();
+    const next3Dates = sortedDates.slice(0, 3);
+    const totalSlots = tradesman.availableTimeSlots.length;
+    const displayedSlots = next3Dates.reduce((sum, date) => sum + slotsByDate[date].length, 0);
+
     return (
-      <div className="mb-3 space-y-2">
-        {Object.entries(slotsByDate).map(([date, slots]) => (
-          <div key={date} className="text-sm">
-            <div className="font-medium text-gray-700 mb-1">
-              {new Date(date).toLocaleDateString('en-GB', { 
-                day: 'numeric', 
-                month: 'short',
-                weekday: 'short'
-              })}
+      <div className="mb-3" style={{ minHeight: '120px' }}>
+        <div className="space-y-2">
+          {next3Dates.map((date) => (
+            <div key={date} className="text-sm">
+              <div className="font-medium text-gray-700 mb-1">
+                {new Date(date).toLocaleDateString('en-GB', { 
+                  day: 'numeric', 
+                  month: 'short',
+                  weekday: 'short'
+                })}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {slotsByDate[date].map((slot, index) => (
+                  <span 
+                    key={index}
+                    className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs"
+                  >
+                    {slot.display_time}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1">
-              {slots.map((slot, index) => (
-                <span 
-                  key={index}
-                  className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded text-xs"
-                >
-                  {slot.display_time}
-                </span>
-              ))}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
         
-        {tradesman.availableTimeSlots.length > 6 && (
-          <p className="text-xs text-gray-500">
-            +{tradesman.availableTimeSlots.length - 6} more time slots available
+        {totalSlots > displayedSlots && (
+          <p className="text-xs text-gray-500 mt-2">
+            +{totalSlots - displayedSlots} more time slots available
           </p>
         )}
       </div>
@@ -779,7 +788,6 @@ const BrowseTradesmen = () => {
             )}
           </div>
           
-          {/* NEW: Anonymous postcode search or logged-in location display */}
           {!currentUser ? (
             <div className="mt-4 w-full max-w-2xl">
               {!userLocation ? (
@@ -884,7 +892,6 @@ const BrowseTradesmen = () => {
               )}
             </div>
             
-            {/* NEW: Show location with change option for everyone */}
             {userLocation && (
               <div className="mt-2 text-sm text-gray-600 flex items-center gap-2">
                 <span>Searching near <span className="font-medium">{userLocation.postcode}</span></span>
