@@ -24,14 +24,12 @@ const ManageAvailability = () => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [showTimeSlotModal, setShowTimeSlotModal] = useState(false);
 
-  // Time slot definitions
   const TIME_SLOTS = [
     { id: 'morning', label: 'Morning', time: '9am-1pm', start: '09:00', end: '13:00' },
     { id: 'afternoon', label: 'Afternoon', time: '1pm-5pm', start: '13:00', end: '17:00' },
     { id: 'evening', label: 'Evening', time: '5pm-8pm', start: '17:00', end: '20:00' }
   ];
 
-  // Detect mobile viewport
   useEffect(() => {
     const checkMobile = () => {
       setIsMobileView(window.innerWidth < 768);
@@ -74,7 +72,6 @@ const ManageAvailability = () => {
     if (!currentUser) return;
     
     try {
-      // Fetch from active_jobs to see what's booked
       const q = query(
         collection(db, 'active_jobs'),
         where('tradesman_id', '==', currentUser.uid),
@@ -91,16 +88,116 @@ const ManageAvailability = () => {
     }
   };
 
+  const setAllSlotsForDate = async (dateStr, makeAvailable) => {
+    if (!currentUser) return;
+
+    const availabilityDoc = availability.find(item => item.date === dateStr);
+    
+    if (makeAvailable) {
+      const availableSlotData = TIME_SLOTS.filter(slot => {
+        const isBooked = bookedSlots.some(booking => 
+          booking.agreed_date === dateStr && booking.time_slot === slot.id
+        );
+        return !isBooked;
+      }).map(slot => ({
+        slot_id: slot.id,
+        start_time: slot.start,
+        end_time: slot.end,
+        is_booked: false,
+        booking_id: null
+      }));
+
+      if (availableSlotData.length === 0) return;
+
+      if (availabilityDoc) {
+        await updateDoc(doc(db, 'availability', availabilityDoc.id), {
+          available_slots: availableSlotData,
+          updated_at: new Date().toISOString()
+        });
+      } else {
+        await addDoc(collection(db, 'availability'), {
+          tradesman_id: currentUser.uid,
+          date: dateStr,
+          available_slots: availableSlotData,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      }
+    } else {
+      if (availabilityDoc) {
+        await deleteDoc(doc(db, 'availability', availabilityDoc.id));
+      }
+    }
+  };
+
+  const toggleWholeWeek = async () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(currentDate);
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateString(year, month, day);
+      if (!isDateInPast(year, month, day)) {
+        await setAllSlotsForDate(dateStr, true);
+      }
+    }
+    await fetchAvailability();
+  };
+
+  const toggleWeekdays = async () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(currentDate);
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateString(year, month, day);
+      const dayOfWeek = new Date(year, month, day).getDay();
+      
+      if (dayOfWeek >= 1 && dayOfWeek <= 5 && !isDateInPast(year, month, day)) {
+        await setAllSlotsForDate(dateStr, true);
+      }
+    }
+    await fetchAvailability();
+  };
+
+  const toggleWeekend = async () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(currentDate);
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateString(year, month, day);
+      const dayOfWeek = new Date(year, month, day).getDay();
+      
+      if ((dayOfWeek === 0 || dayOfWeek === 6) && !isDateInPast(year, month, day)) {
+        await setAllSlotsForDate(dateStr, true);
+      }
+    }
+    await fetchAvailability();
+  };
+
+  const clearMonth = async () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = getDaysInMonth(currentDate);
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = formatDateString(year, month, day);
+      if (!isDateInPast(year, month, day)) {
+        await setAllSlotsForDate(dateStr, false);
+      }
+    }
+    await fetchAvailability();
+  };
+
   const toggleTimeSlot = async (dateStr, slotId) => {
     if (!currentUser) return;
 
-    // Check if this specific slot is booked
     const isBooked = bookedSlots.some(booking => 
       booking.agreed_date === dateStr && booking.time_slot === slotId
     );
     
     if (isBooked) {
-      // If booked, navigate to job details
       const booking = bookedSlots.find(b => 
         b.agreed_date === dateStr && b.time_slot === slotId
       );
@@ -110,20 +207,16 @@ const ManageAvailability = () => {
       return;
     }
 
-    // Find existing availability document for this date
     let availabilityDoc = availability.find(item => item.date === dateStr);
     
     if (availabilityDoc) {
-      // Update existing document
       const currentSlots = availabilityDoc.available_slots || [];
       const slotIndex = currentSlots.findIndex(slot => slot.slot_id === slotId);
       
       let updatedSlots;
       if (slotIndex >= 0) {
-        // Remove slot
         updatedSlots = currentSlots.filter(slot => slot.slot_id !== slotId);
       } else {
-        // Add slot
         const slotInfo = TIME_SLOTS.find(s => s.id === slotId);
         updatedSlots = [...currentSlots, {
           slot_id: slotId,
@@ -135,7 +228,6 @@ const ManageAvailability = () => {
       }
 
       if (updatedSlots.length === 0) {
-        // Remove document if no slots left
         try {
           await deleteDoc(doc(db, 'availability', availabilityDoc.id));
           setAvailability(prev => prev.filter(item => item.id !== availabilityDoc.id));
@@ -143,7 +235,6 @@ const ManageAvailability = () => {
           console.error('Error removing availability:', error);
         }
       } else {
-        // Update document
         try {
           await updateDoc(doc(db, 'availability', availabilityDoc.id), {
             available_slots: updatedSlots,
@@ -160,7 +251,6 @@ const ManageAvailability = () => {
         }
       }
     } else {
-      // Create new availability document
       const slotInfo = TIME_SLOTS.find(s => s.id === slotId);
       const newAvailability = {
         tradesman_id: currentUser.uid,
@@ -185,7 +275,6 @@ const ManageAvailability = () => {
     }
   };
 
-  // Calendar helper functions
   const getDaysInMonth = (date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
@@ -200,14 +289,12 @@ const ManageAvailability = () => {
   };
 
   const getSlotStatus = (dateStr, slotId) => {
-    // Check if slot is booked
     const isBooked = bookedSlots.some(booking => 
       booking.agreed_date === dateStr && booking.time_slot === slotId
     );
     
     if (isBooked) return 'booked';
 
-    // Check if slot is available
     const availabilityDoc = availability.find(item => item.date === dateStr);
     if (availabilityDoc && availabilityDoc.available_slots) {
       const hasSlot = availabilityDoc.available_slots.some(slot => slot.slot_id === slotId);
@@ -231,7 +318,6 @@ const ManageAvailability = () => {
     });
   };
 
-  // Mobile calendar rendering
   const renderMobileCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -240,12 +326,10 @@ const ManageAvailability = () => {
     
     const days = [];
 
-    // Empty cells for days before the first day of the month
     for (let i = 0; i < firstDay; i++) {
       days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
     }
 
-    // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDateString(year, month, day);
       const isPast = isDateInPast(year, month, day);
@@ -258,7 +342,6 @@ const ManageAvailability = () => {
         className += "bg-white border-gray-200 hover:border-blue-300 active:scale-95";
       }
 
-      // Count available and booked slots
       const availableSlots = [];
       const bookedSlots_day = [];
       
@@ -277,7 +360,7 @@ const ManageAvailability = () => {
             setSelectedDate(dateStr);
             setShowTimeSlotModal(true);
           }}
-          style={{ minHeight: '60px' }} // Ensure minimum touch target
+          style={{ minHeight: '60px' }}
           disabled={isPast}
         >
           <div className="flex flex-col items-center justify-center h-full">
@@ -302,7 +385,6 @@ const ManageAvailability = () => {
     return days;
   };
 
-  // Desktop time slots rendering (original)
   const renderTimeSlots = (dateStr, isPast) => {
     return (
       <div className="space-y-1 mt-1">
@@ -350,7 +432,6 @@ const ManageAvailability = () => {
     );
   };
 
-  // Desktop calendar rendering (original)
   const renderDesktopCalendar = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -360,7 +441,6 @@ const ManageAvailability = () => {
     const days = [];
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    // Day headers
     dayNames.forEach(day => {
       days.push(
         <div key={day} className="p-2 text-center font-semibold text-gray-600 text-sm">
@@ -369,12 +449,10 @@ const ManageAvailability = () => {
       );
     });
 
-    // Empty cells for days before the first day of the month
     for (let i = 0; i < firstDay; i++) {
       days.push(<div key={`empty-${i}`} className="p-2"></div>);
     }
 
-    // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = formatDateString(year, month, day);
       const isPast = isDateInPast(year, month, day);
@@ -398,7 +476,6 @@ const ManageAvailability = () => {
     return days;
   };
 
-  // Time slot modal for mobile
   const renderTimeSlotModal = () => {
     if (!showTimeSlotModal || !selectedDate) return null;
 
@@ -450,12 +527,11 @@ const ManageAvailability = () => {
                   className={buttonClass}
                   onClick={() => {
                     toggleTimeSlot(selectedDate, slot.id);
-                    // Close modal if it was a booking view
                     if (status === 'booked') {
                       setShowTimeSlotModal(false);
                     }
                   }}
-                  style={{ minHeight: '60px' }} // Large touch target
+                  style={{ minHeight: '60px' }}
                 >
                   <div className="flex justify-between items-center">
                     <div>
@@ -476,14 +552,12 @@ const ManageAvailability = () => {
             })}
           </div>
           
-          {/* Bottom padding for safe area */}
           <div className="h-4"></div>
         </div>
       </div>
     );
   };
 
-  // Calculate stats - only count future/current dates
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
@@ -505,15 +579,12 @@ const ManageAvailability = () => {
     return <div className="text-center py-8">Loading calendar...</div>;
   }
 
-  // Mobile Layout
   if (isMobileView) {
     return (
       <div className="max-w-md mx-auto bg-gray-50 min-h-screen">
-        {/* Header */}
         <div className="bg-white shadow-sm p-4">
           <h1 className="text-2xl font-bold text-center mb-4">Manage Availability</h1>
           
-          {/* Quick Stats */}
           <div className="grid grid-cols-2 gap-3 mb-4">
             <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
               <div className="text-xl font-bold text-green-700">{totalAvailableSlots}</div>
@@ -525,7 +596,6 @@ const ManageAvailability = () => {
             </div>
           </div>
           
-          {/* Month display */}
           <div className="text-center">
             <h2 className="text-xl font-bold">
               {currentDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
@@ -533,16 +603,42 @@ const ManageAvailability = () => {
           </div>
         </div>
 
-        {/* Instructions */}
         <div className="bg-blue-50 border-l-4 border-blue-400 p-4 m-4">
-          <p className="text-blue-800 text-sm">
-            <strong>Tap any date</strong> to manage your time slots for that day
+          <p className="text-blue-800 text-sm mb-3">
+            <strong>Quick Actions:</strong>
+          </p>
+          <div className="space-y-2">
+            <button
+              onClick={() => toggleWholeWeek()}
+              className="w-full bg-white border border-blue-300 text-blue-700 px-4 py-2 rounded-lg font-medium text-sm"
+            >
+              📅 Set Whole Month Available
+            </button>
+            <button
+              onClick={() => toggleWeekdays()}
+              className="w-full bg-white border border-green-300 text-green-700 px-4 py-2 rounded-lg font-medium text-sm"
+            >
+              💼 Weekdays Only
+            </button>
+            <button
+              onClick={() => toggleWeekend()}
+              className="w-full bg-white border border-purple-300 text-purple-700 px-4 py-2 rounded-lg font-medium text-sm"
+            >
+              🌴 Weekend Only
+            </button>
+            <button
+              onClick={() => clearMonth()}
+              className="w-full bg-white border border-red-300 text-red-700 px-4 py-2 rounded-lg font-medium text-sm"
+            >
+              🗑️ Clear All Availability
+            </button>
+          </div>
+          <p className="text-blue-700 text-xs mt-3">
+            Or <strong>tap any date</strong> to manage specific time slots
           </p>
         </div>
 
-        {/* Calendar */}
         <div className="p-4">
-          {/* Day headers */}
           <div className="grid grid-cols-7 gap-1 mb-2">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
               <div key={day} className="text-center font-medium text-gray-600 text-sm py-2">
@@ -551,12 +647,10 @@ const ManageAvailability = () => {
             ))}
           </div>
           
-          {/* Calendar grid */}
           <div className="grid grid-cols-7 gap-2 mb-4">
             {renderMobileCalendar()}
           </div>
           
-          {/* Legend */}
           <div className="bg-white rounded-lg p-3 space-y-2 text-sm">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 bg-green-500 rounded-full"></div>
@@ -569,7 +663,6 @@ const ManageAvailability = () => {
           </div>
         </div>
 
-        {/* Bottom Navigation - THUMB FRIENDLY */}
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg">
           <div className="max-w-md mx-auto flex">
             <button
@@ -589,35 +682,65 @@ const ManageAvailability = () => {
           </div>
         </div>
 
-        {/* Time Slot Modal */}
         {renderTimeSlotModal()}
 
-        {/* Bottom padding */}
         <div className="h-16"></div>
       </div>
     );
   }
 
-  // Desktop Layout (Original)
   return (
     <div className="max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Manage Your Availability</h1>
       
-      {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold text-blue-800 mb-2">How to use the time slot calendar:</h3>
-        <ul className="text-blue-700 text-sm space-y-1">
-          <li>• <strong>Click time slots</strong> to toggle your availability</li>
-          <li>• <strong>Morning:</strong> 9am-1pm (4 hours)</li>
-          <li>• <strong>Afternoon:</strong> 1pm-5pm (4 hours)</li>
-          <li>• <strong>Evening:</strong> 5pm-8pm (3 hours)</li>
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6 mb-6">
+        <h3 className="font-semibold text-blue-800 mb-4 text-lg">Quick Availability Actions</h3>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <button
+            onClick={() => toggleWholeWeek()}
+            className="bg-white border-2 border-blue-300 text-blue-700 px-4 py-3 rounded-lg hover:bg-blue-50 font-medium transition-colors shadow-sm"
+          >
+            📅 Whole Month
+          </button>
+          
+          <button
+            onClick={() => toggleWeekdays()}
+            className="bg-white border-2 border-green-300 text-green-700 px-4 py-3 rounded-lg hover:bg-green-50 font-medium transition-colors shadow-sm"
+          >
+            💼 Weekdays Only
+          </button>
+          
+          <button
+            onClick={() => toggleWeekend()}
+            className="bg-white border-2 border-purple-300 text-purple-700 px-4 py-3 rounded-lg hover:bg-purple-50 font-medium transition-colors shadow-sm"
+          >
+            🌴 Weekend Only
+          </button>
+          
+          <button
+            onClick={() => clearMonth()}
+            className="bg-white border-2 border-red-300 text-red-700 px-4 py-3 rounded-lg hover:bg-red-50 font-medium transition-colors shadow-sm"
+          >
+            🗑️ Clear Month
+          </button>
+        </div>
+
+        <div className="text-xs text-blue-600 bg-blue-100 rounded p-3">
+          <strong>Tip:</strong> Quick actions only affect future dates and won't override booked slots
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+        <h3 className="font-semibold text-gray-800 mb-2">How to use:</h3>
+        <ul className="text-gray-700 text-sm space-y-1">
           <li>• <strong>Green slots</strong> = Available for booking</li>
           <li>• <strong>Red slots</strong> = Booked by customers (click to view job)</li>
-          <li>• <strong>White slots</strong> = Not available</li>
+          <li>• Click individual time slots to toggle specific hours</li>
+          <li>• Morning (9am-1pm) • Afternoon (1pm-5pm) • Evening (5pm-8pm)</li>
         </ul>
       </div>
 
-      {/* Calendar Header */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex justify-between items-center mb-6">
           <button
@@ -639,12 +762,10 @@ const ManageAvailability = () => {
           </button>
         </div>
 
-        {/* Calendar Grid */}
         <div className="grid grid-cols-7 gap-2">
           {renderDesktopCalendar()}
         </div>
 
-        {/* Legend */}
         <div className="mt-6 flex flex-wrap gap-4 justify-center text-sm">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded"></div>
@@ -665,7 +786,6 @@ const ManageAvailability = () => {
         </div>
       </div>
 
-      {/* Quick Stats */}
       <div className="mt-6 grid md:grid-cols-3 gap-4">
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
           <div className="text-2xl font-bold text-green-700">
