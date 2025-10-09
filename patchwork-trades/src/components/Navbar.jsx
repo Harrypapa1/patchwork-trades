@@ -197,7 +197,8 @@ const Navbar = () => {
             <div className="flex items-center space-x-4">
               {!currentUser ? (
                 <>
-                  <Link to="/browse" className="hover:text-blue-200 transition-colors">
+                  {/* Non-logged in users see "Browse Tradesmen" which goes to home (/) */}
+                  <Link to="/" className="hover:text-blue-200 transition-colors">
                     Browse Tradesmen
                   </Link>
                   <Link to="/login" className="hover:text-blue-200 transition-colors">
@@ -212,8 +213,9 @@ const Navbar = () => {
                 </>
               ) : (
                 <>
+                  {/* Customers see Browse Tradesmen which goes to home (/) */}
                   {userType !== 'tradesman' && (
-                    <Link to="/browse" className="hover:text-blue-200 transition-colors">
+                    <Link to="/" className="hover:text-blue-200 transition-colors">
                       Browse Tradesmen
                     </Link>
                   )}
@@ -332,7 +334,7 @@ const Navbar = () => {
             {!currentUser ? (
               <>
                 <Link 
-                  to="/browse" 
+                  to="/" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
@@ -357,7 +359,7 @@ const Navbar = () => {
               <>
                 {userType !== 'tradesman' && (
                   <Link 
-                    to="/browse" 
+                    to="/" 
                     className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                     onClick={closeMenu}
                   >
