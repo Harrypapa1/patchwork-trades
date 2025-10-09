@@ -1372,12 +1372,24 @@ const BrowseTradesmen = () => {
                         )}
 
                         {isMobileView && (
-                          <div className="mb-2 min-h-[80px] flex flex-col justify-between">
-                            <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-2">
+                          <div className="mb-2 min-h-[110px] flex flex-col justify-between space-y-1">
+                            <div className="bg-blue-50 border border-blue-200 rounded p-1.5">
                               <p className="text-xs text-blue-800 font-semibold text-center">
                                 {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hr` : 'On request'}
                               </p>
                             </div>
+                            
+                            {tradesman.availableTimeSlots.length > 0 && (
+                              <div className="bg-green-50 border border-green-200 rounded p-1.5">
+                                <p className="text-xs text-green-800 font-medium text-center">
+                                  Next: {new Date(tradesman.availableTimeSlots[0].date).toLocaleDateString('en-GB', { 
+                                    day: 'numeric', 
+                                    month: 'short'
+                                  })}
+                                </p>
+                              </div>
+                            )}
+                            
                             {tradesman.insuranceStatus && (
                               <div className="text-center">
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
