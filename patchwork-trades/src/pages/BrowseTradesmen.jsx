@@ -900,13 +900,13 @@ const BrowseTradesmen = () => {
               onChange={handleSearch}
               placeholder={
                 !currentUser && !userLocation 
-                  ? "Enter your postcode above to start searching..."
+                  ? "Enter your postcode above" 
                   : isMobileView 
                     ? "e.g., 'fix my tap'..." 
                     : "e.g., 'fix my leaky tap', 'paint bedroom', 'tile my bathroom'..."
               }
               className={`w-full ${isMobileView ? 'px-4 py-4 pl-28 text-base' : 'px-6 py-5 text-lg'} border-2 ${
-                !currentUser && !userLocation ? 'border-gray-200 bg-gray-50' : 'border-gray-300'
+                !currentUser && !userLocation ? 'border-gray-200 bg-gray-50 text-center' : 'border-gray-300'
               } rounded-full focus:border-blue-500 focus:outline-none shadow-lg hover:shadow-xl transition-shadow`}
               style={{ minHeight: isMobileView ? '52px' : '64px' }}
               autoFocus={currentUser || userLocation}
@@ -1413,58 +1413,3 @@ const BrowseTradesmen = () => {
                                 <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
                                   {tradesman.servicesOffered}
                                 </p>
-                              </div>
-                            )}
-
-                            <div>
-                              <h4 className="font-medium mb-2 text-sm">Work Portfolio:</h4>
-                              {renderPortfolioGallery(details.portfolio_images, loadingDetails)}
-                            </div>
-
-                            <div>
-                              <h4 className="font-medium mb-2 text-sm">Recent Reviews:</h4>
-                              {renderReviews(details.reviews, loadingDetails)}
-                            </div>
-                          </div>
-                        )}
-                        
-                        <div className="border-t pt-4 mt-4">
-                          {!isMobileView && (
-                            <>
-                              <h4 className="font-medium mb-2">Available Time Slots:</h4>
-                              {renderAvailableTimeSlots(tradesman)}
-                            </>
-                          )}
-                          
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleBooking(tradesman.id, tradesman.name);
-                            }}
-                            className={`w-full ${isMobileView ? 'py-2 px-2 text-xs' : 'py-3 px-4'} rounded font-medium transition-colors ${
-                              tradesman.availableTimeSlots.length > 0 
-                                ? 'bg-green-600 text-white hover:bg-green-700' 
-                                : 'bg-gray-400 text-white cursor-not-allowed'
-                            }`}
-                            style={{ minHeight: isMobileView ? '36px' : '48px' }}
-                            disabled={tradesman.availableTimeSlots.length === 0}
-                          >
-                            {isMobileView ? 'Book' : (tradesman.availableTimeSlots.length > 0 ? 'Request Quote' : 'No Time Slots Available')}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          
-          {isMobileView && <div className="h-20"></div>}
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default BrowseTradesmen;
