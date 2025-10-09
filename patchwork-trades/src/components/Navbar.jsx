@@ -197,10 +197,6 @@ const Navbar = () => {
             <div className="flex items-center space-x-4">
               {!currentUser ? (
                 <>
-                  {/* Non-logged in users see "Browse Tradesmen" which goes to home (/) */}
-                  <Link to="/" className="hover:text-blue-200 transition-colors">
-                    Browse Tradesmen
-                  </Link>
                   <Link to="/login" className="hover:text-blue-200 transition-colors">
                     Login
                   </Link>
@@ -210,16 +206,15 @@ const Navbar = () => {
                   >
                     Sign Up
                   </Link>
+                  <Link 
+                    to="/register-tradesman" 
+                    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors font-medium"
+                  >
+                    Join as Tradesman
+                  </Link>
                 </>
               ) : (
                 <>
-                  {/* Customers see Browse Tradesmen which goes to home (/) */}
-                  {userType !== 'tradesman' && (
-                    <Link to="/" className="hover:text-blue-200 transition-colors">
-                      Browse Tradesmen
-                    </Link>
-                  )}
-                  
                   {userType === 'tradesman' && (
                     <Link to="/manage-availability" className="hover:text-blue-200 transition-colors">
                       Manage Availability
@@ -334,13 +329,6 @@ const Navbar = () => {
             {!currentUser ? (
               <>
                 <Link 
-                  to="/" 
-                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
-                  onClick={closeMenu}
-                >
-                  Browse Tradesmen
-                </Link>
-                <Link 
                   to="/login" 
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
@@ -352,21 +340,18 @@ const Navbar = () => {
                   className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
                   onClick={closeMenu}
                 >
-                  Sign Up
+                  Sign Up as Customer
+                </Link>
+                <Link 
+                  to="/register-tradesman" 
+                  className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
+                  onClick={closeMenu}
+                >
+                  Join as Tradesman
                 </Link>
               </>
             ) : (
               <>
-                {userType !== 'tradesman' && (
-                  <Link 
-                    to="/" 
-                    className="block px-4 py-3 text-white hover:bg-blue-600 transition-colors font-medium"
-                    onClick={closeMenu}
-                  >
-                    Browse Tradesmen
-                  </Link>
-                )}
-                
                 {userType === 'tradesman' && (
                   <Link 
                     to="/manage-availability" 
