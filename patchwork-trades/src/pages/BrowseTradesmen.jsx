@@ -103,8 +103,11 @@ const BrowseTradesmen = () => {
       if (searchTimeout) {
         clearTimeout(searchTimeout);
       }
+      if (postcodeTimeout) {
+        clearTimeout(postcodeTimeout);
+      }
     };
-  }, [searchTimeout]);
+  }, [searchTimeout, postcodeTimeout]);
 
   const fetchUserLocation = async () => {
     if (!currentUser) return;
@@ -125,6 +128,60 @@ const BrowseTradesmen = () => {
     } catch (error) {
       console.error('Error fetching user location:', error);
     }
+  };
+
+  const handleAnonymousPostcodeChange = (e) => {
+    const value = e.target.value.toUpperCase();
+    setAnonymousPostcode(value);
+    setPostcodeError('');
+    
+    // Clear existing timeout
+    if (postcodeTimeout) {
+      clearTimeout(postcodeTimeout);
+    }
+    
+    // If empty, clear location
+    if (!value.trim()) {
+      setUserLocation(null);
+      return;
+    }
+    
+    // Set new timeout to lookup postcode after 1 second
+    const newTimeout = setTimeout(async () => {
+      if (value.trim().length >= 5) { // Minimum UK postcode length
+        setLookingUpPostcode(true);
+        try {
+          const response = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(value.trim())}`);
+          const data = await response.json();
+
+          if (data.status === 200 && data.result) {
+            setUserLocation({
+              postcode: data.result.postcode,
+              latitude: data.result.latitude,
+              longitude: data.result.longitude,
+              isAnonymous: true
+            });
+            setPostcodeError('');
+            
+            // If there's already a search query, trigger the search
+            if (searchQuery.trim().length > 0) {
+              setHasSearched(true);
+            }
+          } else {
+            setPostcodeError('Invalid postcode');
+            setUserLocation(null);
+          }
+        } catch (error) {
+          console.error('Error looking up postcode:', error);
+          setPostcodeError('Error validating postcode');
+          setUserLocation(null);
+        } finally {
+          setLookingUpPostcode(false);
+        }
+      }
+    }, 1000);
+    
+    setPostcodeTimeout(newTimeout);
   };
 
   const handleAnonymousPostcodeSearch = async (e) => {
@@ -414,8 +471,9 @@ const BrowseTradesmen = () => {
       return;
     }
     
-    // For anonymous users, require postcode but allow search once they have it
+    // For anonymous users, show prompt if no postcode
     if (!currentUser && !userLocation) {
+      setPostcodeError('Please enter your postcode first');
       return;
     }
     
@@ -423,7 +481,7 @@ const BrowseTradesmen = () => {
       if (query.trim().length > 0) {
         setHasSearched(true);
       }
-    }, 300); // Reduced timeout for faster response
+    }, 1000);
     
     setSearchTimeout(newTimeout);
   };
@@ -780,35 +838,23 @@ const BrowseTradesmen = () => {
                   <p className="text-sm text-blue-800 mb-3 text-center font-medium">
                     📍 Enter your postcode to see tradespeople near you
                   </p>
-                  <div className="flex gap-2">
+                  <div className="relative">
                     <input
                       type="text"
                       value={anonymousPostcode}
-                      onChange={(e) => setAnonymousPostcode(e.target.value.toUpperCase())}
+                      onChange={handleAnonymousPostcodeChange}
                       placeholder="e.g., SW1A 1AA"
-                      className="flex-1 px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none"
+                      className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-center"
                       disabled={lookingUpPostcode}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAnonymousPostcodeSearch(e);
-                        }
-                      }}
                     />
-                    <button
-                      onClick={handleAnonymousPostcodeSearch}
-                      disabled={lookingUpPostcode}
-                      className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                        lookingUpPostcode
-                          ? 'bg-gray-400 text-white cursor-not-allowed'
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                    >
-                      {lookingUpPostcode ? 'Looking up...' : 'Search'}
-                    </button>
+                    {lookingUpPostcode && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                      </div>
+                    )}
                   </div>
                   {postcodeError && (
-                    <p className="text-red-600 text-sm mt-2">{postcodeError}</p>
+                    <p className="text-red-600 text-sm mt-2 text-center">{postcodeError}</p>
                   )}
                 </div>
               ) : (
@@ -1242,18 +1288,18 @@ const BrowseTradesmen = () => {
                             <LazyImage 
                               src={tradesman.profilePhoto} 
                               alt={tradesman.name} 
-                              className={`${isMobileView ? 'w-12 h-12 mb-2' : 'w-12 h-12 mr-3'} rounded-full object-cover border-2 border-gray-300`}
+                              className={`${isMobileView ? 'w-16 h-16 mb-2' : 'w-12 h-12 mr-3'} rounded-full object-cover border-2 border-gray-300`}
                             />
                           ) : (
-                            <div className={`${isMobileView ? 'w-12 h-12 mb-2 text-xs' : 'w-12 h-12 text-xs mr-3'} rounded-full bg-gray-200 flex items-center justify-center text-gray-500`}>
+                            <div className={`${isMobileView ? 'w-16 h-16 mb-2 text-xs' : 'w-12 h-12 text-xs mr-3'} rounded-full bg-gray-200 flex items-center justify-center text-gray-500`}>
                               No Photo
                             </div>
                           )}
                           <div className={`${isMobileView ? 'text-center' : 'flex-1'} min-w-0 w-full`}>
-                            <h3 className={`${isMobileView ? 'text-xs' : 'text-xl'} font-semibold truncate`}>{tradesman.name}</h3>
+                            <h3 className={`${isMobileView ? 'text-xs font-bold' : 'text-xl font-semibold'} truncate`}>{tradesman.name}</h3>
                             <p className={`${isMobileView ? 'text-xs' : 'text-base'} text-gray-600 truncate`}>{tradesman.tradeType}</p>
                             {tradesman.distance !== undefined && tradesman.distance !== null && (
-                              <p className="text-xs text-blue-600">
+                              <p className="text-xs text-blue-600 font-medium">
                                 {tradesman.distance.toFixed(1)}mi
                               </p>
                             )}
@@ -1326,14 +1372,14 @@ const BrowseTradesmen = () => {
                         )}
 
                         {isMobileView && (
-                          <div className="mb-2">
+                          <div className="mb-2 min-h-[80px] flex flex-col justify-between">
                             <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-2">
                               <p className="text-xs text-blue-800 font-semibold text-center">
-                                {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hr` : 'Rate on request'}
+                                {tradesman.hourlyRate ? `£${tradesman.hourlyRate}/hr` : 'On request'}
                               </p>
                             </div>
                             {tradesman.insuranceStatus && (
-                              <div className="text-center mb-2">
+                              <div className="text-center">
                                 <span className={`px-2 py-1 rounded text-xs font-medium ${
                                   tradesman.insuranceStatus === 'Fully Insured' ? 'bg-green-100 text-green-800' :
                                   tradesman.insuranceStatus === 'Public Liability Only' ? 'bg-yellow-100 text-yellow-800' :
