@@ -1211,7 +1211,7 @@ const BrowseTradesmen = () => {
               </div>
             </div>
           ) : (
-            <div className={`grid gap-6 ${isMobileView ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
+            <div className={`grid gap-6 ${isMobileView ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-3'}`}>
               {filteredTradesmen.map(tradesman => {
                 const isExpanded = expandedCard === tradesman.id;
                 const details = detailedData[tradesman.id] || { portfolio_images: [], reviews: [] };
